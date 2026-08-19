@@ -1,9 +1,9 @@
 [
     { 
-        "file": "context.dlc", 
-        "title": "Context Logo",
+        "file": "rickrollfurby.wav", 
+        "title": "rickroll",
         "buttons": [
-            { "title": "Logo", "action": [75,0,4,4] }
+            { "title": "Logo", "action": [75,0,1,4] }
         ]
     },
     { 
