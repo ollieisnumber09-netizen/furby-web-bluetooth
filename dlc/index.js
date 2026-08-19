@@ -22,10 +22,10 @@
         ]
     },
     {
-        "file": "chilli.dlc", 
-        "title": "Chilli",
+        "file": "tu003410.dlc", 
+        "title": "test",
         "buttons": [
-            { "title": "Chilli ", "action": [75,0,4,4] }
+            { "title": "test ", "action": [75,0,4,4] }
         ]
     }
 ]
