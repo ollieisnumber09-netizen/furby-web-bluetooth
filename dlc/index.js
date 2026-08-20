@@ -1,9 +1,9 @@
 [
     { 
-        "file": "rickrollfurby.wav", 
+        "file": "tu003410-rickroll.dlc", 
         "title": "rickroll",
         "buttons": [
-            { "title": "Logo", "action": [75,0,1,4] }
+            { "title": "rickroll", "action": [75,0,1,4] }
         ]
     },
     { 
