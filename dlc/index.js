@@ -1,6 +1,6 @@
 [
     { 
-        "file": "tu003410-rickroll.dlc", 
+        "file": "furby_voice.dlc", 
         "title": "rickroll",
         "buttons": [
             { "title": "rickroll", "action": [75,0,1,4] }
