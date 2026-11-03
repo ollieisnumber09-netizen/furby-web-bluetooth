@@ -121,8 +121,8 @@ td button { min-height: 32px; padding: 4px 10px; }
   </div>
 
   <div class="bar">
-    <label for="sync" class="time">Furby sync</label>
-    <div class="grow"><input type="range" id="sync" min="-1000" max="1500" step="50" value="300" aria-describedby="syncText"></div>
+    <label for="sync" class="time">Furby head start</label>
+    <div class="grow"><input type="range" id="sync" min="0" max="3000" step="50" value="1000" aria-describedby="syncText"></div>
     <span class="time" id="syncText"></span>
     <label class="time"><input type="checkbox" id="videoSound" checked> Video sound</label>
   </div>
@@ -253,11 +253,11 @@ document.getElementById('clearBtn').onclick = () => { cues = []; fired.clear(); 
 // Positive: the Furby is told to sing this many ms before the video starts (covers Bluetooth delay).
 // Negative: the video starts first.
 const syncEl = document.getElementById('sync'), syncText = document.getElementById('syncText');
-try { const v = localStorage.getItem('furby-theatre-sync'); if (v !== null) syncEl.value = v; } catch (e) {}
+try { const v = localStorage.getItem('furby-theatre-head-start'); if (v !== null) syncEl.value = v; } catch (e) {}
 function showSync() {
   const v = +syncEl.value;
-  syncText.textContent = v === 0 ? 'together' : v > 0 ? `Furby ${v} ms early` : `Furby ${-v} ms late`;
-  try { localStorage.setItem('furby-theatre-sync', v); } catch (e) {}
+  syncText.textContent = v === 0 ? 'no head start' : `Furby starts ${(v / 1000).toFixed(2)} s early`;
+  try { localStorage.setItem('furby-theatre-head-start', v); } catch (e) {}
 }
 syncEl.addEventListener('input', showSync); showSync();
 const soundEl = document.getElementById('videoSound');
@@ -377,14 +377,11 @@ startBtn.onclick = async () => {
   uploadBox.hidden = true;
   hint.hidden = true;
   countdown.running = true; countdown.start = performance.now(); countdown.lastBeat = -1;
-  const go = countdown.start + 3 * countdown.beat;     // moment the show starts
-  const sync = +syncEl.value;
-  const sing = () => { if (show.song) furby.action(...show.song); };
-  const play = () => { chime(783.99, 0.9); furby.antenna(255, 255, 255); video.play().catch(e => log('Could not play: ' + e.message)); };
-  // Whichever one goes first starts at "go"; the other waits |sync| ms.
-  setTimeout(sync >= 0 ? sing : play, go - performance.now());
-  setTimeout(sync >= 0 ? play : sing, go - performance.now() + Math.abs(sync));
-  setTimeout(() => { busy = false; startBtn.disabled = false; }, 3 * countdown.beat + Math.abs(sync) + 200);
+  const go = countdown.start + 3 * countdown.beat;     // video starts when the countdown ends
+  const head = Math.min(+syncEl.value, 3 * countdown.beat); // Furby gets told this much earlier, during the countdown
+  setTimeout(() => { if (show.song) furby.action(...show.song); }, go - head - performance.now());
+  setTimeout(() => { chime(783.99, 0.9); furby.antenna(255, 255, 255); video.play().catch(e => log('Could not play: ' + e.message)); }, go - performance.now());
+  setTimeout(() => { busy = false; startBtn.disabled = false; }, 3 * countdown.beat + 200);
 };
 document.getElementById('countBtn').onclick = () => { countdown.running = true; countdown.start = performance.now(); countdown.lastBeat = -1; hint.hidden = true; };
 
