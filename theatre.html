@@ -247,7 +247,7 @@ document.getElementById('clearBtn').onclick = () => { cues = []; fired.clear(); 
 
 // ---------------------------------------------------------------- Sync
 // The Furby takes a moment to start a DLC sound, so it's told to sing this much before the music starts.
-const HEAD_START_MS = 500;
+const HEAD_START_MS = 200;
 const soundEl = document.getElementById('videoSound');
 soundEl.addEventListener('change', () => video.muted = !soundEl.checked);
 
