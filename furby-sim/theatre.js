@@ -32,7 +32,7 @@
     <h2>Theatre</h2>
     <div class="screen"><video id="thVideo" playsinline preload="auto"></video><canvas id="thFx"></canvas></div>
     <div class="row">
-      <label class="file">Load video<input type="file" id="thFile" accept="video/*"></label>
+      <select id="thShow" aria-label="Show"></select>
       <button id="thStart">▶ Start show</button>
       <button id="thPause">Pause</button>
       <span class="time" id="thTime">0:00.0</span>
@@ -42,12 +42,13 @@
       <button id="thAdd">Add at current time</button>
     </div>
     <ul id="thCues"></ul>
-    <div id="thHint">Load a video, play it, and press Add at current time wherever you want Furby to react. Then press Start show.</div>`;
+    <label class="time"><input type="checkbox" id="thSound" checked> Video sound</label>
+    <div id="thHint">Wake Furby up, pick a show and press Start show. He sings along with the video.</div>`;
   const dlcPanel = $('#dlcPick') && $('#dlcPick').closest('.panel');
   if (dlcPanel) dlcPanel.before(panel); else document.body.appendChild(panel);
 
   const video = $('#thVideo'), fx = $('#thFx'), ctx = fx.getContext('2d');
-  let videoName = null, cues = [], fired = new Set();
+  let videoName = null, cues = [], fired = new Set(), shows = [], show = null, dlcLoaded = null;
 
   // ---- reactions: press the simulator's own button so visuals and sounds match
   function react(a) {
@@ -77,17 +78,34 @@
     cues.splice(+b.dataset.i, 1); save(); render();
   });
   $('#thAdd').onclick = () => {
-    if (!video.src) { $('#thHint').textContent = 'Load a video first.'; return; }
+    if (!video.src) { $('#thHint').textContent = 'Pick a show first.'; return; }
     const c = { t: Math.round(video.currentTime * 10) / 10, a: $('#thReact').value };
     cues.push(c); fired.add(c); save(); render(); react(c.a);
   };
-  $('#thFile').onchange = e => {
-    const f = e.target.files[0]; if (!f) return;
-    if (video.src) URL.revokeObjectURL(video.src);
-    video.src = URL.createObjectURL(f); videoName = f.name;
+  function pickShow(id) {
+    show = shows.find(s => s.id === id) || shows[0]; if (!show) return;
+    video.src = '../' + show.video; videoName = show.id;
     cues = load(); fired.clear(); render();
-    $('#thHint').textContent = cues.length ? `Found ${cues.length} saved reactions for this video.` : 'Play the video and add reactions where you want them.';
-  };
+  }
+  fetch('../shows/shows.json', { cache: 'no-store' }).then(r => r.json()).then(list => {
+    shows = list;
+    for (const s of shows) $('#thShow').add(new Option(s.title, s.id));
+    pickShow(shows[0] && shows[0].id);
+  }).catch(() => { $('#thHint').textContent = 'Could not load the show list. Check your connection and reload.'; });
+  $('#thShow').addEventListener('change', e => pickShow(e.target.value));
+  $('#thSound').addEventListener('change', e => video.muted = !e.target.checked);
+
+  // Load the show's song DLC into the simulated Furby (once per show).
+  async function loadSong() {
+    const f = window.furby;
+    if (!show || !show.dlc || dlcLoaded === show.id) return true;
+    if (!f || !f.base) { $('#thHint').textContent = 'Wake Furby up first (the button at the top), then press Start show.'; return false; }
+    $('#thHint').textContent = 'Loading the song…';
+    const r = await fetch('../' + show.dlc, { cache: 'no-store' });
+    if (!r.ok) throw new Error('could not download the song');
+    await f.loadDLC(new Uint8Array(await r.arrayBuffer()), show.dlc.split('/').pop());
+    dlcLoaded = show.id; return true;
+  }
   video.addEventListener('seeked', () => { fired = new Set(cues.filter(c => c.t < video.currentTime)); render(); });
   $('#thPause').onclick = () => { if (!video.src) return; video.paused ? video.play() : video.pause(); };
   video.addEventListener('play', () => $('#thPause').textContent = 'Pause');
@@ -131,11 +149,20 @@
     } catch (e) {}
   }
 
-  $('#thStart').onclick = () => {
-    if (!video.src) { $('#thHint').textContent = 'Load a video first.'; return; }
+  $('#thStart').onclick = async () => {
+    if (!show) return;
+    try { if (!(await loadSong())) return; }
+    catch (err) { console.error(err); $('#thHint').textContent = 'Could not load the song: ' + err.message; return; }
+    $('#thHint').textContent = 'Enjoy the show!';
     video.pause(); video.currentTime = 0; fired.clear(); render();
+    video.muted = !$('#thSound').checked;
     cd.on = true; cd.start = performance.now(); cd.last = -1;
-    setTimeout(() => { chime(783.99, 0.9); video.play().catch(() => {}); }, 3 * cd.beat);
+    setTimeout(() => {
+      chime(783.99, 0.9);
+      // Furby starts singing at the same moment the video starts.
+      if (show.song && window.furby && !window.furby.asleep) window.furby.playDLC(show.song);
+      video.play().catch(() => {});
+    }, 3 * cd.beat);
   };
 
   function tick(now) {
