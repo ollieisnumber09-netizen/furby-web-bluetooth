@@ -62,7 +62,11 @@
     align-items: center; justify-content: center; gap: 14px; z-index: 10; padding: 16px; text-align: center;
   }
   #start button { background: var(--accent); color: #2a1a00; font-size: 18px; padding: 14px 26px; border: 0; }
-  #start p { color: var(--muted); max-width: 320px; margin: 0; }
+  #start p { color: var(--muted); max-width: 340px; margin: 0; }
+  #start a { color: #9bc0e0; }
+  #start label.file { background: var(--accent); color: #2a1a00; border: 0; font-size: 16px; padding: 12px 20px; }
+  #start button.alt { background: transparent; color: var(--text); border: 1px solid var(--line); font-size: 14px; padding: 8px 14px; }
+  #speed { color: #6f8aa6; font-size: 11px; text-align: center; min-height: 14px; }
   .credit { color: #6f8aa6; font-size: 11px; text-align: center; margin-top: 14px; max-width: 440px; }
   .credit a { color: #9bc0e0; }
   #ripple { position: absolute; width: 60px; height: 60px; margin: -30px; border-radius: 50%; border: 3px solid #fff; opacity: 0; pointer-events: none; }
@@ -74,9 +78,9 @@
 <header>
   <h1>Furby Simulator</h1>
   <select id="pers" aria-label="Personality">
-    <option value="Base">No personality</option>
-    <option>Cat</option><option>DJ</option><option>Ninja</option>
-    <option>Pirate</option><option>PopStar</option><option>Princess</option>
+    <option value="">Personality…</option>
+    <option value="7">Cat</option><option value="6">DJ</option><option value="5">Ninja</option>
+    <option value="4">Pirate</option><option value="3">PopStar</option><option value="2">Princess</option>
   </select>
 </header>
 
@@ -182,18 +186,19 @@
   </div></div>
 </div>
 <div id="status"></div>
+<div id="speed"></div>
 
 <div class="controls">
   <button data-act="FEED">🍪 Feed</button>
-  <button data-act="HUG">🤗 Hug</button>
-  <button data-act="TALK">💬 Talk</button>
-  <button data-act="SHAKE">🌀 Shake</button>
-  <button data-act="UPSIDE">🙃 Upside down</button>
-  <button data-act="SING">🎵 Sing</button>
   <button data-act="TAIL">🐾 Pull tail</button>
+  <button data-act="SHAKE">🌀 Shake</button>
+  <button data-act="TILTL">↩️ Tilt left</button>
+  <button data-act="TILTR">↪️ Tilt right</button>
+  <button data-act="UPSIDE">🙃 Upside down</button>
+  <button data-act="NOISE">🔊 Make a noise</button>
   <button class="mask" id="maskBtn" style="grid-column: span 2">😴 Put sleep mask on</button>
 </div>
-<p class="hint">Tap his head or ears to pet him, tickle his belly, or stroke his sides. On a phone you can shake it too.</p>
+<p class="hint">This Furby runs the real Furby Connect firmware. Tap his head, ears or back to push his antenna, tap his beak to feed him. On a phone you can shake it too. If he goes quiet he has switched himself off: tap him to wake him up.</p>
 
 <div class="panel">
   <h2>Test a DLC</h2>
@@ -205,65 +210,57 @@
   <div id="dlcButtons"></div>
 </div>
 
-<p class="credit">Fan project. Eyes and sounds load from the Furby Connect files in the <a href="https://github.com/Furby-ReConnect/Furby" target="_blank" rel="noopener">Furby-ReConnect</a> repo. Sound decoding is ported from <a href="https://github.com/John-K/a1800_codec" target="_blank" rel="noopener">a1800_codec</a>. Furby is a trademark of Hasbro. Want the real firmware? Try the <a href="../emulator/">real Furby emulator</a>.</p>
+<p class="credit">Fan project. Furby runs on <a href="https://github.com/FurbLord/furbulator" target="_blank" rel="noopener">furbulator</a> by FurbLord (MIT), an emulator of the Furby Connect's chip, compiled for the web. You supply the ROM pack. Furby is a trademark of Hasbro. Also try the <a href="../emulator/">full emulator with its debug tools</a>.</p>
 
 <div id="start">
-  <button id="go">Wake up Furby</button>
-  <p>Turn your sound on. Furby's eyes and voice load from the internet, so the first few moves can take a second.</p>
+  <p><b>This Furby runs the real Furby Connect firmware.</b> It needs the ROM pack, <code>furby-connect.fcrom</code>, from the <a href="https://github.com/FurbLord/furbulator/releases/latest" target="_blank" rel="noopener">furbulator releases page</a>. Pick it once and your browser keeps it.</p>
+  <label class="file" id="pickLabel">Choose furby-connect.fcrom<input type="file" id="romFile" accept=".fcrom"></label>
+  <button id="go" style="display:none">Wake up Furby</button>
+  <p id="startMsg"></p>
 </div>
 
-<script src="furby.js?v=9"></script>
+<script src="furby.js?v=10"></script>
+<script src="furby_core.js?v=1"></script>
+<script src="emu.js?v=1"></script>
 <script>
 (() => {
-  const { Furby, ACT } = window.FurbySim;
   const $ = s => document.querySelector(s);
   const furbyEl = $('#furby'), earL = $('#earL'), earR = $('#earR'), jaw = $('#jaw'), bobEl = $('#bob');
-  let level = 0, nudge = 0;
+  const status = t => { $('#status').textContent = t; };
+  const emu = window.__emu = new EmuFurby({ leftCanvas: $('#eyeL'), rightCanvas: $('#eyeR'), onStatus: status });
+  let maskOn = false, upsideUntil = 0;
 
-  // The motor: one cam drives ears, body tilt and beak, like the real toy.
-  const motor = { pos: 0, from: 0, to: 0, t0: 0, dur: 1, queue: [] };
-  function runMotor(steps) { motor.queue = steps.slice(); nextStep(performance.now()); }
-  function nextStep(t) {
-    const s = motor.queue.shift();
-    if (!s) return;
-    motor.from = motor.pos; motor.to = s[0]; motor.t0 = t; motor.dur = Math.max(60, s[1]);
-  }
+  // The theatre (theatre.js) talks to window.furby.
+  window.furby = {
+    get asleep() { return emu.poweredOff || maskOn; },
+    get base() { return emu.ready; },
+    loadDLC: (bytes, name) => emu.uploadDlc(bytes, name, t => status(t)).then(() => { status(''); return []; }),
+    playDLC: a => emu.action(a),
+  };
 
-  const furby = window.furby = new Furby({
-    leftCanvas: $('#eyeL'), rightCanvas: $('#eyeR'),
-    onStatus: t => { $('#status').textContent = t; },
-    onBusy: b => { document.body.classList.toggle('busy', b); },
-    onMove: (kind, v) => {
-      if (kind === 'level') level = level * 0.6 + v * 0.4;
-      else if (kind === 'motor') runMotor(v);
-      else if (kind === 'nudge') nudge = 1;
-    },
-  });
-
-  let t0 = performance.now();
+  // Everything that moves is the motor: the firmware sends cam positions (0-476, the same numbers
+  // as the .MTR files) and the cam turns towards them. Around 28-50 the beak opens (it chomps
+  // between 35 and 50 while he talks); further round, the ears tilt out and the upper body sways
+  // left and right. Nothing moves on its own.
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   function animate(t) {
-    const s = (t - t0) / 1000;
-    // advance the motor
-    const k = Math.min(1, (t - motor.t0) / motor.dur);
-    motor.pos = motor.from + (motor.to - motor.from) * (0.5 - Math.cos(k * Math.PI) / 2);
-    if (k >= 1) nextStep(t);
-    const ph = motor.pos / 476;                      // 0..1 around the cam
-    nudge *= 0.9;
-    const talk = Math.min(1, level * 1.6);
-    const sleep = furby.asleep ? 1 : 0;
-    const earCam = -30 + Math.sin(ph * Math.PI) * 78;  // ears: straight up at rest, swing right out sideways half way round the cam
-    const earBase = sleep ? 70 : 0;
-    const wig = Math.sin(s * 9) * talk * 6 + Math.sin(s * 1.3) * 1.5 + nudge * Math.sin(s * 40) * 6;
-    const ear = Math.max(-35, Math.min(80, earBase + earCam + wig));   // never past sideways
+    emu.frame(t);
+    const pos = emu.motor.pos;
+    const ear = clamp(pos * 0.28, 0, 75);
     earL.style.transform = `rotate(${-ear}deg)`;
     earR.style.transform = `rotate(${ear}deg)`;
-    const open = talk * 16 + Math.max(0, Math.sin(ph * Math.PI * 2)) * 5;
-    jaw.setAttribute("cy", 270 + open * 0.55);
-    const lean = Math.sin(ph * Math.PI * 2) * 3;     // body rocks back and forth with the cam
-    const bob = Math.sin(s * (sleep ? 1.2 : 2)) * (sleep ? 3 : 1);
-    const tilt = lean;
-    bobEl.style.transform = `translateY(${bob}px) rotate(${tilt}deg)`;
-    document.documentElement.style.setProperty('--ant', sleep ? '#5a5aa8' : talk > 0.1 ? '#ffe45c' : '#c8f56a');
+    const open = pos <= 50 ? clamp((pos - 28) / 22, 0, 1) : clamp(1 - (pos - 50) / 40, 0, 1);
+    jaw.setAttribute('cy', 270 + open * 10);
+    const sway = 10 * Math.sin(pos / 476 * 2 * Math.PI);
+    bobEl.style.transform = `rotate(${sway}deg)`;
+    if (emu.ready) {
+      const v = emu.ledRaw | 0, a = (v >> 16) & 255, b = (v >> 8) & 255, c = v & 255;
+      const lit = !emu.poweredOff && (a || b || c);
+      const k = 255 / Math.max(1, a, b, c);   // the LED's colour; its brightness shows in the glow
+      document.documentElement.style.setProperty('--ant', lit ? `rgb(${a * k | 0},${b * k | 0},${c * k | 0})` : '#3a4a5a');
+      if (emu.speed !== undefined) $('#speed').textContent = emu.poweredOff ? 'switched off' : `speed ${Math.round(emu.speed * 100)}%` + (emu.cpi > 2 ? ' (boost)' : '');
+      if (upsideUntil && t > upsideUntil) { upsideUntil = 0; emu.orient(0); furbyEl.classList.remove('upside'); }
+    }
     requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
@@ -274,69 +271,80 @@
     r.classList.remove('go'); void r.offsetWidth; r.classList.add('go');
   }
 
-  const partAct = { head: ACT.HEAD, belly: ACT.BELLY, back: ACT.BACK, tail: ACT.TAIL, face: ACT.HEAD };
+  // Touches: the antenna is pushed towards where you tap (0-3); the beak is the tongue sensor.
   document.querySelectorAll('.hit').forEach(el => {
     el.addEventListener('pointerdown', e => {
       e.preventDefault();
       ripple(e.clientX, e.clientY);
-      if (furby.asleep) { nudge = 1; return; }
-      furby.act(partAct[el.dataset.part]);
+      const part = el.dataset.part;
+      if (part === 'face') return emu.press(4, 500);
+      const box = bobEl.getBoundingClientRect(), x = (e.clientX - box.left) / box.width;
+      if (part === 'head') return emu.press(x < 0.4 ? 1 : x > 0.6 ? 2 : 0, 450);
+      if (part === 'back') return emu.press(3, 450);
+      if (part === 'belly') return emu.press(0, 450);
     });
   });
 
-  document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async () => {
-    if (furby.asleep) { nudge = 1; return; }
+  document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
     const a = b.dataset.act;
-    if (a === 'SHAKE') { furbyEl.classList.add('shaking'); setTimeout(() => furbyEl.classList.remove('shaking'), 1200); }
-    if (a === 'UPSIDE') {
-      if (furbyEl.classList.contains('upside')) return;
-      furbyEl.classList.add('upside');
-      await Promise.all([furby.act(ACT.UPSIDE, { force: true }), new Promise(r => setTimeout(r, 2500))]);
-      furbyEl.classList.remove('upside');
-      return;
-    }
-    if (a === 'FEED') { furby.feed(); return; }
-    furby.act(ACT[a]);
+    if (a === 'FEED') emu.press(4, 600);
+    else if (a === 'TAIL') emu.press(5, 700);
+    else if (a === 'NOISE') emu.noise(1000);
+    else if (a === 'SHAKE') { emu.shake(1200); furbyEl.classList.add('shaking'); setTimeout(() => furbyEl.classList.remove('shaking'), 1200); }
+    else if (a === 'TILTL' || a === 'TILTR') { emu.orient(0, a === 'TILTL' ? -1 : 1, 0); setTimeout(() => emu.orient(0), 1500); }
+    else if (a === 'UPSIDE') { emu.orient(1); furbyEl.classList.add('upside'); upsideUntil = performance.now() + 3000; }
   }));
 
   const mask = $('#mask'), maskBtn = $('#maskBtn');
-  maskBtn.addEventListener('click', async () => {
-    if (!maskBtn.classList.contains('on')) {
-      mask.style.transform = 'translateY(0)'; mask.style.opacity = '1';
-      maskBtn.classList.add('on'); maskBtn.textContent = '☀️ Take sleep mask off';
-      await furby.maskOn();
-    } else {
-      mask.style.transform = 'translateY(-260px)'; mask.style.opacity = '0';
-      maskBtn.classList.remove('on'); maskBtn.textContent = '😴 Put sleep mask on';
-      await furby.maskOff();
-    }
+  maskBtn.addEventListener('click', () => {
+    maskOn = !maskOn;
+    mask.style.transform = maskOn ? 'translateY(0)' : 'translateY(-260px)'; mask.style.opacity = maskOn ? '1' : '0';
+    maskBtn.classList.toggle('on', maskOn);
+    maskBtn.textContent = maskOn ? '☀️ Take sleep mask off' : '😴 Put sleep mask on';
+    emu.wake();
+    emu.mask(maskOn ? 0 : -1);
   });
 
-  $('#pers').addEventListener('change', e => furby.setPersonality(e.target.value).catch(err => { $('#status').textContent = 'Could not load that personality. Check your connection.'; console.error(err); }));
+  // Personalities come from the sleep mask's resistor code, like the real mask accessory.
+  $('#pers').addEventListener('change', e => {
+    const entry = +e.target.value;
+    if (!entry) return;
+    emu.wake();
+    emu.mask(entry);
+    status('Furby is reading the mask…');
+    setTimeout(() => { emu.mask(maskOn ? 0 : -1); status(''); e.target.value = ''; }, 4000);
+  });
 
-  // ----- DLC testing -----
+  // ----- DLC testing: uploaded over the emulated Bluetooth link, like the app does -----
   const dlcInfo = $('#dlcInfo'), dlcButtons = $('#dlcButtons');
   let dlcIndex = [];
   fetch('../dlc/index.js', { cache: 'no-store' }).then(r => r.ok ? r.text() : '[]').then(t => {
     try { dlcIndex = JSON.parse(t); } catch (e) { dlcIndex = []; }
     for (const d of dlcIndex) { const o = document.createElement('option'); o.value = d.file; o.textContent = d.title || d.file; $('#dlcPick').appendChild(o); }
   }).catch(() => {});
-
-  async function useDLC(bytes, name, buttons) {
-    if (!furby.base) { dlcInfo.textContent = 'Wake Furby up first.'; return; }
-    dlcInfo.textContent = 'Loading ' + name + '…'; dlcButtons.innerHTML = '';
+  function actionsOf(bytes) {
     try {
-      const all = await furby.loadDLC(bytes, name);
-      const list = buttons && buttons.length ? buttons : all.map((a, i) => ({ title: 'Action ' + a.join('/'), action: a }));
-      dlcInfo.textContent = name + ' is loaded. Tap a button to play it.';
+      const { parseDLC, parseXLS } = window.FurbySim, raw = parseDLC(bytes), xls = parseXLS(raw.XLS), out = [];
+      const A = xls[74];
+      if (A && A[0]) A[0].forEach((sub, a) => sub.items.forEach((id, b) => { if ((id >> 12) === 1) out.push([75, 0, a, b]); }));
+      return out;
+    } catch (e) { return [[75, 0, 0, 0]]; }
+  }
+  async function useDLC(bytes, name, buttons) {
+    if (!emu.ready) { dlcInfo.textContent = 'Wake Furby up first.'; return; }
+    dlcButtons.innerHTML = '';
+    try {
+      await emu.uploadDlc(bytes, name, t => { dlcInfo.textContent = t; });
+      const list = buttons && buttons.length ? buttons : actionsOf(bytes).map(a => ({ title: 'Action ' + a.join('/'), action: a }));
+      dlcInfo.textContent = name + ' is on Furby. Tap a button to play it.';
       for (const b of list) {
         const el = document.createElement('button');
         el.textContent = b.title; el.title = b.action.join('/');
-        el.onclick = () => furby.playDLC(b.action);
+        el.onclick = () => emu.action(b.action);
         dlcButtons.appendChild(el);
       }
-      if (list[0]) furby.playDLC(list[0].action);
-    } catch (err) { console.error(err); dlcInfo.textContent = 'Could not read that DLC: ' + err.message; }
+      if (list[0]) emu.action(list[0].action);
+    } catch (err) { console.error(err); dlcInfo.textContent = 'Could not send that DLC: ' + err.message; }
   }
   $('#dlcPick').addEventListener('change', async e => {
     const f = e.target.value; if (!f) return;
@@ -361,25 +369,38 @@
     if (prev) {
       const d = Math.abs(a.x - prev.x) + Math.abs(a.y - prev.y) + Math.abs(a.z - prev.z);
       const now = performance.now();
-      if (d > 35 && now - lastShake > 4000 && !furby.asleep) {
+      if (d > 35 && now - lastShake > 2000 && emu.ready) {
         lastShake = now;
         furbyEl.classList.add('shaking'); setTimeout(() => furbyEl.classList.remove('shaking'), 1200);
-        furby.act(ACT.SHAKE);
+        emu.shake(1200);
       }
     }
     prev = { x: a.x, y: a.y, z: a.z };
   });
 
-  $('#go').addEventListener('click', async () => {
-    furby.voice.start();
-    $('#start').style.display = 'none';
+  // ----- start: the ROM pack (kept in the browser after the first time) -----
+  async function start(bytes, name) {
+    emu.speaker.start();
+    $('#startMsg').textContent = 'Starting…';
     try {
-      await furby.init();
-      furby.act(ACT.WAKE, { force: true });
+      await emu.load(bytes, name);
+      $('#start').style.display = 'none';
     } catch (err) {
       console.error(err);
-      $('#status').textContent = 'Could not load Furby\'s files. Check your connection and reload.';
+      $('#startMsg').textContent = 'That file did not work: ' + err.message;
     }
+  }
+  emu.savedRom().then(saved => {
+    if (!saved) return;
+    $('#go').style.display = '';
+    $('#pickLabel').classList.add('alt');
+    $('#pickLabel').firstChild.textContent = 'Use a different ROM pack';
+    $('#go').onclick = () => start(new Uint8Array(saved.data));
+  });
+  $('#romFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    $('#startMsg').textContent = 'Reading ' + f.name + '…';
+    start(new Uint8Array(await f.arrayBuffer()), f.name);
   });
 })();
 </script>
