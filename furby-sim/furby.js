@@ -704,4 +704,4 @@ class Furby {
   }
 }
 
-window.FurbySim = { Furby, ACT, PERSONALITIES };
+window.FurbySim = { Furby, ACT, PERSONALITIES, parseDLC, parseXLS };
