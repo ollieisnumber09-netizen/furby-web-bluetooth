@@ -78,7 +78,7 @@
 <header>
   <h1>Furby Simulator</h1>
   <select id="pers" aria-label="Personality">
-    <option value="">Personality…</option>
+    <option value="-1">No personality</option>
     <option value="7">Cat</option><option value="6">DJ</option><option value="5">Ninja</option>
     <option value="4">Pirate</option><option value="3">PopStar</option><option value="2">Princess</option>
   </select>
@@ -220,15 +220,15 @@
 </div>
 
 <script src="furby.js?v=10"></script>
-<script src="furby_core.js?v=1"></script>
-<script src="emu.js?v=1"></script>
+<script src="furby_core.js?v=2"></script>
+<script src="emu.js?v=4"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
   const furbyEl = $('#furby'), earL = $('#earL'), earR = $('#earR'), jaw = $('#jaw'), bobEl = $('#bob');
   const status = t => { $('#status').textContent = t; };
   const emu = window.__emu = new EmuFurby({ leftCanvas: $('#eyeL'), rightCanvas: $('#eyeR'), onStatus: status });
-  let maskOn = false, upsideUntil = 0;
+  let maskOn = false, upsideUntil = 0, persEntry = -1;
 
   // The theatre (theatre.js) talks to window.furby.
   window.furby = {
@@ -258,7 +258,7 @@
       const lit = !emu.poweredOff && (a || b || c);
       const k = 255 / Math.max(1, a, b, c);   // the LED's colour; its brightness shows in the glow
       document.documentElement.style.setProperty('--ant', lit ? `rgb(${a * k | 0},${b * k | 0},${c * k | 0})` : '#3a4a5a');
-      if (emu.speed !== undefined) $('#speed').textContent = emu.poweredOff ? 'switched off' : `speed ${Math.round(emu.speed * 100)}%` + (emu.cpi > 2 ? ' (boost)' : '');
+      if (emu.speed !== undefined) $('#speed').textContent = emu.poweredOff ? 'switched off' : `speed ${Math.round(emu.speed * 100)}%`;
       if (upsideUntil && t > upsideUntil) { upsideUntil = 0; emu.orient(0); furbyEl.classList.remove('upside'); }
     }
     requestAnimationFrame(animate);
@@ -281,7 +281,7 @@
       const box = bobEl.getBoundingClientRect(), x = (e.clientX - box.left) / box.width;
       if (part === 'head') return emu.press(x < 0.4 ? 1 : x > 0.6 ? 2 : 0, 450);
       if (part === 'back') return emu.press(3, 450);
-      if (part === 'belly') return emu.press(0, 450);
+      if (part === 'belly') { status('The firmware has no belly sensor, so a tummy tickle does nothing. Try his head or beak.'); setTimeout(() => status(''), 3000); }
     });
   });
 
@@ -302,17 +302,17 @@
     maskBtn.classList.toggle('on', maskOn);
     maskBtn.textContent = maskOn ? '☀️ Take sleep mask off' : '😴 Put sleep mask on';
     emu.wake();
-    emu.mask(maskOn ? 0 : -1);
+    emu.mask(maskOn ? 0 : persEntry);
   });
 
-  // Personalities come from the sleep mask's resistor code, like the real mask accessory.
+  // Personalities come from a mask's resistor code, like the real mask accessories: the firmware
+  // only stays in a personality while that mask is on, so it stays on until you pick another.
   $('#pers').addEventListener('change', e => {
-    const entry = +e.target.value;
-    if (!entry) return;
+    persEntry = +e.target.value;
     emu.wake();
-    emu.mask(entry);
-    status('Furby is reading the mask…');
-    setTimeout(() => { emu.mask(maskOn ? 0 : -1); status(''); e.target.value = ''; }, 4000);
+    if (!maskOn) emu.mask(persEntry);
+    status(persEntry >= 0 ? 'Furby is reading the mask…' : '');
+    if (persEntry >= 0) setTimeout(() => status(''), 3000);
   });
 
   // ----- DLC testing: uploaded over the emulated Bluetooth link, like the app does -----

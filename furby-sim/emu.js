@@ -26,7 +26,7 @@
   class Speaker {
     constructor() {
       this.ctx = null; this.buf = new Float32Array(16000 * 2 * 2); this.r = 0; this.w = 0; this.rate = 16000; this.pos = 0;
-      this.level = 0;
+      this.level = 0; this.playing = false;
     }
     start() {
       if (this.ctx) return this.ctx.resume();
@@ -47,15 +47,18 @@
         this.w = (this.w + 1) % cap;
         if (this.w === this.r) this.r = (this.r + 2) % cap;   // overrun: drop the oldest
       }
-      // Keep the delay short: past 0.25 s queued, skip ahead to 0.1 s.
-      if (this.queued() > rate * 0.25) this.r = (this.w - Math.round(rate * 0.1) * 2 + cap * 4) % cap;
+      // Keep the delay bounded: past 0.5 s queued, skip ahead to 0.2 s.
+      if (this.queued() > rate * 0.5) this.r = (this.w - Math.round(rate * 0.2) * 2 + cap * 4) % cap;
     }
     fill(out) {
       const L = out.getChannelData(0), R = out.getChannelData(1), cap = this.buf.length;
       const step = this.rate / this.ctx.sampleRate;
       let sum = 0;
+      // Start (and restart after running dry) only with 0.15 s in hand, so a short slowdown
+      // doesn't chop the sound into crackles.
+      if (!this.playing && this.queued() >= this.rate * 0.15) this.playing = true;
       for (let i = 0; i < L.length; i++) {
-        if (this.queued() < 2) { L[i] = R[i] = 0; continue; }
+        if (!this.playing || this.queued() < 2) { this.playing = false; L[i] = R[i] = 0; continue; }
         const f = this.pos, j = this.r, k = (this.r + 2) % cap;
         L[i] = this.buf[j] + (this.buf[k] - this.buf[j]) * f;
         R[i] = this.buf[j + 1] + (this.buf[k + 1] - this.buf[j + 1]) * f;
@@ -71,7 +74,7 @@
     constructor(ui) {
       this.ui = ui;   // { leftCanvas, rightCanvas, onStatus(text) }
       this.mod = null; this.ready = false; this.speaker = new Speaker();
-      this.cpi = 2; this.windowEmu = 0; this.windowWall = 0; this.windowBusy = 0; this.slow = 0; this.idle = 0;
+      this.cpi = 4;   // fixed: a steady speed keeps the sound clean (the firmware still keeps up) this.windowEmu = 0; this.windowWall = 0; this.windowBusy = 0; this.slow = 0; this.idle = 0;
       this.motor = { pos: 0, target: 0 };
       this.commits = [-1, -1];
       this.holds = new Map();
@@ -81,7 +84,7 @@
     async load(romBytes, romName) {
       if (romName) romPut(romName, romBytes);
       this.ui.onStatus('Starting the Furby’s chip…');
-      this.mod = await FurbyCore({ locateFile: f => f + '?v=1' });
+      this.mod = await FurbyCore({ locateFile: f => f + '?v=2' });
       this.mod.FS.writeFile(ROM_PATH, romBytes);
       const M = this.mod;
       this.api = {
@@ -107,11 +110,13 @@
         ble: M.cwrap('fc_ble', null, ['number', 'number']),
         dlc: M.cwrap('fc_dlc', 'number', ['string', 'string']),
         dlcState: M.cwrap('fc_dlc_state', 'number', []),
+        dlcProgress: M.cwrap('fc_dlc_progress', 'number', []),
         listen: M.cwrap('fc_listen_take', 'number', ['number', 'number']),
       };
       this.audioPtr = M._malloc(2 * 2 * 8192);
       this.bytesPtr = M._malloc(64);
       if (!this.api.init(ROM_PATH)) throw new Error(this.api.error() || 'the ROM pack did not load');
+      this.api.setCpi(this.cpi);
       this.ready = true;
       this.last = performance.now();
       this.ui.onStatus('');
@@ -126,7 +131,9 @@
       this.last = now;
       const a = this.api;
       const t0 = performance.now();
-      const done = a.off() ? dt : a.run(dt, 14);
+      // While a DLC is uploading, run as fast as the PC allows (sound muted) so it takes less time.
+      const turbo = this.uploading;
+      const done = a.off() ? dt : a.run(turbo ? 0.1 : dt, turbo ? 12 : 14);
       const busy = performance.now() - t0;
       this.autoBoost(dt, done, busy);
       for (const [i, until] of this.holds) if (now >= until) { a.sensor(i, 0); this.holds.delete(i); }
@@ -135,7 +142,7 @@
       for (;;) {
         const n = a.take(this.audioPtr, 8192);
         if (n <= 0) break;
-        this.speaker.push(new Int16Array(M.HEAPU8.buffer, this.audioPtr, n * 2), n, a.rate());
+        if (!turbo) this.speaker.push(new Int16Array(M.HEAPU8.buffer, this.audioPtr, n * 2), n, a.rate());
         if (n < 8192) break;
       }
       // eyes
@@ -162,11 +169,6 @@
       const speed = this.windowEmu / this.windowWall, load = this.windowBusy / this.windowWall;
       this.windowEmu = this.windowWall = this.windowBusy = 0;
       if (this.windows = (this.windows || 0) + 1, this.windows > 1) this.speed = speed;
-      if (this.api.off()) return;
-      this.slow = speed < 0.96 ? this.slow + 1 : 0;
-      this.idle = speed > 0.98 && load < 0.45 ? this.idle + 1 : 0;
-      if (this.slow >= 2 && this.cpi < 4) { this.cpi++; this.slow = 0; this.api.setCpi(this.cpi); }
-      else if (this.idle >= 10 && this.cpi > 2) { this.cpi--; this.idle = 0; this.api.setCpi(this.cpi); }
     }
     drawEye(panel, dim) {
       const cv = panel === 0 ? this.ui.leftCanvas : this.ui.rightCanvas;
@@ -214,20 +216,51 @@
       if (!this.ready) throw new Error('Wake Furby up first');
       this.wake();
       const safe = name.replace(/[^A-Za-z0-9._-]/g, '_').slice(-12).toUpperCase();
+      // Same steps as the real app (furble.js): clear the old DLCs, upload,
+      // then load and switch on whichever slot the Furby stored it in.
+      onStep && onStep('Clearing old DLCs off Furby…');
+      const before = await this.slots();
+      for (let i = 0; i < 16; i++) {
+        if (!(before.filled & (1 << i)) && !(before.active & (1 << i))) continue;
+        await this.command([0x62, i], 0xDC, 5000).catch(() => {});
+        await this.command([0x74, i], 0x74, 5000).catch(() => {});
+      }
       this.mod.FS.writeFile('/upload.dlc', bytes);
       this.listenAll();
       if (!this.api.dlc('/upload.dlc', safe)) throw new Error('the Furby would not take the file');
-      onStep && onStep('Sending ' + name + ' to Furby…');
-      await this.waitFor(() => { const s = this.api.dlcState(); if (s === 5) throw new Error('the upload failed'); return s === 4; }, 600000);
+      this.uploading = true;
+      try {
+        await this.waitFor(() => {
+          const s = this.api.dlcState();
+          if (s === 5) throw new Error('the upload failed');
+          onStep && onStep('Sending ' + name + ' to Furby… ' + Math.floor(this.api.dlcProgress() * 100) + '%');
+          return s === 4;
+        }, 900000);
+      } finally { this.uploading = false; }
+      onStep && onStep('Checking it…');
+      await this.waitFor(() => false, 1500).catch(() => {});   // the Furby may still reject it
+      const after = await this.slots();
+      const slot = [...Array(16).keys()].find(i => after.filled & (1 << i));
+      if (slot === undefined) throw new Error(bytes.length > 2500000
+        ? 'Furby threw it away, it is too big (' + (bytes.length / 1048576).toFixed(1) + ' MB). DLCs up to about 2 MB work.'
+        : 'Furby threw the file away');
       onStep && onStep('Loading it…');
-      await this.command([0x60, 0x02], 0xDC, 45000);
+      await this.command([0x60, slot], 0xDC, 45000);
       onStep && onStep('Switching it on…');
       await this.command([0x61], 0xDC, 20000);
+      const now = await this.slots();
+      if (!(now.active & (1 << slot))) throw new Error('Furby would not switch it on');
+    }
+    async slots() {
+      const p = await this.command([0x72], 0x72, 5000);
+      return { filled: (p[3] << 8) | p[4], active: (p[7] << 8) | p[8] };
     }
     async command(bytes, reply, ms) {
       this.listenAll();
       this.ble(bytes);
-      await this.waitFor(() => this.listenAll().some(p => p[0] === reply), ms);
+      let got = null;
+      await this.waitFor(() => { got = got || this.listenAll().find(p => p[0] === reply); return !!got; }, ms);
+      return got;
     }
     waitFor(test, ms) {
       const t0 = performance.now();
