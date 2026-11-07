@@ -43,27 +43,70 @@ var furby_chars = {};
 var furbies = [];
 var sendTarget = 'all';
 var furbyCount = 0;
+var userDisconnect = false;
 function targets() {
-    if (sendTarget === 'all') return furbies;
-    return furbies.filter(f => f.id == sendTarget);
+    var ready = furbies.filter(f => f.ready);
+    if (sendTarget === 'all') return ready;
+    return ready.filter(f => f.id == sendTarget);
+}
+// Each Furby gets its own queue so two writes never hit the same Furby at
+// once (Chrome rejects that with "GATT operation already in progress").
+// A busy write is retried a few times before giving up.
+function writeTo(f, data) {
+    var bytes = new Uint8Array(data);
+    var run = async () => {
+        for (var i = 0; ; i++) {
+            try {
+                await f.chars.GeneralPlusWrite.writeValue(bytes);
+                f.lastSent = performance.now();
+                return;
+            } catch (e) {
+                if (i >= 3 || !f.ready) throw e;
+                await sleep(80 * (i + 1));
+            }
+        }
+    };
+    var p = (f.queue || Promise.resolve()).then(run, run);
+    f.queue = p.catch(() => {});
+    return p;
 }
 function writeGP(data) {
     var t = targets();
     if (t.length == 0) return Promise.reject(new Error('No Furby selected'));
-    return Promise.all(t.map(f => f.chars.GeneralPlusWrite.writeValue(new Uint8Array(data))));
+    return Promise.all(t.map(f => writeTo(f, data)));
 }
 function updateTargets() {
     var sel = document.getElementById('sendto');
     if (!sel) return;
     var html = "<option value='all'>All Furbys (" + furbies.length + ")</option>";
-    furbies.forEach(f => { html += "<option value='" + f.id + "'>" + f.name + "</option>"; });
+    furbies.forEach(f => { html += "<option value='" + f.id + "'>" + f.name + (f.ready ? '' : ' (reconnecting)') + "</option>"; });
     sel.innerHTML = html;
     if (sendTarget !== 'all' && !furbies.some(f => f.id == sendTarget)) sendTarget = 'all';
     sel.value = sendTarget;
     var st = document.getElementById('state');
     if (furbies.length > 1) st.textContent = furbies.length + ' Furbys connected';
 }
-function onOneDisconnected(f) {
+async function onOneDisconnected(f) {
+    if (!f.ready) return;
+    f.ready = false;
+    if (!userDisconnect) {
+        log('> ' + f.name + ' dropped, reconnecting...');
+        msg.error(f.name + ' dropped, reconnecting...');
+        updateTargets();
+        for (var i = 0; i < 6 && !userDisconnect; i++) {
+            await sleep(500 + i * 700);
+            try {
+                await setupFurby(f);
+                f.ready = true;
+                log('> ' + f.name + ' reconnected');
+                msg.ok(f.name + ' reconnected!');
+                updateTargets();
+                return;
+            } catch (e) {
+                log(f.name + ' reconnect try ' + (i + 1) + ' failed: ' + e.message);
+            }
+        }
+    }
     furbies = furbies.filter(x => x !== f);
     log('> ' + f.name + ' disconnected');
     if (furbies.length == 0) { onDisconnected(); updateTargets(); return; }
@@ -324,10 +367,11 @@ function startKeepAlive() {
     clearInterval(keepAliveTimer);
     keepAliveTimer = setInterval(() => {
         if (isTransferring) return;
-        if (performance.now() - lastCommandSent > 3000) {
-            lastCommandSent = performance.now();
-            furbies.forEach(f => f.chars.GeneralPlusWrite.writeValue(new Uint8Array([0x20, 0x06])).catch(() => {}));
-        }
+        var now = performance.now();
+        furbies.forEach(f => {
+            if (f.ready && now - (f.lastSent || 0) > 2500)
+                writeTo(f, [0x20, 0x06]).catch(() => {});
+        });
     }, 1000);
 }
 
@@ -617,6 +661,7 @@ function doConnectDisconnect() {
 async function doDisconnect() {
     try {
       log('Disconnecting from GATT Server...');
+      userDisconnect = true;
       furbies.slice().forEach(f => f.dev.gatt.disconnect());
     } catch (e) {
       log('Argh! ' + e);
@@ -705,56 +750,68 @@ function decodeFurbyState(buf) {
     return state;
 }
 
+// Connects GATT and sets up notifications for one Furby. Android often
+// fails the first connect attempt when other Furbys are already connected,
+// so it retries a few times.
+async function setupFurby(entry) {
+    var server, lastErr;
+    for (var i = 0; i < 4; i++) {
+        try {
+            if (entry.dev.gatt.connected) entry.dev.gatt.disconnect();
+            server = await entry.dev.gatt.connect();
+            break;
+        } catch (e) {
+            lastErr = e;
+            log(entry.name + ' connect try ' + (i + 1) + ' failed: ' + e.message);
+            await sleep(400 + i * 600);
+        }
+    }
+    if (!server) throw lastErr;
+    log('Getting Furby Service...');
+    const service = await server.getPrimaryService(fluff_service);
+    const characteristics = await service.getCharacteristics();
+    entry.chars = {};
+    for (const characteristic of characteristics) {
+        var name = uuid_lookup[characteristic.uuid];
+        entry.chars[name] = characteristic;
+    }
+    entry.chars.GeneralPlusListen.addEventListener('characteristicvaluechanged', handleGeneralPlusResponse);
+    await entry.chars.GeneralPlusListen.startNotifications();
+    entry.chars.NordicListen.addEventListener('characteristicvaluechanged', handleNordicNotification);
+    await entry.chars.NordicListen.startNotifications();
+    entry.queue = Promise.resolve();
+    entry.lastSent = performance.now();
+    if (furbies[0] === entry || furbies.length == 0) furby_chars = entry.chars;
+}
+
 async function doConnect() {
     log('Requesting Bluetooth Devices with Furby name...');
-    var server;
+    userDisconnect = false;
+    var dev, entry;
     try {
-        var dev = await navigator.bluetooth.requestDevice({
+        dev = await navigator.bluetooth.requestDevice({
             filters: [{ name: 'Furby'}], 
             optionalServices: ['generic_access', 'device_information', fluff_service]});
-        if (furbies.some(f => f.dev.id === dev.id)) { msg.error('That Furby is already connected'); return; }
-        device = dev;
-        var entry = { id: ++furbyCount, dev: dev, chars: {}, name: 'Furby ' + furbyCount };
-        dev.addEventListener('gattserverdisconnected', () => onOneDisconnected(entry));
-        furby_chars = entry.chars;
-        log('Connecting to GATT Server...');
-        server = await device.gatt.connect();
     } catch (e) {
-        msg.error('Failed to connect');
         log(e.message);
         return;
     }
-
+    if (furbies.some(f => f.dev.id === dev.id)) { msg.error('That Furby is already connected'); return; }
+    entry = { id: ++furbyCount, dev: dev, chars: {}, name: 'Furby ' + furbyCount, ready: false };
+    dev.addEventListener('gattserverdisconnected', () => onOneDisconnected(entry));
+    msg.ok('Connecting ' + entry.name + '...');
     try {
-        log('Getting Furby Service...');
-        const service = await server.getPrimaryService(fluff_service);
-    
-        log('Getting Furby Characteristics...');
-        const characteristics = await service.getCharacteristics();
-    
-        // put handles to characteristics into chars object
-        for (const characteristic of characteristics) {
-            var uuid = characteristic.uuid;
-            var name = uuid_lookup[uuid];
-            var props = '';
-            for (let k in characteristic.properties) {
-                if (characteristic.properties[k]) props += k + ' ';
-            }
-            log('> Got Characteristic: ' + uuid + ' - ' + name + ' (' + props + ')');
-            furby_chars[name] = characteristic;
-        }
-        // enable notifications
-        furby_chars.GeneralPlusListen.addEventListener('characteristicvaluechanged', handleGeneralPlusResponse);
-        await furby_chars.GeneralPlusListen.startNotifications();
-
-        furby_chars.NordicListen.addEventListener('characteristicvaluechanged', handleNordicNotification);
-        await furby_chars.NordicListen.startNotifications();
+        await setupFurby(entry);
     } catch (e) {
-        msg.error('Failed initialise BLE services');
+        msg.error('Could not connect ' + entry.name + ', try again');
         log(e.message);
+        furbyCount--;
         return;
     }
-  
+    device = dev;
+    entry.ready = true;
+    if (furbies.length == 0) furby_chars = entry.chars;
+
     //await triggerAction(39,4,2,0); // 'get ready'
     var first = furbies.length == 0;
     furbies.push(entry);
