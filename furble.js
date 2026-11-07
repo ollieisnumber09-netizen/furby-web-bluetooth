@@ -366,9 +366,10 @@ function cycleDebug() {
 function startKeepAlive() {
     clearInterval(keepAliveTimer);
     keepAliveTimer = setInterval(() => {
-        if (isTransferring) return;
         var now = performance.now();
         furbies.forEach(f => {
+            // only the Furby receiving a file skips its keep-alive
+            if (isTransferring && f.chars === furby_chars) return;
             if (f.ready && now - (f.lastSent || 0) > 2500)
                 writeTo(f, [0x20, 0x06]).catch(() => {});
         });
@@ -823,21 +824,38 @@ async function doConnect() {
         msg.ok(entry.name + ' connected!');
     }
     updateTargets();
-    var prevTarget = sendTarget;
-    sendTarget = entry.id;
     try {
         if (first) await checkActiveSlot();
+    } catch (e) {
+        log('Could not read active DLC: ' + e.message);
+    }
+    // flash this Furby's antenna so you can tell which one just connected
+    for (const c of [[255,0,0],[0,255,0],[0,0,255]]) {
+        await writeTo(entry, [0x14].concat(c)).catch(() => {});
+        await sleep(600);
+    }
+}
+function doAddFurby() { return doConnect(); }
 
-    await setAntennaColor(255,0,0);
-    await sleep(600);
-    await setAntennaColor(0,255,0);
-    await sleep(600);
-    await setAntennaColor(0,0,255);
-    await sleep(600);
+// Runs fn once for each selected Furby, one Furby at a time, so a DLC
+// upload goes to every chosen Furby without them getting in each other's way.
+async function forEachTarget(fn) {
+    var list = targets().slice();
+    if (list.length == 0) { msg.error('No Furby connected'); return; }
+    var prevTarget = sendTarget;
+    try {
+        for (var i = 0; i < list.length; i++) {
+            var f = list[i];
+            if (!f.ready) continue;
+            sendTarget = f.id;
+            furby_chars = f.chars;
+            if (list.length > 1) log('--- ' + f.name + ' (' + (i + 1) + ' of ' + list.length + ') ---');
+            await fn(f, i, list.length);
+        }
     } finally {
         sendTarget = prevTarget;
+        if (furbies.length) furby_chars = furbies[0].chars;
         updateTargets();
     }
 }
-function doAddFurby() { doConnect(); }
 function setSendTarget(v) { sendTarget = v; }

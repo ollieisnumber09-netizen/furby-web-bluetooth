@@ -198,7 +198,10 @@ async function dlcUploadClicked() {
         let dlcfile = dlcsel.options[dlcsel.selectedIndex].value;
         let params = dlcdata[dlcfile];
         console.log('DLC upload clicked', params);
-        await fetchAndUploadDLC('dlc/'+dlcfile);
+        await forEachTarget(async (f, i, n) => {
+            if (n > 1) msg.ok('Uploading to ' + f.name + ' (' + (i + 1) + ' of ' + n + ')...');
+            await fetchAndUploadDLC('dlc/'+dlcfile);
+        });
         setupDLCButtons(params);
         showSection('actions');
     } finally {
@@ -216,36 +219,40 @@ async function dlcActivateClicked() {
     }
     dlcUploading = true;
     try {
-        let dlcfile = dlcsel.options[dlcsel.selectedIndex].value;
-        let params = dlcdata[dlcfile];
-        let wanted = dlcfile.replace(/\.dlc$/i, '').toUpperCase();
-        msg.ok('Activating... (big DLCs can take up to a minute)');
-        let slots = await getDLCInfo();
-        let slot = -1, used = [];
-        for (let i = 0; i < slots.length; i++) {
-            if (slots[i] == SLOT_EMPTY) continue;
-            used.push(i);
-            let info = await getDLCSlotInfo(i);
-            if (info.name && info.name.replace(/^_+/, '').toUpperCase().startsWith(wanted.substr(0, 8)))
-                slot = i;
+        await forEachTarget(async (f, idx, n) => {
+        try {
+            let dlcfile = dlcsel.options[dlcsel.selectedIndex].value;
+            let params = dlcdata[dlcfile];
+            let wanted = dlcfile.replace(/\.dlc$/i, '').toUpperCase();
+            msg.ok('Activating... (big DLCs can take up to a minute)');
+            let slots = await getDLCInfo();
+            let slot = -1, used = [];
+            for (let i = 0; i < slots.length; i++) {
+                if (slots[i] == SLOT_EMPTY) continue;
+                used.push(i);
+                let info = await getDLCSlotInfo(i);
+                if (info.name && info.name.replace(/^_+/, '').toUpperCase().startsWith(wanted.substr(0, 8)))
+                    slot = i;
+            }
+            if (slot == -1 && used.length == 1) slot = used[0];
+            if (slot == -1)
+                throw new Error(dlcfile + ' is not on the Furby, press Upload first');
+            for (let i of used)
+                if (slots[i] == SLOT_ACTIVE && i != slot) await deactivateDLC(i);
+            await loadAndActivateDLC(slot);
+            slots = await getDLCInfo();
+            if (slots[slot] != SLOT_ACTIVE)
+                throw new Error('Furby did not activate it');
+            msg.ok((n > 1 ? f.name + ': ' : '') + 'DLC activated!');
+            await setAntennaColor(0,255,0);
+            setupDLCButtons(params);
+            showSection('actions');
+        } catch (e) {
+            msg.error((n > 1 ? f.name + ': ' : '') + 'DLC activation failed :( ' + e.message);
+            log(e.message);
+            await setAntennaColor(255,0,0);
         }
-        if (slot == -1 && used.length == 1) slot = used[0];
-        if (slot == -1)
-            throw new Error(dlcfile + ' is not on the Furby, press Upload first');
-        for (let i of used)
-            if (slots[i] == SLOT_ACTIVE && i != slot) await deactivateDLC(i);
-        await loadAndActivateDLC(slot);
-        slots = await getDLCInfo();
-        if (slots[slot] != SLOT_ACTIVE)
-            throw new Error('Furby did not activate it');
-        msg.ok('DLC activated!');
-        await setAntennaColor(0,255,0);
-        setupDLCButtons(params);
-        showSection('actions');
-    } catch (e) {
-        msg.error('DLC activation failed :( ' + e.message);
-        log(e.message);
-        await setAntennaColor(255,0,0);
+        });
     } finally {
         dlcUploading = false;
     }
