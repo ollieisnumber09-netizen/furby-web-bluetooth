@@ -27,6 +27,8 @@
 
 <div class='header'>
         <button id='connbtn' onclick='doConnectDisconnect()'>Connect</button>
+        <button id='addbtn' onclick='doAddFurby()'>Add another Furby</button>
+        <select id='sendto' onchange='setSendTarget(this.value)'><option value='all'>All Furbys</option></select>
     <div><h1>FurBLE</h1>
     <span id='state'>Not connected</span></div>
     

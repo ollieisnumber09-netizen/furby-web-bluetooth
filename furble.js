@@ -40,6 +40,38 @@ var device;
 var isConnected = false;
 var isTransferring = false;
 var furby_chars = {};
+var furbies = [];
+var sendTarget = 'all';
+var furbyCount = 0;
+function targets() {
+    if (sendTarget === 'all') return furbies;
+    return furbies.filter(f => f.id == sendTarget);
+}
+function writeGP(data) {
+    var t = targets();
+    if (t.length == 0) return Promise.reject(new Error('No Furby selected'));
+    return Promise.all(t.map(f => f.chars.GeneralPlusWrite.writeValue(new Uint8Array(data))));
+}
+function updateTargets() {
+    var sel = document.getElementById('sendto');
+    if (!sel) return;
+    var html = "<option value='all'>All Furbys (" + furbies.length + ")</option>";
+    furbies.forEach(f => { html += "<option value='" + f.id + "'>" + f.name + "</option>"; });
+    sel.innerHTML = html;
+    if (sendTarget !== 'all' && !furbies.some(f => f.id == sendTarget)) sendTarget = 'all';
+    sel.value = sendTarget;
+    var st = document.getElementById('state');
+    if (furbies.length > 1) st.textContent = furbies.length + ' Furbys connected';
+}
+function onOneDisconnected(f) {
+    furbies = furbies.filter(x => x !== f);
+    log('> ' + f.name + ' disconnected');
+    if (furbies.length == 0) { onDisconnected(); updateTargets(); return; }
+    furby_chars = furbies[0].chars;
+    device = furbies[0].dev;
+    msg.error(f.name + ' disconnected');
+    updateTargets();
+}
 var gp_listen_callbacks = [];
 var nordicListener = null;
 var keepAliveTimer = null;
@@ -89,7 +121,7 @@ function sendGPCmd(data, response_prefix, timeoutMs = GP_TIMEOUT_MS, maxTries = 
             if (done) return;
             tries++;
             lastCommandSent = performance.now();
-            furby_chars.GeneralPlusWrite.writeValue(new Uint8Array(data))
+            writeGP(data)
                 .then(() => {
                     // if we're not expecting a response resolve once the data's been sent
                     if (response_prefix == NO_RESPONSE) {
@@ -289,13 +321,13 @@ function cycleDebug() {
 }
 
 function startKeepAlive() {
-    keepAliveTimer = setInterval(async () => {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = setInterval(() => {
         if (isTransferring) return;
         if (performance.now() - lastCommandSent > 3000) {
-            let buf = await sendGPCmd([0x20, 0x06], [0x22]);
-            //log('Got ImHereSignal', buf);
+            lastCommandSent = performance.now();
+            furbies.forEach(f => f.chars.GeneralPlusWrite.writeValue(new Uint8Array([0x20, 0x06])).catch(() => {}));
         }
-       
     }, 1000);
 }
 
@@ -585,7 +617,7 @@ function doConnectDisconnect() {
 async function doDisconnect() {
     try {
       log('Disconnecting from GATT Server...');
-      device.gatt.disconnect();
+      furbies.slice().forEach(f => f.dev.gatt.disconnect());
     } catch (e) {
       log('Argh! ' + e);
     }
@@ -677,10 +709,14 @@ async function doConnect() {
     log('Requesting Bluetooth Devices with Furby name...');
     var server;
     try {
-        device = await navigator.bluetooth.requestDevice({
+        var dev = await navigator.bluetooth.requestDevice({
             filters: [{ name: 'Furby'}], 
             optionalServices: ['generic_access', 'device_information', fluff_service]});
-        device.addEventListener('gattserverdisconnected', onDisconnected);
+        if (furbies.some(f => f.dev.id === dev.id)) { msg.error('That Furby is already connected'); return; }
+        device = dev;
+        var entry = { id: ++furbyCount, dev: dev, chars: {}, name: 'Furby ' + furbyCount };
+        dev.addEventListener('gattserverdisconnected', () => onOneDisconnected(entry));
+        furby_chars = entry.chars;
         log('Connecting to GATT Server...');
         server = await device.gatt.connect();
     } catch (e) {
@@ -720,11 +756,20 @@ async function doConnect() {
     }
   
     //await triggerAction(39,4,2,0); // 'get ready'
-    gp_listen_callbacks = [];
-    startKeepAlive();
-    onConnected();
-    addGPListenCallback([0x21], onFurbySensorData);
-    await checkActiveSlot();
+    var first = furbies.length == 0;
+    furbies.push(entry);
+    if (first) {
+        gp_listen_callbacks = [];
+        onConnected();
+        addGPListenCallback([0x21], onFurbySensorData);
+    } else {
+        msg.ok(entry.name + ' connected!');
+    }
+    updateTargets();
+    var prevTarget = sendTarget;
+    sendTarget = entry.id;
+    try {
+        if (first) await checkActiveSlot();
 
     await setAntennaColor(255,0,0);
     await sleep(600);
@@ -732,6 +777,10 @@ async function doConnect() {
     await sleep(600);
     await setAntennaColor(0,0,255);
     await sleep(600);
-
-
+    } finally {
+        sendTarget = prevTarget;
+        updateTargets();
+    }
 }
+function doAddFurby() { doConnect(); }
+function setSendTarget(v) { sendTarget = v; }
