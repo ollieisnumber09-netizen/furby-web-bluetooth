@@ -392,25 +392,30 @@ function makeDLCFilename(dlcurl) {
     return dlcurl.substr(dlcurl.lastIndexOf('/') + 1).padStart(12, '_').toUpperCase();
 }
 
-async function fetchAndUploadDLC(dlcurl) {
+async function fetchDLC(dlcurl) {
     let response = await fetch(dlcurl, {cache: 'no-store'});
     if (response.status != 200) {
-        throw new Error('Failed to fetch DLC', dlcurl);
         msg.error('DLC not found on server');
+        throw new Error('Failed to fetch DLC ' + dlcurl);
     }
-
     let buf = await response.arrayBuffer();
+    log('Fetched DLC from server:', dlcurl, ' checksum 0x' + adler32(buf).toString(16));
+    return buf;
+}
+
+// Uploads a DLC to the current Furby without switching it on.
+// Throws if the upload fails or the saved file doesn't match.
+async function uploadDLCOnly(buf, dlcurl, label) {
+    label = label || '';
     let chksumOriginal = adler32(buf);
-    log('Fetched DLC from server:', dlcurl, ' checksum 0x' + chksumOriginal.toString(16));
     var progress = document.getElementById('dlcprogress');
     progress.max = buf.byteLength;
-
     try {
         progress.style.display = 'block';
         progress.removeAttribute('value');
         let c = 0;
         log('Clearing all DLC slots...');
-        msg.ok('Clearing old DLCs off the Furby...');
+        msg.ok(label + 'Clearing old DLCs off the Furby...');
         await deleteAllDLCSlots();
         await enableEyes(false); // eyes off, save battery
         await setAntennaColor(0,0,0);
@@ -423,54 +428,53 @@ async function fetchAndUploadDLC(dlcurl) {
                 console.log(`transfer: ${current}/${total} maxRx:${maxRx}`);
             if (!started) {
                 started = true;
-                msg.ok('Eyes off while Uploading...');
+                msg.ok(label + 'Eyes off while Uploading...');
             }
             c++; 
         });
-        msg.ok('DLC uploaded!');
-    } catch (e) {
-        msg.error('DLC upload failed :( ' + (e && e.message ? e.message : e));
-        log(e.message);
-        console.error(e);
-        await setAntennaColor(255,0,0);
-        return;
     } finally {
         progress.style.display = 'none';
-        await enableEyes(true); // eyes on
+        try { await enableEyes(true); } catch (e) {} // eyes on
     }
+    await sleep(1500); // let the Furby finish saving the file
+    let slots = await getDLCInfo();
+    let filledSlot = slots.indexOf(SLOT_FILLED);
+    if (filledSlot == -1)
+        throw new Error('Upload failed - no slots filled');
+    log('DLC was uploaded to slot ' + filledSlot);
+    let slotInfo = await getDLCSlotInfo(filledSlot);
+    if (slotInfo.checksum != chksumOriginal)
+        throw new Error('Expected checksum of 0x' + chksumOriginal.toString(16) + ' but got 0x' + slotInfo.checksum.toString(16));
+    return filledSlot;
+}
 
-    try { 
+// Switches on a DLC that uploadDLCOnly put in the given slot.
+async function activateUploadedDLC(filledSlot) {
+    let slots = await getDLCInfo();
+    let activeSlot = slots.indexOf(SLOT_ACTIVE);
+    if (activeSlot != -1 && activeSlot != filledSlot) {
+        log('deactivating old DLC in slot ' + activeSlot);
+        await deactivateDLC(activeSlot);
+    }
+    await loadAndActivateDLC(filledSlot);
+    slots = await getDLCInfo();
+    if (slots.indexOf(SLOT_ACTIVE) != filledSlot)
+        throw new Error('Failed to activate');
+}
+
+async function fetchAndUploadDLC(dlcurl) {
+    try {
+        let buf = await fetchDLC(dlcurl);
+        let slot = await uploadDLCOnly(buf, dlcurl);
         msg.ok('DLC uploaded! Activating...');
-        await sleep(1500); // let the Furby finish saving the file
-        let slots = await getDLCInfo();
-        let filledSlot = slots.indexOf(SLOT_FILLED);
-        let activeSlot = slots.indexOf(SLOT_ACTIVE);
-        if (filledSlot == -1)
-            throw new Error('Upload failed - no slots filled');
-        else {
-            log('DLC was uploaded to slot ' + filledSlot);
-        }
-        if (activeSlot != -1) {
-            log('deactivating old DLC in slot ' + activeSlot);
-            await deactivateDLC(activeSlot)
-        }
-        
-        let slotInfo = await getDLCSlotInfo(filledSlot);
-        if (slotInfo.checksum != chksumOriginal) {
-            throw new Error('Expected checksum of 0x' + chksumOriginal.toString(16) + ' but got 0x' + slotInfo.checksum.toString(16));
-        }
-        await loadAndActivateDLC(filledSlot);
-        slots = await getDLCInfo();
-        if (slots.indexOf(SLOT_ACTIVE) != filledSlot)
-            throw new Error('Failed to activate');
+        await activateUploadedDLC(slot);
         msg.ok('DLC activated!');
         await setAntennaColor(0,255,0);
     } catch (e) {
-        msg.error('DLC activation failed :( ' + e.message);
-        log(e.message);
-        console.log(e);
-        await setAntennaColor(255,0,0);
-    } 
+        msg.error('DLC upload failed :( ' + (e && e.message ? e.message : e));
+        log(e && e.message ? e.message : e);
+        await setAntennaColor(255,0,0).catch(() => {});
+    }
 }
 
 function adler32(buf) {
