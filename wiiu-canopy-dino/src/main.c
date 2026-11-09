@@ -37,6 +37,7 @@ static void wiiu_read(Input* in) {
     if (h & (VPAD_BUTTON_DOWN | VPAD_STICK_L_EMULATION_DOWN)) in->down = 1;
     if (h & (VPAD_BUTTON_A | VPAD_BUTTON_B)) in->jump = 1;
     if (h & VPAD_BUTTON_PLUS) in->start = 1;
+    if (h & (VPAD_BUTTON_X | VPAD_BUTTON_Y)) in->attack = 1;
     if (v.leftStick.x < -0.35f) in->left = 1;
     if (v.leftStick.x > 0.35f) in->right = 1;
     if (v.leftStick.y < -0.5f) in->down = 1;
@@ -56,6 +57,7 @@ static void wiiu_read(Input* in) {
       if (b & WPAD_PRO_BUTTON_DOWN) in->down = 1;
       if (b & (WPAD_PRO_BUTTON_A | WPAD_PRO_BUTTON_B)) in->jump = 1;
       if (b & WPAD_PRO_BUTTON_PLUS) in->start = 1;
+      if (b & (WPAD_PRO_BUTTON_X | WPAD_PRO_BUTTON_Y)) in->attack = 1;
       sx = k.pro.leftStick.x; sy = k.pro.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_CLASSIC || k.extensionType == WPAD_EXT_MPLUS_CLASSIC) {
       uint32_t b = k.classic.hold;
@@ -65,9 +67,11 @@ static void wiiu_read(Input* in) {
       if (b & WPAD_CLASSIC_BUTTON_DOWN) in->down = 1;
       if (b & (WPAD_CLASSIC_BUTTON_A | WPAD_CLASSIC_BUTTON_B)) in->jump = 1;
       if (b & WPAD_CLASSIC_BUTTON_PLUS) in->start = 1;
+      if (b & (WPAD_CLASSIC_BUTTON_X | WPAD_CLASSIC_BUTTON_Y)) in->attack = 1;
       sx = k.classic.leftStick.x; sy = k.classic.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_NUNCHUK || k.extensionType == WPAD_EXT_MPLUS_NUNCHUK) {
-      if (k.hold & (WPAD_BUTTON_A | WPAD_BUTTON_B)) in->jump = 1;
+      if (k.hold & WPAD_BUTTON_A) in->jump = 1;
+      if (k.hold & WPAD_BUTTON_B) in->attack = 1;
       if (k.hold & WPAD_BUTTON_PLUS) in->start = 1;
       sx = k.nunchuk.stick.x; sy = k.nunchuk.stick.y;
     } else {
@@ -77,7 +81,8 @@ static void wiiu_read(Input* in) {
       if (b & WPAD_BUTTON_DOWN) in->right = 1;
       if (b & WPAD_BUTTON_RIGHT) in->up = 1;
       if (b & WPAD_BUTTON_LEFT) in->down = 1;
-      if (b & (WPAD_BUTTON_1 | WPAD_BUTTON_2)) in->jump = 1;
+      if (b & WPAD_BUTTON_2) in->jump = 1;
+      if (b & WPAD_BUTTON_1) in->attack = 1;
       if (b & WPAD_BUTTON_PLUS) in->start = 1;
     }
     if (sx < -0.35f) in->left = 1;
@@ -142,12 +147,14 @@ int main(int argc, char** argv) {
     in.down = ks[SDL_SCANCODE_DOWN] || ks[SDL_SCANCODE_S];
     in.jump = ks[SDL_SCANCODE_SPACE] || ks[SDL_SCANCODE_Z];
     in.start = ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_ESCAPE];
+    in.attack = ks[SDL_SCANCODE_X] || ks[SDL_SCANCODE_LSHIFT];
     if (pad) {
       in.left |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) < -12000;
       in.right |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) > 12000;
       in.down |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
       in.jump |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B);
       in.start |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START);
+      in.attack |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
     }
 #endif
     Uint64 now = SDL_GetPerformanceCounter();

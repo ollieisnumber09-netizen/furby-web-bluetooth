@@ -11,6 +11,7 @@ typedef struct {
   int left, right, up, down;
   int jump;   // held
   int start;  // held
+  int attack; // held
 } Input;
 
 void game_init(void);

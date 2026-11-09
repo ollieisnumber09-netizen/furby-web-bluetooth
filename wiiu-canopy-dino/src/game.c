@@ -6,7 +6,7 @@
 
 #define T 16                 // tile size in pixels
 #define MAXW 160
-#define MAXH 28
+#define MAXH 40
 
 // ============================================================ sprites
 // Each sprite is 16 rows of 16 characters. '.' is see-through; other letters are palette colours.
@@ -82,6 +82,38 @@ static const char* SPR_BEE[2][16] = { {
   "...kkkkkkkkk.kk.",
   "................", "................", "................",
 } };
+static const char* SPR_WING[16] = {
+  "................", "................", "................",
+  "..........kk....",
+  "........kkwwk...",
+  "......kkwwwwk...",
+  "....kkwwwwwwk...",
+  "...kwwwwwwwwk...",
+  "..kwwwwwwwwk....",
+  "..kwwlwwlwk.....",
+  "...kwlwwlk......",
+  "....kwlwk.......",
+  ".....kkk........",
+  "................", "................", "................",
+};
+static const char* SPR_SWORD[16] = {
+  "................",
+  ".............kk.",
+  "............kwsk",
+  "...........kwsk.",
+  "..........kwsk..",
+  ".........kwsk...",
+  "........kwsk....",
+  ".......kwsk.....",
+  "..kk..kwsk......",
+  "..kykkwsk.......",
+  "...kyysk........",
+  "....kyyk........",
+  "...kkkyyk.......",
+  "..krrk.kyk......",
+  "..krk...k.......",
+  "...k............",
+};
 static const char* SPR_BANANA[16] = {
   "................", "................", "................",
   "..........kk....",
@@ -189,6 +221,7 @@ typedef struct {
 //      = one-way plank  ^ spikes  o bananas  b beetle  z bee  s spring  c checkpoint
 //      F goal flag  P start  i sign (w = which text)
 static const Op L1[] = {
+  {'B', 12, 7, 0}, {'B', 25, 7, 1}, {'B', 44, 5, 0}, {'B', 59, 7, 0}, {'B', 88, 7, 2}, {'B', 113, 7, 0},
   {'g', 0, 11, 30}, {'P', 3, 10}, {'i', 6, 10, 0}, {'o', 9, 8, 3}, {'b', 20, 10}, {'i', 16, 10, 1},
   {'o', 29, 8, 5},
   {'g', 33, 11, 18}, {'=', 36, 8, 4}, {'o', 36, 7, 4}, {'g', 42, 9, 4}, {'o', 42, 7, 4}, {'b', 48, 10},
@@ -201,6 +234,7 @@ static const Op L1[] = {
   {0}
 };
 static const Op L2[] = {
+  {'B', 4, 19, 0}, {'B', 9, 19, 2}, {'B', 33, 6, 0}, {'B', 83, 14, 1},
   {'g', 0, 23, 22}, {'P', 2, 22}, {'i', 6, 22, 0},
   {'x', 15, 12, 1, 9}, {'x', 20, 12, 2, 11},
   {'o', 18, 20, 1}, {'o', 17, 17, 1}, {'o', 18, 14, 1},
@@ -220,6 +254,7 @@ static const Op L2[] = {
   {0}
 };
 static const Op L3[] = {
+  {'B', 6, 9, 2}, {'B', 35, 9, 0}, {'B', 62, 9, 1}, {'B', 108, 9, 0},
   {'G', 0, 13, 16}, {'P', 2, 12}, {'b', 10, 12},
   {'G', 18, 11, 5}, {'o', 18, 9, 5},
   {'G', 23, 13, 10}, {'^', 25, 12, 3}, {'z', 28, 9},
@@ -235,6 +270,7 @@ static const Op L3[] = {
   {0}
 };
 static const Op L4[] = {   // Misty Falls: climb up and up
+  {'B', 5, 29, 1}, {'B', 34, 19, 0},
   {'g', 0, 33, 40}, {'P', 3, 32}, {'i', 6, 32, 0},
   {'=', 8, 31, 4}, {'=', 14, 29, 4}, {'o', 14, 28, 4}, {'=', 20, 27, 4},
   {'=', 26, 25, 4}, {'b', 27, 24}, {'=', 32, 23, 5}, {'o', 32, 22, 5},
@@ -245,6 +281,7 @@ static const Op L4[] = {   // Misty Falls: climb up and up
   {0}
 };
 static const Op L5[] = {   // Beetle Cavern: lots of beetles under a low roof
+  {'B', 5, 9, 2}, {'B', 36, 9, 0}, {'B', 88, 9, 1}, {'B', 115, 9, 0},
   {'x', 0, 0, 130, 2},
   {'G', 0, 13, 20}, {'P', 2, 12}, {'b', 8, 12}, {'b', 14, 12},
   {'x', 20, 2, 4, 6}, {'G', 20, 13, 10}, {'^', 24, 12, 2}, {'b', 27, 12},
@@ -260,6 +297,7 @@ static const Op L5[] = {   // Beetle Cavern: lots of beetles under a low roof
   {0}
 };
 static const Op L6[] = {   // Sky Bridge: planks and floating islands high above the clouds
+  {'B', 4, 6, 1}, {'B', 30, 6, 0}, {'B', 52, 6, 2}, {'B', 108, 6, 0}, {'B', 140, 6, 0},
   {'x', 0, 10, 8, 2}, {'P', 2, 9},
   {'=', 10, 10, 4}, {'=', 16, 9, 4}, {'z', 18, 6}, {'=', 22, 10, 3},
   {'x', 27, 10, 5, 2}, {'b', 29, 9}, {'o', 27, 8, 5},
@@ -275,7 +313,7 @@ static const Op L6[] = {   // Sky Bridge: planks and floating islands high above
 };
 static const Level LEVELS[] = {
   { "1  JUNGLE FLOOR", 140, 14, 0xFF7EC8F0, 0xFFD4F1F9, 0xFF6FB07E, 0xFF3F8452, 0, L1,
-    { "A: JUMP. HOLD IT TO JUMP HIGHER", "JUMP ON BEETLES TO STOMP THEM", "SPRINGS BOUNCE YOU UP HIGH" } },
+    { "A: JUMP. HOLD IT TO JUMP HIGHER", "X OR Y: HEADBUTT. JUMP UNDER BOXES TO OPEN THEM", "SPRINGS BOUNCE YOU UP HIGH" } },
   { "2  CANOPY CLIMB", 110, 26, 0xFFF7A35C, 0xFFFDE2B0, 0xFFC97B5A, 0xFF7A4B3A, 0, L2,
     { "JUMP AT A WALL, THEN JUMP AGAIN TO WALL-JUMP", "CLIMB THE TOWER TO REACH THE FLAG" } },
   { "3  MISTY FALLS", 40, 36, 0xFF5FB4C9, 0xFFC8EEF0, 0xFF5E9C8C, 0xFF2F6B5E, 4, L4,
@@ -288,13 +326,14 @@ static const Level LEVELS[] = {
 
 // ============================================================ state
 enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP };
-enum { E_BEETLE, E_BEE };
-enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL };
+enum { E_BEETLE, E_BEE, E_POW };   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
+enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL, SFX_DASH, SFX_SWORD, SFX_JUMP2 };
 
-typedef struct { int type, alive, dying, t; float x, y, vx, vy, by; } Ent;
+typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by; } Ent;
 typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 
 static char G[MAXH][MAXW];
+static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
 static int LW, LH, lvl;
 static const Level* L;
 static Ent ents[64]; static int nents;
@@ -304,6 +343,7 @@ static int goal_x, goal_y;
 
 static int state, frame, lives, bananas, total_bananas, state_t;
 static float px, py, pvx, pvy, camx, camy;
+static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 static int face, on_ground, coyote, jbuf, wall_lock, wall_dir, dead_t, run_t, land_t;
 static int start_x, start_y, check_x, check_y, prev_jump, prev_start, prev_down, prev_up, prev_left, prev_right;
 static int ncheck;
@@ -346,7 +386,7 @@ static char tile(int tx, int ty) {
   if (ty < 0 || ty >= LH) return ' ';
   return G[ty][tx];
 }
-static int solid_c(char c) { return c == '#' || c == 'X'; }
+static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u'; }
 static int box_solid(float x, float y, float w, float h) {
   int x0 = (int)floorf(x / T), x1 = (int)floorf((x + w - 0.01f) / T);
   int y0 = (int)floorf(y / T), y1 = (int)floorf((y + h - 0.01f) / T);
@@ -367,7 +407,7 @@ static void spawn_parts(float x, float y, int n, uint32_t c, float spd, float up
 
 static void load_level(int n) {
   lvl = n; L = &LEVELS[n]; LW = L->w; LH = L->h;
-  memset(G, ' ', sizeof G);
+  memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK);
   nents = 0; nsigns = 0; ncheck = 0;
   memset(parts, 0, sizeof parts);
   for (const Op* o = L->ops; o->op; o++) {
@@ -381,6 +421,7 @@ static void load_level(int n) {
         for (int x = o->x; x < o->x + w; x++) G[o->y][x] = o->op;
         break;
       case 's': G[o->y][o->x] = 's'; break;
+      case 'B': G[o->y][o->x] = '?'; BOXK[o->y][o->x] = (char)o->w; break;
       case 'c': G[o->y][o->x] = 'c'; break;
       case 'F': goal_x = o->x; goal_y = o->y; break;
       case 'P': start_x = o->x * T + 3; start_y = o->y * T + T - PH; break;
@@ -402,11 +443,12 @@ static void load_level(int n) {
 }
 
 static void respawn(void) {
-  px = check_x; py = check_y; pvx = pvy = 0; face = 1; dead_t = 0; wall_lock = 0; jbuf = 0;
+  px = check_x; py = check_y; pvx = pvy = 0; face = 1; dead_t = 0; wall_lock = 0; jbuf = 0; atk_t = 0; inv_t = 0;
   camx = px - SCR_W / 2; camy = py - SCR_H / 2;
   // beetles and bees come back when you respawn
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
+    if (e->type == E_POW) continue;
     if (!e->alive || e->dying) { e->alive = 1; e->dying = 0; e->y = e->by; }
   }
 }
@@ -424,10 +466,55 @@ void game_init(void) {
   load_level(0); respawn();
 }
 
-static void hurt(void) {
+static void hurt_ex(int pit) {
   if (dead_t) return;
-  dead_t = 1; pvy = -5.0f; pvx = 0;
+  if (!pit && inv_t) return;
+  if (!pit && power) {
+    // losing the power-up instead of a life
+#ifdef TRACE
+    printf("lost power at x=%.0f\n", px / 16);
+#endif
+    power = 0; inv_t = 100; pvy = -3.5f; pvx = -face * 2.0f; wall_lock = 10;
+    plat_sfx(SFX_HURT);
+    spawn_parts(px + PW / 2, py + 4, 12, 0xFFFFFFFF, 1.8f, 0.4f);
+    return;
+  }
+  dead_t = 1; pvy = -5.0f; pvx = 0; power = 0;
   plat_sfx(SFX_HURT);
+}
+static void hurt(void) { hurt_ex(0); }
+
+static void open_box(int tx, int ty) {
+  if (tile(tx, ty) != '?') return;
+  G[ty][tx] = 'u';
+  int k = BOXK[ty][tx];
+  if (k == 0) {
+    for (int i = 0; i < 5; i++) { bananas++; total_bananas++; }
+    if (bananas >= 50) { bananas -= 50; lives++; plat_sfx(SFX_LIFE); } else plat_sfx(SFX_BANANA);
+    spawn_parts(tx * T + 8, ty * T - 2, 14, 0xFFF7D038, 2.0f, 1.2f);
+  } else if (nents < 64) {
+    Ent* e = &ents[nents++];
+    memset(e, 0, sizeof *e);
+    e->type = E_POW; e->alive = 1; e->k = k; e->vx = 0.8f;
+    e->x = tx * T + 2; e->by = (ty - 1) * T + 2; e->y = ty * T; e->t = 0;
+    plat_sfx(SFX_CHECK);
+  }
+  spawn_parts(tx * T + 8, ty * T, 6, 0xFFD69A55, 1.2f, 0.8f);
+}
+
+// the area Dino's attack hits right now (headbutt, or the sword's longer reach)
+static int attack_box(float* ax, float* ay, float* aw, float* ah) {
+  if (atk_t <= 0 || dead_t) return 0;
+  if (power == 2) {
+    if (atk_t < 4) return 0;
+    *aw = 22; *ah = PH + 8; *ay = py - 6;
+    *ax = face > 0 ? px + PW - 2 : px - 20;
+  } else {
+    if (atk_t < 6) return 0;
+    *aw = 8; *ah = PH - 2; *ay = py + 1;
+    *ax = face > 0 ? px + PW - 2 : px - 6;
+  }
+  return 1;
 }
 
 static void collect(int tx, int ty) {
@@ -454,12 +541,30 @@ static void update_player(const Input* in) {
 
   int dir = (in->right ? 1 : 0) - (in->left ? 1 : 0);
   if (wall_lock > 0) { wall_lock--; dir = 0; }
+  if (inv_t > 0) inv_t--;
+  if (atk_cd > 0) atk_cd--;
+  int ap = in->attack && !prev_atk;
+  prev_atk = in->attack;
+  if (ap && atk_cd == 0 && atk_t == 0) {
+    if (power == 2) { atk_t = 16; atk_cd = 22; pvx += face * 0.8f; plat_sfx(SFX_SWORD); }
+    else { atk_t = 18; atk_cd = 30; pvx = face * 4.2f; if (pvy > 0.5f) pvy = 0.5f; plat_sfx(SFX_DASH); }
+  }
+  if (atk_t > 0) {
+    atk_t--;
+    if (power != 2) { dir = 0; if (atk_t > 6) { pvx = face * 4.2f; if (pvy > 0.6f) pvy = 0.6f; if (frame % 2 == 0) spawn_parts(px + (face > 0 ? 0 : PW), py + PH - 3, 1, 0xFFE8E0C8, 0.5f, 0.1f); } }
+    float ax, ay, aw, ah;
+    if (attack_box(&ax, &ay, &aw, &ah)) {
+      int tx0 = (int)floorf(ax / T), tx1 = (int)floorf((ax + aw) / T), ty0 = (int)floorf(ay / T), ty1 = (int)floorf((ay + ah) / T);
+      for (int ty = ty0; ty <= ty1; ty++) for (int tx = tx0; tx <= tx1; tx++) if (tile(tx, ty) == '?') { open_box(tx, ty); if (power != 2) { atk_t = 4; pvx = -face * 1.5f; } }
+    }
+  }
   float acc = on_ground ? 0.32f : 0.22f, maxv = 2.1f;
+  if (atk_t > 6 && power != 2) maxv = 4.2f;
   if (dir) { pvx += dir * acc; face = dir; if (pvx > maxv) pvx = maxv; if (pvx < -maxv) pvx = -maxv; }
   else if (wall_lock <= 0) { float f = on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
 
   if (jp) jbuf = 7; else if (jbuf > 0) jbuf--;
-  if (on_ground) coyote = 6; else if (coyote > 0) coyote--;
+  if (on_ground) { coyote = 6; air_jumps = 1; } else if (coyote > 0) coyote--;
 
   // walls next to the player
   wall_dir = 0;
@@ -476,9 +581,14 @@ static void update_player(const Input* in) {
     pvy = -5.0f; pvx = -wall_dir * 2.3f; face = -wall_dir; wall_lock = 9; jbuf = 0;
     plat_sfx(SFX_WALL);
     spawn_parts(px + (wall_dir > 0 ? PW : 0), py + PH / 2, 5, 0xFFE8E0C8, 1.0f, 0.2f);
+  } else if (jbuf && power == 1 && air_jumps > 0) {
+    pvy = -4.9f; jbuf = 0; air_jumps = 0;
+    plat_sfx(SFX_JUMP2);
+    spawn_parts(px + PW / 2, py + PH, 10, 0xFFFFFFFF, 1.4f, -0.4f);
   }
 
-  float g = (in->jump && pvy < 0) ? 0.28f : 0.55f;
+  if (pvy >= 0) spring_up = 0;
+  float g = ((in->jump || spring_up) && pvy < 0) ? 0.28f : 0.55f;
   pvy += g;
   float maxfall = 5.5f;
   if (wall_dir && dir == wall_dir && pvy > 0) { maxfall = 1.1f; if (frame % 6 == 0) spawn_parts(px + (wall_dir > 0 ? PW : 0), py + 4, 1, 0xFFE8E0C8, 0.4f, 0); }
@@ -507,7 +617,12 @@ static void update_player(const Input* in) {
     }
     if (hit) { ny = ty * T - PH; pvy = 0; on_ground = 1; }
   } else if (pvy < 0) {
-    if (box_solid(px, ny, PW, PH)) { ny = (floorf(ny / T) + 1) * T; pvy = 0; }
+    if (box_solid(px, ny, PW, PH)) {
+      int ty = (int)floorf(ny / T);
+      int x0 = (int)floorf((px + 1) / T), x1 = (int)floorf((px + PW - 1.01f) / T);
+      for (int tx = x0; tx <= x1; tx++) open_box(tx, ty);
+      ny = (ty + 1) * T; pvy = 0;
+    }
   }
   py = ny;
   if (on_ground && !was_ground) { land_t = 6; spawn_parts(px + PW / 2, py + PH, 3, 0xFFE8E0C8, 0.6f, 0.2f); }
@@ -521,7 +636,7 @@ static void update_player(const Input* in) {
     if (c == 'o') collect(tx, ty);
     else if (c == '^' && py + PH > ty * T + 9) hurt();
     else if (c == 's' && pvy >= 0 && py + PH > ty * T + 8) {
-      pvy = -8.6f; on_ground = 0; coyote = 0; plat_sfx(SFX_SPRING);
+      pvy = -8.6f; on_ground = 0; coyote = 0; spring_up = 1; plat_sfx(SFX_SPRING);
       spawn_parts(tx * T + 8, ty * T + 10, 6, 0xFFFFFFFF, 1.2f, 0.4f);
     } else if (c == 'c' && (check_x != tx * T + 3 || check_y != ty * T + T - PH)) {
       check_x = tx * T + 3; check_y = ty * T + T - PH;
@@ -534,7 +649,7 @@ static void update_player(const Input* in) {
     state = ST_CLEAR; state_t = 0; plat_sfx(SFX_CLEAR);
     spawn_parts(goal_x * T + 8, goal_y * T - 32, 24, 0xFFF7D038, 2.5f, 0.5f);
   }
-  if (py > LH * T + 24) hurt();
+  if (py > LH * T + 24) hurt_ex(1);
 
   if (on_ground && pvx != 0) run_t++; else run_t = 0;
 }
@@ -546,6 +661,28 @@ static void update_ents(void) {
     e->t++;
     if (e->dying) { if (++e->dying > 24) e->alive = 0; continue; }
     float ew = 12, eh = 10;
+    if (e->type == E_POW) {
+      if (e->t <= 16) e->y -= 1.0f;          // pop up out of the box
+      else {                                  // then slide off and land
+        if (e->t < 70 && !box_solid(e->x + e->vx, e->y, 12, 12)) e->x += e->vx;
+        e->vy += 0.3f; if (e->vy > 4) e->vy = 4;
+        float ny = e->y + e->vy;
+        int ty = (int)floorf((ny + 12) / T);
+        int x0 = (int)floorf(e->x / T), x1 = (int)floorf((e->x + 11) / T), land = 0;
+        for (int tx = x0; tx <= x1; tx++) { char c = tile(tx, ty); if (solid_c(c) || (c == '=' && e->y + 12 <= ty * T + 0.5f)) land = 1; }
+        if (land && e->vy > 0) { e->y = ty * T - 12; e->vy = 0; } else e->y = ny;
+        if (e->y > LH * T + 40) e->alive = 0;
+      }
+      if (!dead_t && state == ST_PLAY && px + PW > e->x && px < e->x + 12 && py + PH > e->y && py < e->y + 12) {
+        power = e->k; e->alive = 0; air_jumps = 1;
+#ifdef TRACE
+        printf("got power %d at x=%.0f\n", power, px / 16);
+#endif
+        plat_sfx(SFX_LIFE);
+        spawn_parts(e->x + 6, e->y + 6, 16, power == 2 ? 0xFFD8DCE6 : 0xFFFFFFFF, 2.0f, 0.5f);
+      }
+      continue;
+    }
     if (e->type == E_BEETLE) {
       // walk, turn at walls and ledges
       float nx = e->x + e->vx;
@@ -564,6 +701,12 @@ static void update_ents(void) {
     // touch the player
     if (!dead_t && state == ST_PLAY) {
       float ex = e->x + 1, ey = e->y + (e->type == E_BEETLE ? 0 : 2);
+      float ax, ay, aw, ah;
+      if (attack_box(&ax, &ay, &aw, &ah) && ax + aw > ex && ax < ex + ew - 2 && ay + ah > ey && ay < ey + eh) {
+        e->dying = 1; plat_sfx(SFX_STOMP);
+        spawn_parts(e->x + 6, e->y + 4, 10, e->type == E_BEETLE ? 0xFF3FA34D : 0xFFF7D038, 2.0f, 0.5f);
+        continue;
+      }
       if (px + PW > ex && px < ex + ew - 2 && py + PH > ey && py < ey + eh) {
         if (pvy > 0.5f && py + PH - ey < 9) {
           e->dying = 1; pvy = -4.6f; plat_sfx(SFX_STOMP);
@@ -805,6 +948,22 @@ static void draw_tile(char c, int tx, int ty, int sx, int sy) {
       fill(sx + 1, sy + 11, 14, 1, 0xFF2B1A12);
       break;
     }
+    case '?': case 'u': {
+      int used = c == 'u';
+      uint32_t base = used ? 0xFF8A5A2B : 0xFFE0A030, lite = used ? 0xFFA0703A : 0xFFFFD36A, dark = used ? 0xFF5A3A1E : 0xFFA0661A;
+      fill(sx, sy, 16, 16, 0xFF2B1A12);
+      fill(sx + 1, sy + 1, 14, 14, base);
+      fill(sx + 1, sy + 1, 14, 1, lite); fill(sx + 1, sy + 1, 1, 14, lite);
+      fill(sx + 1, sy + 14, 14, 1, dark); fill(sx + 14, sy + 1, 1, 14, dark);
+      put(sx + 3, sy + 3, dark); put(sx + 12, sy + 3, dark); put(sx + 3, sy + 12, dark); put(sx + 12, sy + 12, dark);
+      if (!used) {
+        int b = ((frame / 10) % 6 == 0) ? 1 : 0;
+        static const char* Q[7] = { ".XXX.", "X...X", "...X.", "..X..", "..X..", ".....", "..X.." };
+        for (int j = 0; j < 7; j++) for (int i = 0; i < 5; i++) if (Q[j][i] == 'X') { put(sx + 6 + i, sy + 4 + j + b, 0xFFFFFFFF); put(sx + 7 + i, sy + 5 + j + b, dark); }
+        for (int j = 0; j < 7; j++) for (int i = 0; i < 5; i++) if (Q[j][i] == 'X') put(sx + 6 + i, sy + 4 + j + b, 0xFFFFFFFF);
+      }
+      break;
+    }
     case 'c': {
       int on = check_x == tx * T + 3 && check_y == ty * T + T - PH;
       fill(sx + 7, sy + 1, 2, 15, 0xFF3B2414);
@@ -848,6 +1007,11 @@ static void draw_world(void) {
     Ent* e = &ents[i];
     if (!e->alive) continue;
     int sx = (int)e->x - 2 - cx, sy = (int)e->y - 6 - cy;
+    if (e->type == E_POW) {
+      int bob = (int)(sinf(e->t * 0.1f) * 1.5f);
+      sprite(e->k == 2 ? SPR_SWORD : SPR_WING, (int)e->x - 2 - cx, (int)e->y - 2 - cy + bob, 0);
+      continue;
+    }
     if (e->type == E_BEETLE) {
       if (e->dying) {
         // squashed flat
@@ -863,13 +1027,48 @@ static void draw_world(void) {
   {
     int sx = (int)floorf(px) - 3 - cx, sy = (int)floorf(py) - 3 - cy;
     const char* const* s = (frame % 200) < 7 ? SPR_DINO_BLINK : SPR_DINO_IDLE;
+    static const char* const* RUN[4] = { SPR_DINO_RUN1, SPR_DINO_RUN2, SPR_DINO_RUN3, SPR_DINO_RUN2 };
+    int walling = !on_ground && wall_dir && pvy > 0 && !dead_t;
     if (dead_t) s = SPR_DINO_HURT;
-    else if (!on_ground) s = SPR_DINO_JUMP;
-    else if (run_t) s = ((run_t / 6) % 2) ? SPR_DINO_RUN1 : SPR_DINO_RUN2;
+    else if (atk_t > 4 && power != 2) s = SPR_DINO_ATTACK;
+    else if (walling) s = SPR_DINO_WALL;
+    else if (!on_ground) s = pvy < 0 ? SPR_DINO_JUMP : SPR_DINO_FALL;
+    else if (run_t) s = RUN[(run_t / 5) % 4];
+    else if (land_t > 2) s = SPR_DINO_FALL;
     int flip = face < 0;
-    if (!on_ground && wall_dir && pvy > 0 && !dead_t) flip = wall_dir > 0;   // back to the wall
+    if (walling) flip = wall_dir > 0;   // back to the wall
     sx = (int)floorf(px) - (flip ? 5 : 4) - cx; sy = (int)floorf(py) + PH - 19 - cy;
-    sprite_n(s, 20, sx, sy, flip);
+    int show = !(inv_t && (inv_t / 4) % 2);
+    if (power == 1 && show) {
+      // little wings on his back
+      int wx = flip ? sx + 15 : sx - 1, wy = sy + 5 + ((frame / 8) % 2);
+      for (int j = 0; j < 6; j++) for (int i = 0; i < 6 - j / 2; i++) {
+        int x = flip ? wx + i : wx + 5 - i;
+        put(x, wy + j, (i == 6 - j / 2 - 1 || j == 0 || j == 5) ? 0xFF2B1A12 : 0xFFFFFFFF);
+      }
+    }
+    if (show) sprite_n(s, 20, sx, sy, flip);
+    if (power == 2 && show && !dead_t) {
+      // the sword: held up behind him, or swung in an arc
+      float cxp = sx + (flip ? 6 : 13), cyp = sy + 11;
+      float ang;
+      if (atk_t > 0) { float k = (16 - atk_t) / 16.0f; ang = -2.2f + k * 3.0f; }
+      else ang = -2.0f;
+      if (flip) ang = 3.14159f - ang;
+      float ca = cosf(ang), sa = sinf(ang);
+      for (int d = 2; d < 17; d++) {
+        int x = (int)(cxp + ca * d), y = (int)(cyp + sa * d);
+        put(x - 1, y, 0xFF2B1A12); put(x + 1, y, 0xFF2B1A12); put(x, y - 1, 0xFF2B1A12); put(x, y + 1, 0xFF2B1A12);
+      }
+      for (int d = 2; d < 17; d++) {
+        int x = (int)(cxp + ca * d), y = (int)(cyp + sa * d);
+        put(x, y, d < 5 ? 0xFFC9A227 : (d == 5 ? 0xFF8B5A2B : 0xFFE8ECF4));
+      }
+      if (atk_t > 4) for (int d = 10; d < 19; d += 2) {   // swoosh
+        float a2 = ang - (flip ? -0.5f : 0.5f);
+        put((int)(cxp + cosf(a2) * d), (int)(cyp + sinf(a2) * d), 0xFFFFFFFF);
+      }
+    }
   }
   for (int i = 0; i < 160; i++) if (parts[i].life > 0) {
     int x = (int)parts[i].x - cx, y = (int)parts[i].y - cy;
@@ -899,6 +1098,10 @@ static void draw_hud(void) {
   for (int j = 0; j < 14; j++) for (int i = 0; i < 20; i++) { char c = SPR_DINO_IDLE[j][i]; if (c != '.') put(SCR_W - 56 + i, 1 + j, pal(c)); }
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
+  if (power) {
+    fill(SCR_W - 80, 1, 18, 18, 0xFF1B1020); fill(SCR_W - 79, 2, 16, 16, 0xFF3B2F6B);
+    sprite(power == 2 ? SPR_SWORD : SPR_WING, SCR_W - 79, 2, 0);
+  }
 }
 
 static void draw_kip_big(int x, int y, int sc, const char* const* s, int flip) {
@@ -1011,7 +1214,7 @@ void game_draw(uint32_t* fb) {
     text_c("CANOPY DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
-    text_c("MOVE: STICK OR D-PAD    JUMP: A OR B    PAUSE: +", 167, 1, 0xFFFFF4C2);
+    text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
     return;
   }
   if (state == ST_MAP) { draw_map(); return; }
@@ -1067,6 +1270,9 @@ void synth_trigger(int id) {
     case SFX_CLEAR: v.f0 = 523; v.f1 = 1046; v.dur = 1.2f; v.wave = 3; v.vol = 0.18f; break;
     case SFX_LIFE: v.f0 = 784; v.f1 = 1568; v.dur = 0.5f; v.wave = 3; v.vol = 0.16f; break;
     case SFX_SELECT: v.f0 = 880; v.f1 = 880; v.dur = 0.08f; v.vol = 0.12f; break;
+    case SFX_DASH: v.f0 = 900; v.f1 = 200; v.dur = 0.18f; v.wave = 2; v.vol = 0.16f; break;
+    case SFX_SWORD: v.f0 = 2400; v.f1 = 600; v.dur = 0.14f; v.wave = 2; v.vol = 0.14f; break;
+    case SFX_JUMP2: v.f0 = 500; v.f1 = 1100; v.dur = 0.14f; v.wave = 1; v.vol = 0.2f; break;
     default: return;
   }
   for (int i = 0; i < 8; i++) if (voices[i].t >= voices[i].dur) { voices[i] = v; return; }
