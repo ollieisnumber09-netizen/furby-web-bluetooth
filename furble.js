@@ -354,6 +354,16 @@ async function getFirmwareVersion() {
     return version;
 }
 
+// Personality switch for Furbys running the patched firmware (furby-personality patch).
+// Command 0x15 takes the two mask readings a real mask would give; 00 00 clears it.
+const PERSONALITY_READINGS = [[0x00,0x00],[0xe3,0x91],[0xc7,0x94],[0xb1,0x97],[0x9b,0x9b],[0x80,0x9f],[0x62,0xa0]];
+const PERSONALITY_NAMES = ['Normal','DJ','Princess','Ninja','Pirate','Cat','PopStar'];
+function setPersonality(i) {
+    let r = PERSONALITY_READINGS[i];
+    log('Setting personality to ' + PERSONALITY_NAMES[i]);
+    return sendGPCmd([0x15, r[0], r[1]], NO_RESPONSE);
+}
+
 function setAntennaColor(r, g, b) {
     log(`Setting antenna color to (${r}, ${g}, ${b})`);
     return sendGPCmd([0x14, r, g, b], NO_RESPONSE);
