@@ -1,5 +1,10 @@
 [
     {
+        "file": "princlk.dlc",
+        "title": "Princess lock (experimental: eyes go black, ignores the mask until restart)",
+        "buttons": []
+    },
+    {
         "file": "djintr2.dlc",
         "title": "DJ intro v2 (full frames, orange idle)",
         "buttons": [
