@@ -3,13 +3,13 @@
 #include "../src/game.c"
 #include <stdlib.h>
 void plat_sfx(int id) { synth_trigger(id); }
-static uint32_t fb[SCR_W * SCR_H];
+static uint32_t fb[FB_W * FB_H];
 static FILE *fv, *fa;
 static void tick(Input* in) {
   game_update(in);
   game_draw(fb);
-  static unsigned char rgb[SCR_W * SCR_H * 3];
-  for (int i = 0; i < SCR_W * SCR_H; i++) { rgb[i * 3] = fb[i] >> 16; rgb[i * 3 + 1] = fb[i] >> 8; rgb[i * 3 + 2] = fb[i]; }
+  static unsigned char rgb[FB_W * FB_H * 3];
+  for (int i = 0; i < FB_W * FB_H; i++) { rgb[i * 3] = fb[i] >> 16; rgb[i * 3 + 1] = fb[i] >> 8; rgb[i * 3 + 2] = fb[i]; }
   fwrite(rgb, 1, sizeof rgb, fv);
   static int16_t snd[800 * 2];
   synth_render(snd, 800, 48000);
@@ -25,8 +25,17 @@ int main(int argc, char** argv) {
   for (int i = 0; i < 90; i++) tick(&in);
   in.jump = 1; tick(&in); in.jump = 0;
   for (int i = 0; i < 40; i++) tick(&in);
-  // walk on the map to the level
-  for (int n = 0; n < level; n++) { in.right = 1; tick(&in); in.right = 0; for (int i = 0; i < 34; i++) tick(&in); }
+  // walk on the map to the level (through the worlds if it is in a later one)
+  for (;;) {
+    const World* w = &WORLDS[world];
+    int target = -1, exitn = -1;
+    for (int n = 0; n < w->n; n++) { if (w->kind[n] == level - 1) target = n; if (w->kind[n] == -3) exitn = n; }
+    int goal = target >= 0 ? target : exitn;
+    while (map_node < goal) { in.right = 1; tick(&in); in.right = 0; for (int i = 0; i < 30; i++) tick(&in); }
+    if (target >= 0) break;
+    for (int i = 0; i < 40; i++) tick(&in);
+    in.jump = 1; tick(&in); in.jump = 0; for (int i = 0; i < 50; i++) tick(&in);
+  }
   for (int i = 0; i < 30; i++) tick(&in);
   in.jump = 1; tick(&in); in.jump = 0; tick(&in);
   int hold = 0, rest = 0, f = 0;

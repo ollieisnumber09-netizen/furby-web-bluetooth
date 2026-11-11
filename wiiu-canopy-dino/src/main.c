@@ -94,7 +94,7 @@ static void wiiu_read(Input* in) {
 
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
-  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
   Uint32 flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO;
 #ifndef __WIIU__
   flags |= SDL_INIT_GAMECONTROLLER;
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
   SDL_Window* win = SDL_CreateWindow("Canopy Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
   SDL_Renderer* r = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_RenderSetLogicalSize(r, 1280, 720);
-  SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCR_W, SCR_H);
+  SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
 
   game_init();
 
@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
   for (int i = 0; i < SDL_NumJoysticks() && !pad; i++) if (SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i);
 #endif
 
-  static uint32_t fb[SCR_W * SCR_H];
+  static uint32_t fb[FB_W * FB_H];
   Uint64 freq = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter();
   double acc = 0, tick = 1.0 / 60.0;
   int running = 1;
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
       acc -= tick; steps++;
     }
     game_draw(fb);
-    SDL_UpdateTexture(tex, NULL, fb, SCR_W * 4);
+    SDL_UpdateTexture(tex, NULL, fb, FB_W * 4);
     SDL_RenderClear(r);
     SDL_RenderCopy(r, tex, NULL, NULL);
     SDL_RenderPresent(r);

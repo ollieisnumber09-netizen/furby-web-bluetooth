@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define T 16                 // tile size in pixels
 #define MAXW 160
@@ -10,7 +11,13 @@
 
 // ============================================================ sprites
 // Each sprite is 16 rows of 16 characters. '.' is see-through; other letters are palette colours.
+static int pal_snow;   // set while drawing in a snow level: beetles turn icy blue
 static uint32_t pal(char c) {
+  if (pal_snow) {
+    if (c == 'g') return 0xFF8FC7E8;
+    if (c == 'G') return 0xFF5C93BD;
+    if (c == 'h') return 0xFFE3F5FF;
+  }
   switch (c) {
     case 'k': return 0xFF2B1A12;  // outline
     case 'b': return 0xFF8B5A2B;  // fur
@@ -132,10 +139,15 @@ static const char* SPR_BANANA[16] = {
 
 static uint32_t* FB;
 static void put(int x, int y, uint32_t c) {
-  if ((unsigned)x < SCR_W && (unsigned)y < SCR_H) FB[y * SCR_W + x] = c;
+  if ((unsigned)x < SCR_W && (unsigned)y < SCR_H) { uint32_t* d = FB + y * 2 * FB_W + x * 2; d[0] = d[1] = d[FB_W] = d[FB_W + 1] = c; }
 }
 static void fill(int x, int y, int w, int h, uint32_t c) {
-  for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) put(i, j, c);
+  int x0 = x * 2, y0 = y * 2, x1 = (x + w) * 2, y1 = (y + h) * 2;
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > FB_W) x1 = FB_W;
+  if (y1 > FB_H) y1 = FB_H;
+  for (int j = y0; j < y1; j++) for (int i = x0; i < x1; i++) FB[j * FB_W + i] = c;
 }
 static uint32_t blend(uint32_t a, uint32_t b, float t) {
   int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
@@ -143,8 +155,16 @@ static uint32_t blend(uint32_t a, uint32_t b, float t) {
   return 0xFF000000 | ((int)(ar + (br - ar) * t) << 16) | ((int)(ag + (bg - ag) * t) << 8) | (int)(ab + (bb - ab) * t);
 }
 static void darken(int x, int y, int w, int h, float t) {
-  for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++)
-    if ((unsigned)i < SCR_W && (unsigned)j < SCR_H) FB[j * SCR_W + i] = blend(FB[j * SCR_W + i], 0xFF000000, t);
+  int x0 = x * 2, y0 = y * 2, x1 = (x + w) * 2, y1 = (y + h) * 2;
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > FB_W) x1 = FB_W;
+  if (y1 > FB_H) y1 = FB_H;
+  int k = (int)((1 - t) * 256);
+  for (int j = y0; j < y1; j++) for (int i = x0; i < x1; i++) {
+    uint32_t c = FB[j * FB_W + i];
+    FB[j * FB_W + i] = 0xFF000000 | ((((c >> 16) & 255) * k >> 8) << 16) | ((((c >> 8) & 255) * k >> 8) << 8) | ((c & 255) * k >> 8);
+  }
 }
 static void sprite(const char* const* s, int x, int y, int flip) {
   for (int j = 0; j < 16; j++) for (int i = 0; i < 16; i++) {
@@ -168,7 +188,9 @@ static uint32_t hash2(int x, int y) {
   return h ^ (h >> 16);
 }
 
-// ============================================================ font (3x5)
+#include "hdbase.h"
+
+// ============================================================ font (3x5 cells, drawn as round strokes)
 static const struct { char c; const char* r; } FONT[] = {
   {'A', ".X.X.XXXXX.XX.X"}, {'B', "XX.X.XXX.X.XXX."}, {'C', ".XXX..X..X...XX"}, {'D', "XX.X.XX.XX.XXX."},
   {'E', "XXXX..XX.X..XXX"}, {'F', "XXXX..XX.X..X.."}, {'G', ".XXX..X.XX.X.XX"}, {'H', "X.XX.XXXXX.XX.X"},
@@ -184,26 +206,62 @@ static const struct { char c; const char* r; } FONT[] = {
   {'x', "...X.X.X.X.X..."}, {'/', "..X..X.X.X..X.."}, {'\'', ".X..X.........."}, {'+', "....X.XXX.X...."},
   {',', "..........X.X.."}, {'?', "XX...X.X.....X."},
 };
-static const char* glyph(char c) {
+static int glyph_idx(char c) {
   if (c >= 'a' && c <= 'z' && c != 'x') c -= 32;
-  for (unsigned i = 0; i < sizeof FONT / sizeof FONT[0]; i++) if (FONT[i].c == c) return FONT[i].r;
-  return NULL;
+  for (unsigned i = 0; i < sizeof FONT / sizeof FONT[0]; i++) if (FONT[i].c == c) return (int)i;
+  return -1;
 }
 static int text_w(const char* s, int sc) { return (int)strlen(s) * 4 * sc - sc; }
-static void text_raw(const char* s, int x, int y, int sc, uint32_t col) {
+// each letter is made once per size (round strokes through its cells, with an outline) and kept
+static Bmp GLY[2][11][64];
+static int gly_pad(int sc, int ol) { return ol ? (int)ceilf(sc == 1 ? 1.0f : 0.8f + sc * 0.3f) + 1 : 1; }
+static const Bmp* glyph_bmp(int gi, int sc, int ol) {
+  Bmp* b = &GLY[ol][sc][gi];
+  if (b->px) return b;
+  float c = sc * 2.0f, r = sc == 1 ? 1.0f : c * 0.41f, o = ol ? (sc == 1 ? 1.0f : 0.8f + sc * 0.3f) : 0;
+  int pad = gly_pad(sc, ol);
+  *b = bmp_new((int)(3 * c) + pad * 2, (int)(5 * c) + pad * 2);
+  const char* g = FONT[gi].r;
+#define ON(i, j) ((i) >= 0 && (i) < 3 && (j) >= 0 && (j) < 5 && g[(j) * 3 + (i)] == 'X')
+  for (int y = 0; y < b->h; y++) for (int x = 0; x < b->w; x++) {
+    float fx = x + 0.5f - pad, fy = y + 0.5f - pad, d = 99;
+    for (int j = 0; j < 5; j++) for (int i = 0; i < 3; i++) {
+      if (!ON(i, j)) continue;
+      float cx = (i + 0.5f) * c, cy = (j + 0.5f) * c;
+      d = minf(d, sd_circle(fx, fy, cx, cy, r));
+      if (ON(i + 1, j)) d = minf(d, sd_seg(fx, fy, cx, cy, cx + c, cy) - r);
+      if (ON(i, j + 1)) d = minf(d, sd_seg(fx, fy, cx, cy, cx, cy + c) - r);
+      if (ON(i + 1, j + 1) && !ON(i + 1, j) && !ON(i, j + 1)) d = minf(d, sd_seg(fx, fy, cx, cy, cx + c, cy + c) - r);
+      if (ON(i - 1, j + 1) && !ON(i - 1, j) && !ON(i, j + 1)) d = minf(d, sd_seg(fx, fy, cx, cy, cx - c, cy + c) - r);
+    }
+    float tot = cov(d - o), fl = cov(d);
+    if (tot <= 0) continue;
+    b->px[y * b->w + x] = ((uint32_t)(tot * 255) << 24) | ((uint32_t)(fl / tot * 255) << 16);
+  }
+#undef ON
+  return b;
+}
+static void text_hd(const char* s, int x, int y, int sc, uint32_t col, int ol) {
+  if (sc > 10) sc = 10;
+  int pad = gly_pad(sc, ol);
   for (; *s; s++, x += 4 * sc) {
-    const char* g = glyph(*s);
-    if (!g) continue;
-    for (int j = 0; j < 5; j++) for (int i = 0; i < 3; i++)
-      if (g[j * 3 + i] == 'X') fill(x + i * sc, y + j * sc, sc, sc, col);
+    int gi = glyph_idx(*s);
+    if (gi < 0) continue;
+    const Bmp* b = glyph_bmp(gi, sc, ol);
+    int X = x * 2 - pad, Y = y * 2 - pad;
+    for (int j = 0; j < b->h; j++) {
+      if ((unsigned)(Y + j) >= FB_H) continue;
+      for (int i = 0; i < b->w; i++) {
+        uint32_t p = b->px[j * b->w + i];
+        if (!(p >> 24) || (unsigned)(X + i) >= FB_W) continue;
+        uint32_t* d = &FB[(Y + j) * FB_W + X + i];
+        *d = mixc(*d, mixc(0xFF1B1020, col, ((p >> 16) & 255) / 255.0f), (p >> 24) / 255.0f);
+      }
+    }
   }
 }
-static void text(const char* s, int x, int y, int sc, uint32_t col) {
-  int o = sc > 1 ? sc / 2 + (sc > 3) : 1;
-  text_raw(s, x, y + o, sc, 0xFF1B1020);
-  if (sc == 1) text_raw(s, x + 1, y, sc, 0xFF1B1020);
-  text_raw(s, x, y, sc, col);
-}
+static void text_raw(const char* s, int x, int y, int sc, uint32_t col) { text_hd(s, x, y, sc, col, 0); }
+static void text(const char* s, int x, int y, int sc, uint32_t col) { text_hd(s, x, y, sc, col, 1); }
 static void text_c(const char* s, int y, int sc, uint32_t col) { text(s, (SCR_W - text_w(s, sc)) / 2, y, sc, col); }
 
 // ============================================================ levels
@@ -212,7 +270,7 @@ typedef struct {
   const char* name;
   int w, h;
   uint32_t sky0, sky1, far, nearc;
-  int theme;   // 0 jungle, 1 temple, 2 cave, 3 sky, 4 waterfalls
+  int theme;   // 0 jungle, 1 temple, 2 cave, 3 sky, 4 waterfalls, 5 snow, 6 ice cave, 7 snow at night
   const Op* ops;
   const char* signs[4];
 } Level;
@@ -311,6 +369,83 @@ static const Op L6[] = {   // Sky Bridge: planks and floating islands high above
   {'x', 133, 10, 17, 2}, {'b', 137, 9}, {'F', 144, 9},
   {0}
 };
+static const Op L7[] = {   // Snowy Trail: first ice
+  {'g', 0, 11, 24}, {'P', 3, 10}, {'i', 6, 10, 0}, {'B', 10, 7, 0}, {'b', 16, 10},
+  {'I', 24, 11, 10, 3}, {'o', 26, 9, 6},
+  {'g', 34, 11, 10}, {'b', 38, 10}, {'B', 40, 7, 1},
+  {'g', 47, 11, 8}, {'x', 50, 9, 2, 2}, {'o', 50, 7, 2},
+  {'I', 55, 11, 8, 3}, {'g', 63, 11, 12}, {'^', 65, 10, 2}, {'c', 69, 10},
+  {'=', 78, 9, 4}, {'o', 78, 8, 4},
+  {'g', 84, 11, 14}, {'b', 88, 10}, {'b', 93, 10}, {'z', 90, 6}, {'B', 95, 7, 2},
+  {'I', 98, 11, 12, 3}, {'o', 100, 9, 8},
+  {'g', 110, 9, 5}, {'o', 110, 7, 5},
+  {'g', 115, 11, 25}, {'b', 120, 10}, {'F', 132, 10},
+  {0}
+};
+static const Op L8[] = {   // Frozen Lake: long slides and ice floes
+  {'g', 0, 11, 12}, {'P', 2, 10}, {'B', 6, 7, 0},
+  {'I', 12, 11, 20, 3}, {'b', 18, 10}, {'b', 26, 10}, {'o', 14, 9, 4},
+  {'I', 35, 11, 5, 3}, {'I', 43, 11, 5, 3}, {'z', 41, 7}, {'o', 36, 9, 3}, {'o', 44, 9, 3},
+  {'g', 51, 11, 10}, {'c', 54, 10}, {'B', 57, 7, 1}, {'s', 59, 10}, {'o', 62, 4, 4},
+  {'I', 67, 11, 14, 3}, {'b', 71, 10}, {'x', 76, 9, 2, 2},
+  {'=', 84, 9, 3}, {'=', 89, 7, 3}, {'o', 89, 6, 3}, {'=', 94, 9, 3}, {'z', 92, 4},
+  {'I', 99, 11, 16, 3}, {'b', 104, 10}, {'b', 110, 10}, {'B', 107, 7, 2},
+  {'g', 118, 9, 4}, {'o', 118, 7, 4},
+  {'g', 125, 11, 25}, {'b', 130, 10}, {'F', 142, 10},
+  {0}
+};
+static const Op L9[] = {   // Icicle Cave: icicles drop from the roof
+  {'x', 0, 0, 130, 5},
+  {'G', 0, 13, 18}, {'P', 2, 12}, {'i', 5, 12, 0}, {'v', 10, 5}, {'v', 13, 5}, {'b', 15, 12},
+  {'G', 21, 13, 12}, {'v', 23, 5}, {'v', 26, 5}, {'v', 29, 5}, {'o', 22, 11, 8}, {'B', 31, 9, 0},
+  {'I', 33, 13, 10, 3}, {'x', 36, 5, 3, 5}, {'b', 40, 12},
+  {'G', 46, 11, 4}, {'o', 46, 9, 4},
+  {'G', 53, 13, 16}, {'c', 55, 12}, {'v', 58, 5}, {'v', 61, 5}, {'v', 65, 5}, {'b', 60, 12}, {'b', 66, 12}, {'B', 63, 9, 1},
+  {'s', 67, 12}, {'o', 70, 6, 4},
+  {'G', 75, 13, 6}, {'v', 77, 5},
+  {'G', 81, 13, 14}, {'^', 83, 12, 2}, {'^', 88, 12, 2}, {'=', 82, 9, 4}, {'=', 87, 9, 4}, {'z', 91, 8},
+  {'I', 95, 13, 14, 3}, {'v', 98, 5}, {'v', 102, 5}, {'v', 106, 5}, {'b', 100, 12},
+  {'G', 112, 13, 18}, {'b', 118, 12}, {'B', 115, 9, 2}, {'F', 124, 12},
+  {0}
+};
+static const Op L10[] = {   // Northern Lights
+  {'g', 0, 13, 14}, {'P', 2, 12}, {'B', 7, 9, 1}, {'b', 10, 12},
+  {'g', 14, 11, 5}, {'o', 14, 9, 5},
+  {'I', 22, 13, 10, 3}, {'z', 26, 9},
+  {'g', 32, 13, 20}, {'B', 34, 9, 0}, {'x', 36, 4, 1, 7}, {'x', 40, 6, 2, 7}, {'o', 38, 10, 1}, {'o', 38, 7, 1},
+  {'b', 45, 12}, {'b', 49, 12},
+  {'=', 55, 10, 3}, {'=', 60, 8, 3}, {'o', 60, 7, 3}, {'=', 65, 10, 3}, {'z', 63, 5},
+  {'g', 70, 13, 12}, {'c', 72, 12},
+  {'I', 82, 13, 10, 3}, {'g', 92, 13, 10}, {'^', 92, 12, 2}, {'b', 97, 12}, {'B', 98, 9, 2},
+  {'s', 100, 12}, {'o', 103, 5, 4},
+  {'g', 108, 11, 5}, {'o', 108, 9, 5},
+  {'g', 116, 13, 34}, {'x', 120, 10, 2, 3}, {'b', 126, 12}, {'b', 132, 12}, {'z', 129, 8}, {'F', 142, 12},
+  {0}
+};
+static const Op L11[] = {   // Glacier Gap: ice floes high in the air
+  {'I', 0, 10, 8, 2}, {'P', 2, 9}, {'B', 4, 6, 1},
+  {'I', 11, 10, 4, 1}, {'I', 18, 9, 4, 1}, {'z', 20, 6}, {'I', 25, 10, 3, 1},
+  {'x', 30, 10, 6, 2}, {'b', 32, 9}, {'o', 30, 8, 6},
+  {'=', 38, 8, 3}, {'=', 43, 6, 3}, {'o', 43, 5, 3}, {'I', 48, 8, 4, 1}, {'z', 46, 3},
+  {'x', 54, 10, 6, 2}, {'c', 56, 9}, {'B', 58, 6, 2},
+  {'x', 62, 11, 2, 1}, {'s', 63, 10}, {'I', 69, 4, 5, 1}, {'o', 69, 3, 5},
+  {'I', 76, 6, 4, 1}, {'b', 77, 5}, {'I', 82, 8, 4, 1}, {'z', 85, 5},
+  {'x', 88, 10, 4, 2}, {'I', 94, 9, 3, 1}, {'I', 99, 7, 3, 1}, {'o', 99, 6, 3}, {'I', 104, 9, 3, 1}, {'z', 102, 4},
+  {'x', 109, 10, 8, 2}, {'b', 111, 9}, {'b', 114, 9}, {'B', 112, 6, 0},
+  {'I', 119, 8, 4, 1}, {'I', 125, 10, 4, 1}, {'z', 127, 7}, {'I', 131, 8, 4, 1}, {'o', 131, 7, 4},
+  {'x', 137, 10, 13, 2}, {'b', 141, 9}, {'F', 145, 9},
+  {0}
+};
+static const Op L12[] = {   // The Summit: the last climb
+  {'g', 0, 37, 40}, {'P', 3, 36}, {'B', 6, 33, 1},
+  {'=', 8, 35, 4}, {'I', 14, 33, 4, 1}, {'o', 14, 32, 4}, {'=', 20, 31, 4}, {'I', 26, 29, 4, 1}, {'b', 27, 28},
+  {'=', 32, 27, 5}, {'o', 32, 26, 5}, {'I', 26, 25, 4, 1}, {'z', 23, 22}, {'=', 20, 23, 4}, {'c', 21, 22},
+  {'=', 16, 22, 3}, {'x', 11, 22, 4, 1}, {'x', 10, 9, 1, 14}, {'x', 14, 12, 1, 8},
+  {'o', 12, 19, 1}, {'o', 12, 16, 1}, {'o', 12, 13, 1},
+  {'=', 17, 11, 4}, {'o', 17, 10, 4}, {'I', 23, 9, 4, 1}, {'=', 29, 7, 4}, {'b', 30, 6},
+  {'I', 23, 5, 4, 1}, {'z', 27, 2}, {'x', 8, 3, 13, 1}, {'F', 11, 2},
+  {0}
+};
 static const Level LEVELS[] = {
   { "1  JUNGLE FLOOR", 140, 14, 0xFF7EC8F0, 0xFFD4F1F9, 0xFF6FB07E, 0xFF3F8452, 0, L1,
     { "A: JUMP. HOLD IT TO JUMP HIGHER", "X OR Y: HEADBUTT. JUMP UNDER BOXES TO OPEN THEM", "SPRINGS BOUNCE YOU UP HIGH" } },
@@ -321,15 +456,25 @@ static const Level LEVELS[] = {
   { "4  OLD TEMPLE", 150, 16, 0xFF3B2F6B, 0xFF9C6FA8, 0xFF5A4A86, 0xFF3A2F5C, 1, L3, { 0 } },
   { "5  BEETLE CAVERN", 130, 16, 0xFF1E1A24, 0xFF4A3B3A, 0xFF3A302E, 0xFF2A2220, 2, L5, { 0 } },
   { "6  SKY BRIDGE", 150, 16, 0xFF4A90E2, 0xFFBFE3FF, 0xFFFFFFFF, 0xFFE3F1FF, 3, L6, { 0 } },
+  // world 2: Frosty Forest
+  { "7  SNOWY TRAIL", 140, 14, 0xFF8FC4EC, 0xFFEAF6FF, 0xFFD5E6F2, 0xFF7FA6BE, 5, L7,
+    { "ICE IS SLIPPERY. YOU KEEP SLIDING WHEN YOU STOP!" } },
+  { "8  FROZEN LAKE", 150, 14, 0xFF8FC4EC, 0xFFEAF6FF, 0xFFD5E6F2, 0xFF7FA6BE, 5, L8, { 0 } },
+  { "9  ICICLE CAVE", 130, 16, 0xFF0E2238, 0xFF1F4A6E, 0xFF18395A, 0xFF12304C, 6, L9,
+    { "LOOK UP! ICICLES FALL WHEN YOU WALK UNDER THEM" } },
+  // world 3: Ice Mountain
+  { "10 NORTHERN LIGHTS", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L10, { 0 } },
+  { "11 GLACIER GAP", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L11, { 0 } },
+  { "12 THE SUMMIT", 40, 40, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L12, { 0 } },
 };
 #define NLEVELS (int)(sizeof LEVELS / sizeof LEVELS[0])
 
 // ============================================================ state
 enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP };
-enum { E_BEETLE, E_BEE, E_POW };   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
+enum { E_BEETLE, E_BEE, E_POW, E_ICE };   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
 enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL, SFX_DASH, SFX_SWORD, SFX_JUMP2 };
 
-typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by; } Ent;
+typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz; } Ent;
 typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 
 static char G[MAXH][MAXW];
@@ -352,8 +497,17 @@ static int ncheck;
 
 static int lvl_frames; int g_no_hud;
 // world map: node 0 is Dino's house, node n is level n
-static int cleared[8], map_node, map_from, map_t;
-static const short MAP_XY[7][2] = { {38, 146}, {84, 134}, {130, 108}, {96, 62}, {166, 50}, {226, 92}, {282, 44} };
+static int cleared[20], map_node, map_from, map_t, world;
+// Each world is its own map. A stop is a level (kind >= 0, the level's index), Dino's house (-1),
+// the way back to the world before (-2) or the way on to the next world (-3).
+typedef struct { const char* name; int n; short xy[8][2]; signed char kind[8]; } World;
+static const World WORLDS[3] = {
+  { "JUNGLE ISLAND", 8, { {38, 146}, {84, 134}, {130, 108}, {96, 62}, {166, 50}, {226, 92}, {282, 44}, {306, 112} }, { -1, 0, 1, 2, 3, 4, 5, -3 } },
+  { "FROSTY FOREST", 5, { {22, 150}, {80, 128}, {140, 100}, {204, 74}, {276, 46} }, { -2, 6, 7, 8, -3 } },
+  { "ICE MOUNTAIN", 4, { {26, 150}, {92, 128}, {164, 98}, {238, 54} }, { -2, 9, 10, 11 } },
+};
+#define NWORLDS 3
+#define MAP_XY (WORLDS[world].xy)
 #ifndef SAVE_PATH
 #define SAVE_PATH "canopydino-save.txt"
 #endif
@@ -378,7 +532,11 @@ static void load_progress(void) {
   if (fscanf(f, "%d", &total_bananas) != 1) total_bananas = 0;
   fclose(f);
 }
-static int node_open(int n) { return n == 0 || n == 1 || (n <= NLEVELS && cleared[n - 1]); }
+static int node_open(int n) {
+  const World* w = &WORLDS[world];
+  for (int k = 0; k < n; k++) if (w->kind[k] >= 0 && !cleared[w->kind[k] + 1]) return 0;   // every level before it is cleared
+  return n < w->n;
+}
 
 
 static char tile(int tx, int ty) {
@@ -386,7 +544,9 @@ static char tile(int tx, int ty) {
   if (ty < 0 || ty >= LH) return ' ';
   return G[ty][tx];
 }
-static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u'; }
+static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u' || c == 'I'; }
+#include "hd.h"
+#include "anim.h"
 static int box_solid(float x, float y, float w, float h) {
   int x0 = (int)floorf(x / T), x1 = (int)floorf((x + w - 0.01f) / T);
   int y0 = (int)floorf(y / T), y1 = (int)floorf((y + h - 0.01f) / T);
@@ -422,6 +582,14 @@ static void load_level(int n) {
         break;
       case 's': G[o->y][o->x] = 's'; break;
       case 'B': G[o->y][o->x] = '?'; BOXK[o->y][o->x] = (char)o->w; break;
+      case 'I': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = 'I'; break;
+      case 'v':
+        if (nents < 64) {
+          Ent* e = &ents[nents++];
+          memset(e, 0, sizeof *e);
+          e->type = E_ICE; e->alive = 1; e->x = o->x * T + 2; e->y = e->by = o->y * T;
+        }
+        break;
       case 'c': G[o->y][o->x] = 'c'; break;
       case 'F': goal_x = o->x; goal_y = o->y; break;
       case 'P': start_x = o->x * T + 3; start_y = o->y * T + T - PH; break;
@@ -440,6 +608,7 @@ static void load_level(int n) {
   for (int i = 0; i < nsigns; i++) if (!L->signs[i]) nsigns = i;
   check_x = start_x; check_y = start_y;
   lvl_frames = 0;
+  hd_render_level();
 }
 
 static void respawn(void) {
@@ -449,6 +618,7 @@ static void respawn(void) {
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (e->type == E_POW) continue;
+    if (e->type == E_ICE) { e->alive = 1; e->k = 0; e->y = e->by; e->vy = 0; continue; }
     if (!e->alive || e->dying) { e->alive = 1; e->dying = 0; e->y = e->by; }
   }
 }
@@ -463,6 +633,7 @@ static void start_level(int n) {
 void game_init(void) {
   state = ST_TITLE; state_t = 0; frame = 0;
   load_progress();
+  hd_init();
   load_level(0); respawn();
 }
 
@@ -558,10 +729,16 @@ static void update_player(const Input* in) {
       for (int ty = ty0; ty <= ty1; ty++) for (int tx = tx0; tx <= tx1; tx++) if (tile(tx, ty) == '?') { open_box(tx, ty); if (power != 2) { atk_t = 4; pvx = -face * 1.5f; } }
     }
   }
-  float acc = on_ground ? 0.32f : 0.22f, maxv = 2.1f;
+  // standing on ice: slow to get going, slow to stop
+  int on_ice = 0;
+  if (on_ground) {
+    int ty = (int)floorf((py + PH + 1) / T);
+    on_ice = tile((int)floorf((px + 1) / T), ty) == 'I' || tile((int)floorf((px + PW - 1) / T), ty) == 'I';
+  }
+  float acc = on_ice ? 0.07f : on_ground ? 0.32f : 0.22f, maxv = 2.1f;
   if (atk_t > 6 && power != 2) maxv = 4.2f;
   if (dir) { pvx += dir * acc; face = dir; if (pvx > maxv) pvx = maxv; if (pvx < -maxv) pvx = -maxv; }
-  else if (wall_lock <= 0) { float f = on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
+  else if (wall_lock <= 0) { float f = on_ice ? 0.02f : on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
 
   if (jp) jbuf = 7; else if (jbuf > 0) jbuf--;
   if (on_ground) { coyote = 6; air_jumps = 1; } else if (coyote > 0) coyote--;
@@ -661,6 +838,26 @@ static void update_ents(void) {
     e->t++;
     if (e->dying) { if (++e->dying > 24) e->alive = 0; continue; }
     float ew = 12, eh = 10;
+    if (e->type == E_ICE) {
+      if (e->k == 0) {
+        if (!dead_t && fabsf(px + PW / 2 - (e->x + 6)) < 16 && py > e->y && py - e->y < 170) { e->k = 1; e->t = 0; }
+      } else if (e->k == 1) {
+        if (e->t > 20) { e->k = 2; e->vy = 0; }
+      } else {
+        e->vy += 0.22f; if (e->vy > 5) e->vy = 5;
+        e->y += e->vy;
+        if (box_solid(e->x + 3, e->y + 4, 6, 10) || e->y > LH * T) {
+          e->alive = 0; plat_sfx(SFX_STOMP);
+          spawn_parts(e->x + 6, e->y + 12, 10, 0xFFCFEFFF, 1.6f, 0.6f);
+          continue;
+        }
+      }
+      if (!dead_t && state == ST_PLAY && px + PW > e->x + 3 && px < e->x + 9 && py + PH > e->y && py < e->y + 13) {
+        if (e->k == 2) { e->alive = 0; spawn_parts(e->x + 6, e->y + 8, 8, 0xFFCFEFFF, 1.6f, 0.4f); }
+        hurt();
+      }
+      continue;
+    }
     if (e->type == E_POW) {
       if (e->t <= 16) e->y -= 1.0f;          // pop up out of the box
       else {                                  // then slide off and land
@@ -745,6 +942,7 @@ void game_update(const Input* in) {
       if (sp) { state = ST_PAUSE; plat_sfx(SFX_SELECT); break; }
       lvl_frames++;
       update_player(in);
+      dino_tick();
       if (state == ST_PLAY || state == ST_CLEAR) update_ents();
       update_parts();
       if (!dead_t) update_camera(0);
@@ -754,7 +952,7 @@ void game_update(const Input* in) {
       else if (in->down && !prev_down) { state = ST_MAP; state_t = 0; map_t = 99; }
       break;
     case ST_CLEAR:
-      update_parts();
+      update_parts(); dino_tick();
       if (state_t > 150) {
         int first_all = !cleared[lvl + 1];
         cleared[lvl + 1] = 1;
@@ -775,9 +973,12 @@ void game_update(const Input* in) {
       {
         int fwd = (in->right && !prev_right) || (in->up && !prev_up);
         int back = (in->left && !prev_left) || (in->down && !prev_down);
-        if (fwd && map_node < NLEVELS && node_open(map_node + 1)) { map_from = map_node; map_node++; map_t = 0; plat_sfx(SFX_WALL); }
+        int kind = WORLDS[world].kind[map_node];
+        if (fwd && map_node < WORLDS[world].n - 1 && node_open(map_node + 1)) { map_from = map_node; map_node++; map_t = 0; plat_sfx(SFX_WALL); }
         else if (back && map_node > 0) { map_from = map_node; map_node--; map_t = 0; plat_sfx(SFX_WALL); }
-        else if (jp && map_node > 0) { start_level(map_node - 1); update_camera(1); plat_sfx(SFX_SELECT); }
+        else if (jp && kind >= 0) { start_level(kind); update_camera(1); plat_sfx(SFX_SELECT); }
+        else if (jp && kind == -3 && world < NWORLDS - 1) { world++; map_node = map_from = 0; map_t = 99; state_t = 0; plat_sfx(SFX_CHECK); }
+        else if (jp && kind == -2 && world > 0) { world--; map_node = map_from = WORLDS[world].n - 1; map_t = 99; state_t = 0; plat_sfx(SFX_CHECK); }
       }
       break;
   }
@@ -786,295 +987,123 @@ void game_update(const Input* in) {
 }
 
 // ============================================================ drawing
-static void draw_background(void) {
-  for (int y = 0; y < SCR_H; y++) {
-    uint32_t c = blend(L->sky0, L->sky1, y / (float)SCR_H);
-    for (int x = 0; x < SCR_W; x++) FB[y * SCR_W + x] = c;
-  }
-  float vy = camy / (float)(LH * T - SCR_H + 1);   // 0..1 how far down the level the camera is
-  int th = L->theme;
-  if (th == 2) {
-    // cave roof: hanging rocks
-    for (int x = 0; x < SCR_W; x++) {
-      float wx = x + camx * 0.3f;
-      int h = 26 + (int)(fabsf(sinf(wx * 0.05f)) * 30 * fabsf(sinf(wx * 0.013f)));
-      for (int y = 0; y < h; y++) put(x, y, L->far);
-    }
-  } else if (th == 1) {
-    // stars and a big moon
-    for (int i = 0; i < 40; i++) {
-      uint32_t h = hash2(i, 99);
-      int sx = (int)((h % 400) - camx * 0.05f) % 400, sy = (h >> 12) % 90;
-      if (sx < 0) sx += 400;
-      put(sx, sy, (frame / 20 + i) % 7 ? 0xFFE8E0F8 : 0xFF9C8FC8);
-    }
-    for (int j = -14; j <= 14; j++) for (int i = -14; i <= 14; i++) if (i * i + j * j <= 196) put(250 + i, 36 + j, (i + 4) * (i + 4) + (j - 3) * (j - 3) < 60 ? 0xFFE6DFC8 : 0xFFF6F0DC);
-  } else {
-    for (int j = -10; j <= 10; j++) for (int i = -10; i <= 10; i++) if (i * i + j * j <= 100) put(260 + i, 30 + j - (int)(vy * 10), 0xFFFFF4C2);
-    // clouds
-    for (int c = 0; c < 6; c++) {
-      int cx = (int)(c * 97 - camx * 0.1f - frame * 0.05f) % 480; if (cx < -60) cx += 480;
-      int cy = 20 + (c * 37) % 50;
-      for (int k = 0; k < 4; k++) for (int j = -6; j <= 6; j++) for (int i = -9; i <= 9; i++)
-        if (i * i / 81.0f + j * j / 36.0f <= 1 && j < 4) put(cx + k * 9 + i, cy - (k % 2) * 4 + j, 0xFFFFFFFF);
-    }
-  }
-  // far hills
-  int base_far = 120 - (int)(vy * 30);
-  for (int x = 0; x < SCR_W; x++) {
-    float wx = x + camx * 0.25f;
-    int h = base_far - (int)(sinf(wx * 0.021f) * 16 + sinf(wx * 0.053f + 1) * 7);
-    if (th == 1 || th == 2) h = base_far - (int)(fabsf(sinf(wx * 0.012f)) * 34);
-    if (th == 3) break;
-    for (int y = h; y < SCR_H; y++) put(x, y, L->far);
-  }
-  if (th == 3) {
-    // a sea of clouds far below
-    for (int layer = 0; layer < 2; layer++) {
-      int base = 140 - (int)(vy * 20) + layer * 16;
-      uint32_t c = layer ? 0xFFFFFFFF : 0xFFE3F1FF;
-      for (int x = 0; x < SCR_W; x++) {
-        float wx = x + camx * (0.2f + layer * 0.2f) + frame * 0.1f;
-        int h = base - (int)(fabsf(sinf(wx * 0.04f)) * 12 + fabsf(sinf(wx * 0.11f)) * 5);
-        for (int y = h; y < SCR_H; y++) put(x, y, c);
+static void blit_level(int CX, int CY) {
+  for (int y = 0; y < FB_H; y++) {
+    int sy = y + CY;
+    if (sy < 0 || sy >= LVB.h) continue;
+    const uint32_t* src = LVB.px + sy * LVB.w;
+    uint32_t* dst = FB + y * FB_W;
+    for (int x = 0; x < FB_W; x++) {
+      int sx = x + CX;
+      if ((unsigned)sx >= (unsigned)LVB.w) continue;
+      uint32_t c = src[sx], a = c >> 24;
+      if (!a) continue;
+      if (a == 255) dst[x] = c;
+      else {
+        uint32_t d = dst[x], ia = 255 - a;
+        dst[x] = 0xFF000000 | (((((c >> 16) & 255) * a + ((d >> 16) & 255) * ia) / 255) << 16)
+               | (((((c >> 8) & 255) * a + ((d >> 8) & 255) * ia) / 255) << 8) | (((c & 255) * a + (d & 255) * ia) / 255);
       }
-    }
-    return;
-  }
-  if (th == 4) {
-    // waterfalls pouring down the cliffs
-    for (int k = 0; k < 4; k++) {
-      int wx = (int)(k * 110 + 40 - camx * 0.25f) % 440; if (wx < -30) wx += 440;
-      for (int y = 10; y < SCR_H; y++) for (int i = 0; i < 16; i++) {
-        int streak = ((y - frame * 2 + i * 7) % 11 + 11) % 11 < 3;
-        put(wx + i, y, streak ? 0xFFEAF8FF : (i == 0 || i == 15 ? 0xFF7FC4D8 : 0xFFAEE0EE));
-      }
-    }
-  }
-  // near layer: jungle trees, or temple ruins
-  int base_near = 150 - (int)(vy * 50);
-  if (th == 1 || th == 2) {
-    for (int x = 0; x < SCR_W; x++) {
-      float wx = x + camx * 0.5f;
-      int m = ((int)wx % 90 + 90) % 90;
-      int h = m < 22 ? base_near - 60 + (m < 2 || m > 19 ? 6 : 0) : base_near - 8;
-      for (int y = h; y < SCR_H; y++) put(x, y, L->nearc);
-    }
-  } else {
-    uint32_t leaf = blend(L->nearc, L->far, 0.35f), lite = blend(L->nearc, 0xFFFFFFFF, 0.12f);
-    float off = camx * 0.5f;
-    int k0 = (int)floorf((off - 60) / 80), k1 = (int)floorf((off + SCR_W + 60) / 80);
-    for (int k = k0; k <= k1; k++) {
-      uint32_t h = hash2(k, 3);
-      int tx = k * 80 + (int)(h % 30) - (int)off, top = base_near - 70 - (int)((h >> 8) % 25);
-      fill(tx - 2, top, 5, SCR_H - top, L->nearc);
-      for (int b = 0; b < 5; b++) {
-        int bx = tx + (int)(hash2(k, b) % 36) - 18, by = top + (int)(hash2(b, k) % 14) - 6, r = 11 + (int)(hash2(k + b, 9) % 6);
-        for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r)
-          put(bx + i, by + j, (i + j < -r / 2) ? lite : leaf);
-      }
-    }
-    for (int x = 0; x < SCR_W; x++) {
-      float wx = x + off;
-      int h = base_near - 18 - (int)(fabsf(sinf(wx * 0.06f)) * 10 + sinf(wx * 0.21f) * 3);
-      for (int y = h; y < SCR_H; y++) put(x, y, L->nearc);
     }
   }
 }
-
-static void draw_tile(char c, int tx, int ty, int sx, int sy) {
-  switch (c) {
-    case '#': {
-      int top = tile(tx, ty - 1) != '#';
-      for (int j = 0; j < T; j++) for (int i = 0; i < T; i++) {
-        uint32_t h = hash2(tx * T + i, ty * T + j);
-        uint32_t col = (h % 23 == 0) ? 0xFF6E4520 : (h % 31 == 0 ? 0xFFA0703A : 0xFF8A5A2B);
-        if (top) {
-          int gh = 4 + (int)(hash2(tx * T + i, 7) % 3);
-          if (j < gh) col = j == 0 ? 0xFF9BE37A : (j < 2 ? 0xFF6CC24A : 0xFF4CAF50);
-          else if (j == gh) col = 0xFF2E7D32;
-        }
-        if (tile(tx - 1, ty) != '#' && i == 0) col = blend(col, 0xFF000000, 0.35f);
-        if (tile(tx + 1, ty) != '#' && i == T - 1) col = blend(col, 0xFF000000, 0.35f);
-        put(sx + i, sy + j, col);
-      }
-      break;
-    }
-    case 'X': {
-      int top = !solid_c(tile(tx, ty - 1));
-      int temple = L->theme == 1 || L->theme == 2;
-      uint32_t base = 0xFF8C8F9C, dark = 0xFF575A66, lite = 0xFFB6BAC6;
-      if (L->theme == 1) { base = 0xFF8A7BA8; dark = 0xFF4E4370; lite = 0xFFB8A8D8; }
-      if (L->theme == 2) { base = 0xFF6D6259; dark = 0xFF3E3630; lite = 0xFF8F8378; }
-      for (int j = 0; j < T; j++) for (int i = 0; i < T; i++) {
-        int row = j / 8, off = (row + ty) % 2 ? 8 : 0;
-        int mx = (i + off) % 16 == 0, my = j % 8 == 0;
-        uint32_t col = (mx || my) ? dark : base;
-        if (!mx && !my && (j % 8 == 1 || (i + off) % 16 == 1)) col = lite;
-        uint32_t h = hash2(tx * T + i, ty * T + j);
-        if (col == base && h % 17 == 0) col = blend(base, dark, 0.4f);
-        if (top && j < 2 && !temple) col = j == 0 ? 0xFF9BE37A : 0xFF4CAF50;
-        put(sx + i, sy + j, col);
-      }
-      break;
-    }
-    case '=':
-      for (int i = 0; i < T; i++) {
-        put(sx + i, sy, 0xFF3B2414);
-        put(sx + i, sy + 1, 0xFFD69A55);
-        for (int j = 2; j < 5; j++) put(sx + i, sy + j, (i % 8 == 7) ? 0xFF6B4220 : 0xFFB5793A);
-        put(sx + i, sy + 5, 0xFF3B2414);
-      }
-      for (int j = 6; j < 10; j++) { put(sx + 3, sy + j, 0xFF6B4220); put(sx + 12, sy + j, 0xFF6B4220); }
-      break;
-    case '^':
-      for (int k = 0; k < 2; k++) for (int j = 0; j < 8; j++) {
-        int hw = j / 2;
-        for (int i = -hw; i <= hw; i++) put(sx + k * 8 + 4 + i, sy + 8 + j, i == -hw ? 0xFF5A5E6A : (i == hw ? 0xFF8C8F9C : 0xFFD8DCE6));
-      }
-      fill(sx, sy + 15, 16, 1, 0xFF3B3E48);
-      break;
-    case 'o': {
-      int bob = (int)(sinf((frame + tx * 9) * 0.08f) * 2);
-      sprite(SPR_BANANA, sx, sy + bob, 0);
-      break;
-    }
-    case 's': {
-      int squash = 0;
-      fill(sx + 3, sy + 11, 10, 5, 0xFF575A66);
-      fill(sx + 4, sy + 12, 8, 3, 0xFF8C8F9C);
-      for (int j = 0; j < 5; j++) for (int i = -7 + j / 2; i <= 7 - j / 2; i++)
-        put(sx + 8 + i, sy + 6 + j + squash, j == 0 ? 0xFFFF8A80 : ((i + 8) % 5 == 0 ? 0xFFFFFFFF : 0xFFD8463C));
-      fill(sx + 1, sy + 11, 14, 1, 0xFF2B1A12);
-      break;
-    }
-    case '?': case 'u': {
-      int used = c == 'u';
-      uint32_t base = used ? 0xFF8A5A2B : 0xFFE0A030, lite = used ? 0xFFA0703A : 0xFFFFD36A, dark = used ? 0xFF5A3A1E : 0xFFA0661A;
-      fill(sx, sy, 16, 16, 0xFF2B1A12);
-      fill(sx + 1, sy + 1, 14, 14, base);
-      fill(sx + 1, sy + 1, 14, 1, lite); fill(sx + 1, sy + 1, 1, 14, lite);
-      fill(sx + 1, sy + 14, 14, 1, dark); fill(sx + 14, sy + 1, 1, 14, dark);
-      put(sx + 3, sy + 3, dark); put(sx + 12, sy + 3, dark); put(sx + 3, sy + 12, dark); put(sx + 12, sy + 12, dark);
-      if (!used) {
-        int b = ((frame / 10) % 6 == 0) ? 1 : 0;
-        static const char* Q[7] = { ".XXX.", "X...X", "...X.", "..X..", "..X..", ".....", "..X.." };
-        for (int j = 0; j < 7; j++) for (int i = 0; i < 5; i++) if (Q[j][i] == 'X') { put(sx + 6 + i, sy + 4 + j + b, 0xFFFFFFFF); put(sx + 7 + i, sy + 5 + j + b, dark); }
-        for (int j = 0; j < 7; j++) for (int i = 0; i < 5; i++) if (Q[j][i] == 'X') put(sx + 6 + i, sy + 4 + j + b, 0xFFFFFFFF);
-      }
-      break;
-    }
-    case 'c': {
-      int on = check_x == tx * T + 3 && check_y == ty * T + T - PH;
-      fill(sx + 7, sy + 1, 2, 15, 0xFF3B2414);
-      uint32_t fc = on ? 0xFF4CAF50 : 0xFF9E9E9E;
-      int wave = on ? (frame / 8) % 2 : 0;
-      for (int j = 0; j < 6; j++) for (int i = 0; i < 7 - j / 2 + wave; i++) put(sx + 9 + i, sy + 2 + j, fc);
-      fill(sx + 5, sy + 15, 6, 1, 0xFF2B1A12);
-      break;
-    }
-  }
+static void fb_shadow(float cx, float cy, float rx, float ry, float alpha) {
+  for (int y = (int)(cy - ry - 1); y <= (int)(cy + ry + 1); y++) for (int x = (int)(cx - rx - 1); x <= (int)(cx + rx + 1); x++)
+    fb_over(x, y, 0xFF000000, cov(sd_ellipse(x + 0.5f, y + 0.5f, cx, cy, rx, ry)) * alpha);
 }
-
 static void draw_world(void) {
-  int cx = (int)floorf(camx), cy = (int)floorf(camy);
-  int tx0 = cx / T, ty0 = cy / T;
-  // signs (behind everything)
-  for (int i = 0; i < nsigns; i++) {
-    int sx = sign_x[i] * T - cx, sy = sign_y[i] * T - cy;
-    fill(sx + 7, sy + 8, 2, 8, 0xFF5A3A1E);
-    fill(sx + 1, sy + 1, 14, 9, 0xFF3B2414);
-    fill(sx + 2, sy + 2, 12, 7, 0xFFC8955A);
-    for (int k = 0; k < 3; k++) fill(sx + 4, sy + 3 + k * 2, 8 - (k == 2) * 3, 1, 0xFF7A5230);
-  }
-  // goal pole
+  int CX = (int)floorf(camx * 2), CY = (int)floorf(camy * 2);
+  int tx0 = CX / HT, ty0 = CY / HT;
+  blit_level(CX, CY);
+  for (int i = 0; i < nsigns; i++) hblit(&HD_SIGN, sign_x[i] * HT - CX, sign_y[i] * HT - CY, 0);
+  // goal pole with a rippling flag that runs up the pole when you finish
   {
-    int sx = goal_x * T - cx, sy = goal_y * T - cy;
-    fill(sx + 7, sy - 3 * T, 2, 4 * T, 0xFFE0E0E0);
-    fill(sx + 6, sy - 3 * T - 3, 4, 4, 0xFFF7D038);
-    int wave = (frame / 6) % 3;
-    int raised = state == ST_CLEAR ? (state_t < 40 ? state_t / 2 : 20) : 0;
-    for (int j = 0; j < 10; j++) for (int i = 0; i < 14 - (j > 4 ? j - 4 : 4 - j) + wave; i++)
-      put(sx + 9 + i, sy - 3 * T + 26 - raised + j, (i + j) % 6 < 3 ? 0xFFD8463C : 0xFFF7D038);
-    fill(sx + 3, sy + 13, 10, 3, 0xFF575A66);
+    float X = goal_x * HT - CX, Y = goal_y * HT - CY;
+    if (X > -80 && X < FB_W + 20) {
+      int raised = state == ST_CLEAR ? (state_t < 40 ? state_t : 40) : 0;
+      fb_capsule(X + 8, Y + 28, X + 24, Y + 28, 5, OUTLINE); fb_capsule(X + 8, Y + 28, X + 24, Y + 28, 3.4f, 0xFF8C8F9C);
+      fb_capsule(X + 16, Y - 92, X + 16, Y + 26, 4.4f, OUTLINE);
+      fb_capsule(X + 16, Y - 92, X + 16, Y + 26, 2.8f, 0xFFE8ECF4); fb_capsule(X + 17.3f, Y - 92, X + 17.3f, Y + 26, 1.2f, 0xFFAEB6C8);
+      fb_flag(X + 19, Y - 86 + 56 - raised * 1.4f, 46, 28, 0xFFF0584A, 0xFFC8322C, 1, 1);
+      fb_dot(X + 16, Y - 96, 7.6f, OUTLINE, 1); fb_dot(X + 16, Y - 96, 6, 0xFFF7D038, 1); fb_dot(X + 14, Y - 98, 2.2f, 0xFFFFF7C8, 1);
+    }
   }
-  for (int ty = ty0; ty <= ty0 + SCR_H / T + 1; ty++)
-    for (int tx = tx0; tx <= tx0 + SCR_W / T + 1; tx++) {
+  for (int ty = ty0; ty <= ty0 + FB_H / HT + 1; ty++)
+    for (int tx = tx0 - 1; tx <= tx0 + FB_W / HT + 1; tx++) {
       char c = tile(tx, ty);
-      if (c != ' ' && tx >= 0 && tx < LW) draw_tile(c, tx, ty, tx * T - cx, ty * T - cy);
+      if (c == ' ' || c == '#' || c == 'X' || tx < 0 || tx >= LW) continue;
+      int X = tx * HT - CX, Y = ty * HT - CY;
+      if (c == 'o') hblit(&HD_BANANA, X, Y + (int)lroundf(sinf((frame + tx * 9) * 0.08f) * 3.5f), 0);
+      else if (c == '?') hblit(&HD_BOX[0], X, Y, 0);
+      else if (c == 'u') hblit(&HD_BOX[1], X, Y, 0);
+      else if (c == 's') hblit(&HD_SPRING, X, Y, 0);
+      else if (c == 'c') {
+        int on = check_x == tx * T + 3 && check_y == ty * T + T - PH;
+        fb_capsule(X + 10, Y + 30, X + 22, Y + 30, 3.4f, OUTLINE); fb_capsule(X + 10, Y + 30, X + 22, Y + 30, 2, 0xFF8C8F9C);
+        fb_capsule(X + 16, Y + 3, X + 16, Y + 29, 3.4f, OUTLINE); fb_capsule(X + 16, Y + 3, X + 16, Y + 29, 1.9f, 0xFFB5793A);
+        fb_flag(X + 18, Y + 3, 22, 14, on ? 0xFF7FE06A : 0xFFC4C8D2, on ? 0xFF3FA34D : 0xFF8C8F9C, on ? 1 : 0.15f, 0);
+      }
     }
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (!e->alive) continue;
-    int sx = (int)e->x - 2 - cx, sy = (int)e->y - 6 - cy;
-    if (e->type == E_POW) {
-      int bob = (int)(sinf(e->t * 0.1f) * 1.5f);
-      sprite(e->k == 2 ? SPR_SWORD : SPR_WING, (int)e->x - 2 - cx, (int)e->y - 2 - cy + bob, 0);
+    float ex = e->x * 2 - CX, ey = e->y * 2 - CY;
+    if (ex < -80 || ex > FB_W + 80 || ey < -80 || ey > FB_H + 80) continue;
+    if (e->type == E_ICE) {
+      hblit(&HD_ICICLE, (int)ex + (e->k == 1 ? (int)lroundf(sinf(e->t * 1.6f) * 2) : 0), (int)ey, 0);
       continue;
     }
+    if (e->type == E_POW) {
+      float bob = sinf(e->t * 0.1f) * 3;
+      fb_dot(ex + 12, ey + 12 + bob, 17 + sinf(e->t * 0.15f) * 2, 0xFFFFFFFF, 0.28f);
+      hblit(e->k == 2 ? &HD_SWORDI : &HD_WINGI, (int)ex - 4, (int)(ey - 4 + bob), 0);
+      continue;
+    }
+    float want = e->vx > 0 ? 1 : -1;
+    if (e->fz == 0) e->fz = want;
+    e->fz += (want - e->fz) * 0.22f;   // turns round smoothly instead of snapping
     if (e->type == E_BEETLE) {
-      if (e->dying) {
-        // squashed flat
-        for (int j = 0; j < 4; j++) fill(sx + 1, sy + 12 + j, 14, 1, j == 0 ? 0xFF2B1A12 : 0xFF24723A);
-      } else sprite(SPR_BEETLE[(e->t / 8) % 2], sx, sy, e->vx > 0);
+      float sq = e->dying ? maxf(0.28f, 1 - e->dying * 0.14f) : 1 + sinf(e->t * 0.64f) * 0.02f;
+      beetle_render(&ESCR, e->t * 0.32f, sq, fabsf(e->fz), L->theme >= 5, e->dying, e->t);
+      if (!e->dying) fb_shadow(ex + 12, ey + 21, 12, 2.5f, 0.18f);
+      hblit(&ESCR, (int)ex + 12 - 26, (int)ey + 20 - 36, e->fz < 0);
     } else {
-      sy = (int)e->y - 4 - cy;
-      if (e->dying) sprite_flat(SPR_BEE[0], sx, sy + e->dying, e->vx > 0, 0xFFFFFFFF);
-      else sprite(SPR_BEE[(e->t / 3) % 2], sx, sy, e->vx > 0);
+      float tilt = cosf(e->t * 0.07f) * 0.22f + (e->dying ? e->dying * 0.35f : 0);
+      bee_render(&ESCR, e->t, tilt, e->dying);
+      hblit(&ESCR, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, e->fz < 0);
     }
   }
-  // player
+  // Dino
   {
-    int sx = (int)floorf(px) - 3 - cx, sy = (int)floorf(py) - 3 - cy;
-    const char* const* s = (frame % 200) < 7 ? SPR_DINO_BLINK : SPR_DINO_IDLE;
-    static const char* const* RUN[4] = { SPR_DINO_RUN1, SPR_DINO_RUN2, SPR_DINO_RUN3, SPR_DINO_RUN2 };
+    DinoPose p; dino_pose(&p);
     int walling = !on_ground && wall_dir && pvy > 0 && !dead_t;
-    if (dead_t) s = SPR_DINO_HURT;
-    else if (atk_t > 4 && power != 2) s = SPR_DINO_ATTACK;
-    else if (walling) s = SPR_DINO_WALL;
-    else if (!on_ground) s = pvy < 0 ? SPR_DINO_JUMP : SPR_DINO_FALL;
-    else if (run_t) s = RUN[(run_t / 5) % 4];
-    else if (land_t > 2) s = SPR_DINO_FALL;
     int flip = face < 0;
     if (walling) flip = wall_dir > 0;   // back to the wall
-    sx = (int)floorf(px) - (flip ? 5 : 4) - cx; sy = (int)floorf(py) + PH - 19 - cy;
+    int X = (int)floorf((px + PW * 0.5f) * 2) - CX, Y = (int)floorf((py + PH) * 2) - CY;
     int show = !(inv_t && (inv_t / 4) % 2);
-    if (power == 1 && show) {
-      // little wings on his back
-      int wx = flip ? sx + 15 : sx - 1, wy = sy + 5 + ((frame / 8) % 2);
-      for (int j = 0; j < 6; j++) for (int i = 0; i < 6 - j / 2; i++) {
-        int x = flip ? wx + i : wx + 5 - i;
-        put(x, wy + j, (i == 6 - j / 2 - 1 || j == 0 || j == 5) ? 0xFF2B1A12 : 0xFFFFFFFF);
-      }
-    }
-    if (show) sprite_n(s, 20, sx, sy, flip);
+    if (on_ground && !dead_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
+    if (show) { dino_render(&DSCR, &p, flip, 1); hblit(&DSCR, X - 36, Y - 64, flip); }
     if (power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
-      float cxp = sx + (flip ? 6 : 13), cyp = sy + 11;
-      float ang;
-      if (atk_t > 0) { float k = (16 - atk_t) / 16.0f; ang = -2.2f + k * 3.0f; }
-      else ang = -2.0f;
+      float hx = X + (flip ? -7 : 7), hy = Y - 22, ang;
+      if (atk_t > 0) { float k = (16 - atk_t) / 16.0f; ang = -2.2f + k * k * (3 - 2 * k) * 3.0f; }
+      else ang = -2.0f + sinf(frame * 0.07f) * 0.05f;
+      if (atk_t > 2) for (int q = 5; q >= 1; q--) {   // a fading trail behind the blade
+        float a2 = ang - q * 0.16f; if (flip) a2 = 3.14159f - a2;
+        fb_capsule(hx + cosf(a2) * 16, hy + sinf(a2) * 16, hx + cosf(a2) * 32, hy + sinf(a2) * 32, 2.2f, mixc(0xFFFFFFFF, 0xFFBFE8FF, q / 5.0f));
+      }
       if (flip) ang = 3.14159f - ang;
       float ca = cosf(ang), sa = sinf(ang);
-      for (int d = 2; d < 17; d++) {
-        int x = (int)(cxp + ca * d), y = (int)(cyp + sa * d);
-        put(x - 1, y, 0xFF2B1A12); put(x + 1, y, 0xFF2B1A12); put(x, y - 1, 0xFF2B1A12); put(x, y + 1, 0xFF2B1A12);
-      }
-      for (int d = 2; d < 17; d++) {
-        int x = (int)(cxp + ca * d), y = (int)(cyp + sa * d);
-        put(x, y, d < 5 ? 0xFFC9A227 : (d == 5 ? 0xFF8B5A2B : 0xFFE8ECF4));
-      }
-      if (atk_t > 4) for (int d = 10; d < 19; d += 2) {   // swoosh
-        float a2 = ang - (flip ? -0.5f : 0.5f);
-        put((int)(cxp + cosf(a2) * d), (int)(cyp + sinf(a2) * d), 0xFFFFFFFF);
-      }
+      fb_capsule(hx + ca * 2, hy + sa * 2, hx + ca * 32, hy + sa * 32, 3.8f, OUTLINE);
+      fb_capsule(hx + ca * 9 - sa * 5, hy + sa * 9 + ca * 5, hx + ca * 9 + sa * 5, hy + sa * 9 - ca * 5, 3.4f, OUTLINE);
+      fb_capsule(hx + ca * 2, hy + sa * 2, hx + ca * 8, hy + sa * 8, 2, 0xFF8B5A2B);
+      fb_capsule(hx + ca * 11, hy + sa * 11, hx + ca * 32, hy + sa * 32, 2.3f, 0xFFF4F7FC);
+      fb_capsule(hx + ca * 11 + sa, hy + sa * 11 - ca, hx + ca * 30 + sa, hy + sa * 30 - ca, 0.8f, 0xFFAEB6C8);
+      fb_capsule(hx + ca * 9 - sa * 5, hy + sa * 9 + ca * 5, hx + ca * 9 + sa * 5, hy + sa * 9 - ca * 5, 1.9f, 0xFFF2B02E);
     }
   }
-  for (int i = 0; i < 160; i++) if (parts[i].life > 0) {
-    int x = (int)parts[i].x - cx, y = (int)parts[i].y - cy;
-    put(x, y, parts[i].c);
-    if (parts[i].life > 10) put(x + 1, y, parts[i].c);
-  }
+  for (int i = 0; i < 160; i++) if (parts[i].life > 0)
+    fb_dot(parts[i].x * 2 - CX, parts[i].y * 2 - CY, parts[i].life > 10 ? 2.8f : 1.2f + parts[i].life * 0.15f, parts[i].c, parts[i].life > 8 ? 1 : parts[i].life / 8.0f);
   // sign text when you stand near a sign
   for (int i = 0; i < nsigns; i++) {
     float dx = px + PW / 2 - (sign_x[i] * T + 8), dy = py - sign_y[i] * T;
@@ -1089,18 +1118,25 @@ static void draw_world(void) {
   }
 }
 
+// a still Dino for the HUD, the title and the map
+static void draw_dino_at(int X, int Y, float S, const DinoPose* p, int flip) {
+  static Bmp big;
+  dino_render(&big, p, flip, S);
+  hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), flip);
+}
+
 static void draw_hud(void) {
   char buf[64];
-  sprite(SPR_BANANA, 2, -1, 0);
+  hblit(&HD_BANANA, 6, 3, 0);
   snprintf(buf, sizeof buf, "%02d", bananas);
-  text(buf, 18, 6, 2, 0xFFFFF4C2);
-  // lives: Kip's head
-  for (int j = 0; j < 14; j++) for (int i = 0; i < 20; i++) { char c = SPR_DINO_IDLE[j][i]; if (c != '.') put(SCR_W - 56 + i, 1 + j, pal(c)); }
+  text(buf, 21, 6, 2, 0xFFFFF4C2);
+  DinoPose p; dino_idle_pose(&p, frame);
+  draw_dino_at(FB_W - 94, 34, 0.72f, &p, 0);
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
   if (power) {
-    fill(SCR_W - 80, 1, 18, 18, 0xFF1B1020); fill(SCR_W - 79, 2, 16, 16, 0xFF3B2F6B);
-    sprite(power == 2 ? SPR_SWORD : SPR_WING, SCR_W - 79, 2, 0);
+    fill(SCR_W - 82, 1, 18, 18, 0xFF1B1020); fill(SCR_W - 81, 2, 16, 16, 0xFF3B2F6B);
+    hblit(power == 2 ? &HD_SWORDI : &HD_WINGI, (SCR_W - 81) * 2, 4, 0);
   }
 }
 
@@ -1114,18 +1150,19 @@ static void draw_kip_big(int x, int y, int sc, const char* const* s, int flip) {
 static void disc(int cx, int cy, int r, uint32_t c) {
   for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r) put(cx + i, cy + j, c);
 }
-static void draw_map(void) {
-  char buf[64];
-  // sea
-  for (int y = 0; y < SCR_H; y++) {
-    uint32_t c = blend(0xFF2F7FC1, 0xFF5BB3E6, y / (float)SCR_H);
-    for (int x = 0; x < SCR_W; x++) FB[y * SCR_W + x] = c;
+static void pine(int x, int y, uint32_t green) {
+  fill(x - 1, y, 3, 5, 0xFF6B3F1D);
+  for (int t = 0; t < 3; t++) for (int j = 0; j < 6; j++) {
+    int hw = 1 + j * (3 + t) / 5;
+    for (int i = -hw; i <= hw; i++) put(x + i, y - 15 + t * 4 + j, j < 2 ? 0xFFFFFFFF : green);
   }
-  for (int i = 0; i < 50; i++) {
-    uint32_t h = hash2(i, 5);
-    int x = (int)(h % SCR_W + frame / 6) % SCR_W, y = (h >> 9) % SCR_H;
-    if ((frame / 15 + i) % 4) fill(x, y, 3, 1, 0xFF9ED6F5);
-  }
+}
+static void boat(int x, int y) {
+  for (int j = 0; j < 5; j++) fill(x - 9 + j, y + j, 18 - 2 * j, 1, j == 0 ? 0xFF3B2414 : 0xFF8A5A2B);
+  fill(x, y - 14, 1, 14, 0xFF3B2414);
+  for (int j = 0; j < 11; j++) fill(x + 1, y - 13 + j, 1 + j * 7 / 11, 1, 0xFFFFFFFF);
+}
+static void map_jungle(void) {
   // the island: a blob of circles, sand round the edge
   static const short BLOB[][3] = { {40, 140, 30}, {84, 130, 34}, {130, 110, 34}, {100, 66, 34}, {166, 56, 34},
     {226, 92, 38}, {280, 52, 32}, {150, 90, 30}, {190, 130, 28}, {60, 100, 24}, {250, 140, 22} };
@@ -1158,59 +1195,153 @@ static void draw_map(void) {
   // Dino's house
   fill(26, 136, 24, 14, 0xFFE8D5B0); fill(35, 142, 6, 8, 0xFF6B3F1D);
   for (int j = 0; j < 11; j++) fill(38 - j - 3, 126 + j, 2 * j + 7, 1, 0xFF4C8C2B);
+  // pier and boat to the Frosty Forest
+  fill(292, 110, 12, 3, 0xFF8A5A2B); fill(294, 113, 2, 4, 0xFF5A3A1E); fill(300, 113, 2, 4, 0xFF5A3A1E);
+  boat(308, 118 + (frame / 30) % 2);
+}
+static void map_snow(int night) {
+  const World* w = &WORLDS[world];
+  uint32_t rim = night ? 0xFF7F96CC : 0xFFBFE0F5, snow = night ? 0xFFC9D6F0 : 0xFFF4FAFF, shade = night ? 0xFFB3C2E4 : 0xFFDCEBF7;
+  // the land follows the path, with a few extra lumps
+  for (int pass = 0; pass < 2; pass++) {
+    for (int n = 0; n < w->n; n++) {
+      disc(w->xy[n][0], w->xy[n][1], 30 + 5 * !pass, pass ? snow : rim);
+      if (n + 1 < w->n) disc((w->xy[n][0] + w->xy[n + 1][0]) / 2, (w->xy[n][1] + w->xy[n + 1][1]) / 2 + 8, 30 + 5 * !pass, pass ? snow : rim);
+    }
+    disc(120, 140, 26 + 5 * !pass, pass ? snow : rim); disc(250, 110, 30 + 5 * !pass, pass ? snow : rim); disc(190, 130, 24 + 5 * !pass, pass ? snow : rim);
+  }
+  for (int y = 0; y < SCR_H; y++) for (int x = 0; x < SCR_W; x++)
+    if (FB[y * SCR_W + x] == snow && hash2(x, y) % 11 == 0) put(x, y, shade);
+  uint32_t green = night ? 0xFF1F4A4A : 0xFF2E7D5A;
+  if (!night) {
+    // frozen lake by level 8, ice cave by level 9
+    for (int j = -10; j <= 10; j++) for (int i = -22; i <= 22; i++) if (i * i / 484.0f + j * j / 100.0f <= 1)
+      put(150 + i, 128 + j, (i + j * 2 + 60) % 13 < 2 ? 0xFFEAF8FF : 0xFFA9DAF5);
+    for (int j = 0; j < 30; j++) for (int i = -j; i <= j; i++) put(214 + i, 40 + j, j < 8 ? 0xFFFFFFFF : ((i + j) % 9 ? 0xFF8FB4D4 : 0xFF6F98BC));
+    disc(206, 68, 6, 0xFF12304C); fill(200, 68, 13, 6, 0xFF12304C);
+    static const short P[][2] = { {50, 118}, {66, 150}, {104, 112}, {118, 88}, {172, 100}, {176, 62}, {236, 100}, {254, 124}, {246, 66}, {100, 150}, {30, 128} };
+    for (unsigned t = 0; t < sizeof P / sizeof P[0]; t++) pine(P[t][0], P[t][1], green);
+    boat(8, 156 + (frame / 30) % 2);
+    // ski lift up to Ice Mountain
+    fill(282, 20, 2, 26, 0xFF575A66); fill(276, 20, 14, 2, 0xFF575A66);
+    for (int i = 0; i < 40; i++) put(283 + i, 20 - i / 2, 0xFF2B1A12);
+    fill(296 + (frame / 8) % 6, 14, 6, 5, 0xFFD8463C);
+  } else {
+    // the mountain, with the summit at the last stop
+    for (int j = 0; j < 100; j++) for (int i = -j * 3 / 4; i <= j * 3 / 4; i++) {
+      int x = 238 + i, y = 34 + j;
+      if ((unsigned)x < SCR_W && (unsigned)y < SCR_H && FB[y * SCR_W + x] != 0)
+        put(x, y, j < 16 + (i * 7 % 5) ? 0xFFFFFFFF : ((i * 2 + j) % 11 < 2 ? 0xFF4A5C94 : (i < 0 ? 0xFF8FA6D6 : 0xFF6F86BC)));
+    }
+    fill(238, 22, 1, 12, 0xFFE0E0E0);
+    for (int j = 0; j < 6; j++) fill(239, 22 + j, 7 - j / 2 + (frame / 8) % 2, 1, 0xFFD8463C);
+    static const short P[][2] = { {56, 120}, {70, 152}, {118, 108}, {128, 140}, {196, 128}, {150, 70}, {40, 126}, {104, 150} };
+    for (unsigned t = 0; t < sizeof P / sizeof P[0]; t++) pine(P[t][0], P[t][1], green);
+    // lift station back down
+    fill(12, 128, 2, 24, 0xFF575A66); fill(6, 128, 14, 2, 0xFF575A66);
+    fill(2 + (frame / 8) % 6, 132, 6, 5, 0xFFD8463C);
+  }
+  // falling snow
+  for (int i = 0; i < 50; i++) {
+    uint32_t h = hash2(i, 77);
+    int x = (int)(h % SCR_W + frame * (0.2f + (i % 3) * 0.1f)) % SCR_W, y = (int)((h >> 9) % SCR_H + frame * (0.4f + (i % 4) * 0.15f)) % SCR_H;
+    put(x, y, 0xFFFFFFFF);
+  }
+}
+static void draw_map(void) {
+  char buf[64];
+  const World* w = &WORLDS[world];
+  // sea
+  uint32_t sea0 = 0xFF2F7FC1, sea1 = 0xFF5BB3E6, wave = 0xFF9ED6F5;
+  if (world == 1) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
+  if (world == 2) { sea0 = 0xFF0B1030; sea1 = 0xFF24346E; wave = 0xFF4A5C94; }
+  for (int y = 0; y < SCR_H; y++) {
+    fill(0, y, SCR_W, 1, blend(sea0, sea1, y / (float)SCR_H));
+  }
+  for (int i = 0; i < 50; i++) {
+    uint32_t h = hash2(i, 5);
+    int x = (int)(h % SCR_W + frame / 6) % SCR_W, y = (h >> 9) % SCR_H;
+    if ((frame / 15 + i) % 4) fill(x, y, 3, 1, wave);
+  }
+  if (world == 0) map_jungle(); else map_snow(world == 2);
   // path between the stops
-  for (int n = 0; n < NLEVELS; n++) {
+  for (int n = 0; n + 1 < w->n; n++) {
     int open = node_open(n + 1);
-    float x0 = MAP_XY[n][0], y0 = MAP_XY[n][1], x1 = MAP_XY[n + 1][0], y1 = MAP_XY[n + 1][1];
+    float x0 = w->xy[n][0], y0 = w->xy[n][1], x1 = w->xy[n + 1][0], y1 = w->xy[n + 1][1];
     float len = sqrtf((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
     for (float d = 6; d < len - 5; d += 6) {
       int x = (int)(x0 + (x1 - x0) * d / len), y = (int)(y0 + (y1 - y0) * d / len);
-      fill(x - 1, y - 1, 3, 3, open ? 0xFFFFF4C2 : 0xFF3E7D3B);
+      fill(x - 1, y - 1, 3, 3, open ? (world ? 0xFFE08A2C : 0xFFFFF4C2) : (world ? 0xFF9FB4CC : 0xFF3E7D3B));
     }
   }
-  for (int n = 1; n <= NLEVELS; n++) {
-    int x = MAP_XY[n][0], y = MAP_XY[n][1];
-    uint32_t c = cleared[n] ? 0xFFF7D038 : (node_open(n) ? 0xFFD8463C : 0xFF8C8F9C);
+  for (int n = 0; n < w->n; n++) {
+    int x = w->xy[n][0], y = w->xy[n][1], kind = w->kind[n];
+    if (kind == -1) continue;
+    if (kind < 0) {
+      // an arrow marker for the way to another world
+      uint32_t c = node_open(n) ? 0xFF58D6E8 : 0xFF8C8F9C;
+      disc(x, y, 6, 0xFF2B1A12); disc(x, y, 5, c);
+      int dir = kind == -3 ? 1 : -1;
+      for (int j = -2; j <= 2; j++) fill(x - dir * 2 + (dir > 0 ? 0 : -(2 - abs(j))), y + j, 3 - abs(j) + 1, 1, 0xFF2B1A12);
+      continue;
+    }
+    uint32_t c = cleared[kind + 1] ? 0xFFF7D038 : (node_open(n) ? 0xFFD8463C : 0xFF8C8F9C);
     disc(x, y, 6, 0xFF2B1A12); disc(x, y, 5, c); disc(x - 1, y - 2, 2, blend(c, 0xFFFFFFFF, 0.5f));
-    snprintf(buf, sizeof buf, "%d", n);
-    text_raw(buf, x - 1, y - 2, 1, 0xFF2B1A12);
+    snprintf(buf, sizeof buf, "%d", kind + 1);
+    text_raw(buf, x - (kind + 1 >= 10 ? 3 : 1), y - 2, 1, 0xFF2B1A12);
   }
   // Dino walking between stops
   float t = map_t >= 24 ? 1 : map_t / 24.0f;
-  float dx = MAP_XY[map_from][0] + (MAP_XY[map_node][0] - MAP_XY[map_from][0]) * t;
-  float dy = MAP_XY[map_from][1] + (MAP_XY[map_node][1] - MAP_XY[map_from][1]) * t;
+  float dx = w->xy[map_from][0] + (w->xy[map_node][0] - w->xy[map_from][0]) * t;
+  float dy = w->xy[map_from][1] + (w->xy[map_node][1] - w->xy[map_from][1]) * t;
   int moving = map_t < 24;
-  const char* const* sp = moving ? (((map_t / 5) % 2) ? SPR_DINO_RUN1 : SPR_DINO_RUN2) : ((frame % 200) < 7 ? SPR_DINO_BLINK : SPR_DINO_IDLE);
-  sprite_n(sp, 20, (int)dx - 10, (int)dy - 21, MAP_XY[map_node][0] < MAP_XY[map_from][0]);
+  {
+    DinoPose p; dino_idle_pose(&p, frame);
+    if (moving) for (int i = 0; i < 2; i++) { float a = map_t * 0.55f + i * 3.14159f; p.lx[i] = sinf(a) * 7.5f + (i ? -2.8f : 2.8f); p.ly[i] = maxf(0, cosf(a)) * 5.5f; p.tilt = 0.12f; p.bob = fabsf(cosf(map_t * 0.55f)) * 1.5f; }
+    int X = (int)(dx * 2), Y = (int)(dy * 2) - 2;
+    fb_shadow(X, Y + 1, 12, 2.8f, 0.22f);
+    draw_dino_at(X, Y, 1, &p, w->xy[map_node][0] < w->xy[map_from][0]);
+  }
   // labels
   fill(0, 0, SCR_W, 16, 0xFF1B1020);
-  if (map_node == 0) text_c("DINO'S HOUSE", 3, 2, 0xFFFFFFFF);
-  else {
-    text(LEVELS[map_node - 1].name, 4, 3, 2, 0xFFFFFFFF);
-    const char* hint = cleared[map_node] ? "CLEARED!  A: PLAY" : "A: PLAY";
-    text(hint, SCR_W - text_w(hint, 1) - 4, 6, 1, cleared[map_node] ? 0xFFF7D038 : 0xFFFFF4C2);
+  int kind = w->kind[map_node];
+  if (kind == -1) text_c("DINO'S HOUSE", 3, 2, 0xFFFFFFFF);
+  else if (kind == -3 || kind == -2) {
+    snprintf(buf, sizeof buf, "TO %s", WORLDS[world + (kind == -3 ? 1 : -1)].name);
+    text(buf, 4, 3, 2, 0xFFFFFFFF);
+    text("A: GO", SCR_W - text_w("A: GO", 1) - 4, 6, 1, 0xFF58D6E8);
+  } else {
+    text(LEVELS[kind].name, 4, 3, 2, 0xFFFFFFFF);
+    const char* hint = cleared[kind + 1] ? "CLEARED!  A: PLAY" : "A: PLAY";
+    text(hint, SCR_W - text_w(hint, 1) - 4, 6, 1, cleared[kind + 1] ? 0xFFF7D038 : 0xFFFFF4C2);
   }
   int nc = 0; for (int i = 1; i <= NLEVELS; i++) nc += cleared[i];
   fill(0, SCR_H - 11, SCR_W, 11, 0xFF1B1020);
-  snprintf(buf, sizeof buf, "CLEARED %d/%d   BANANAS %d   LIVES %d", nc, NLEVELS, total_bananas, lives);
+  snprintf(buf, sizeof buf, "%s   CLEARED %d/%d   BANANAS %d   LIVES %d", w->name, nc, NLEVELS, total_bananas, lives);
   text(buf, 4, SCR_H - 8, 1, 0xFFFFF4C2);
-  text("WALK: STICK OR D-PAD", SCR_W - text_w("WALK: STICK OR D-PAD", 1) - 4, SCR_H - 8, 1, 0xFFFFF4C2);
 }
 
 void game_draw(uint32_t* fb) {
   FB = fb;
   char buf[64];
   if (state == ST_TITLE) {
-    draw_background();
-    // a strip of ground to stand on
-    for (int x = 0; x < SCR_W; x++) for (int y = 150; y < SCR_H; y++) {
-      uint32_t h = hash2(x, y);
-      put(x, y, y < 155 ? (y == 150 ? 0xFF9BE37A : 0xFF4CAF50) : (h % 23 ? 0xFF8A5A2B : 0xFF6E4520));
+    hd_background();
+    // a round grassy hill for Dino to stand on
+    for (int y = 280; y < FB_H; y++) for (int x = 0; x < FB_W; x++) {
+      float dd = sd_ellipse(x + 0.5f, y + 0.5f, 320, 700, 620, 410);
+      if (dd > 1) continue;
+      uint32_t c = dd > -12 ? mixc(0xFFC8F27A, 0xFF6CC943, clampf(-dd / 12, 0, 1)) : mixc(0xFF6CC943, 0xFF3B9A36, clampf((-dd - 12) / 60, 0, 1));
+      fb_over(x, y, c, cov(dd));
     }
-    int bob = (state_t / 20) % 2;
-    draw_kip_big(SCR_W / 2 - 30, 92 + bob, 3, (state_t % 200) < 8 ? SPR_DINO_BLINK : (bob ? SPR_DINO_IDLE : SPR_DINO_RUN2), 0);
-    sprite(SPR_BANANA, 40, 128 + (int)(sinf(frame * 0.08f) * 2), 0);
-    sprite(SPR_BANANA, 264, 128 + (int)(sinf(frame * 0.08f + 2) * 2), 1);
+    {
+      DinoPose p; dino_idle_pose(&p, state_t);
+      float hop = fabsf(sinf(state_t * 0.05f));
+      p.bob = hop * 5; p.sq = 1 + 0.06f * sinf(state_t * 0.1f); p.spk = sinf(state_t * 0.1f + 1) * 0.15f; p.mouth = hop > 0.5f ? (hop - 0.5f) * 2 : 0;
+      fb_shadow(320, 293, 44 - hop * 6, 6, 0.2f);
+      draw_dino_at(320, 292, 3, &p, 0);
+    }
+    hblit(&HD_BANANA, 80, 256 + (int)(sinf(frame * 0.08f) * 4), 0);
+    hblit(&HD_BANANA, 528, 256 + (int)(sinf(frame * 0.08f + 2) * 4), 1);
     text_c("CANOPY DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
@@ -1218,8 +1349,17 @@ void game_draw(uint32_t* fb) {
     return;
   }
   if (state == ST_MAP) { draw_map(); return; }
-  draw_background();
+  hd_background();
   draw_world();
+  if (L->theme == 5 || L->theme == 7) {
+    for (int i = 0; i < 90; i++) {   // soft snowflakes drifting down
+      uint32_t h = hash2(i, 31);
+      float fx = fmodf(h % FB_W + frame * (0.5f + (i % 3) * 0.24f) + sinf(frame * 0.03f + i) * 6 - camx * 1.2f, FB_W), fy = fmodf((h >> 9) % FB_H + frame * (1.0f + (i % 4) * 0.4f) - camy * 1.2f, FB_H);
+      if (fx < 0) fx += FB_W;
+      if (fy < 0) fy += FB_H;
+      fb_dot(fx, fy, 1.4f + (i % 3) * 0.7f, 0xFFFFFFFF, 0.9f);
+    }
+  }
   if (!g_no_hud) draw_hud();
   if (state == ST_PLAY && state_t < 120) {
     text_c(L->name, 60, 3, 0xFFFFFFFF);
@@ -1243,7 +1383,7 @@ void game_draw(uint32_t* fb) {
   if (state == ST_WIN) {
     darken(0, 0, SCR_W, SCR_H, 0.55f);
     text_c("YOU WIN!", 36, 5, 0xFFF7D038);
-    draw_kip_big(SCR_W / 2 - 30, 64, 3, (state_t / 15) % 2 ? SPR_DINO_JUMP : SPR_DINO_IDLE, 0);
+    { DinoPose p; dino_idle_pose(&p, state_t); p.mood = 4; p.mouth = 1; p.bob = 6 * fabsf(sinf(state_t * 0.12f)); p.spk = sinf(state_t * 0.24f) * 0.2f; draw_dino_at(FB_W / 2, 246, 2.6f, &p, 0); }
     snprintf(buf, sizeof buf, "BANANAS: %d", total_bananas);
     text_c(buf, 128, 2, 0xFFFFFFFF);
     if (state_t > 60) text_c("PRESS A", 150, 2, 0xFFFFF4C2);

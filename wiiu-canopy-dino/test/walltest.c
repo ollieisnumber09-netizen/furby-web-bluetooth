@@ -1,9 +1,9 @@
 #include "../src/game.c"
 void plat_sfx(int id) { (void)id; }
-static int climb(int level, int sx, int sy, int top_row, int maxf) {
+static int climb2(int level, int sx, int sy, int top_row, int maxf, int dir0) {
   load_level(level); respawn(); state = ST_PLAY; lives = 3;
   px = sx * T + 3; py = sy * T + T - PH; pvx = pvy = 0;
-  Input in = {0}; int dir = 1, best = 9999; int prevj = 0;
+  Input in = {0}; int dir = dir0, best = 9999; int prevj = 0;
   for (int f = 0; f < maxf; f++) {
     in.left = dir < 0; in.right = dir > 0;
     int want = (on_ground && f % 30 == 0) || (!on_ground && wall_dir == dir && pvy > -1);
@@ -18,9 +18,12 @@ static int climb(int level, int sx, int sy, int top_row, int maxf) {
   printf("level %d best y row %.1f (target %d), now x=%.0f y=%.0f\n", level, best / 16.0, top_row, px / 16, py / 16);
   return best;
 }
+static int climb(int level, int sx, int sy, int top_row, int maxf) { return climb2(level, sx, sy, top_row, maxf, 1); }
 int main(void) {
   climb(1, 17, 22, 12, 600);
   climb(1, 94, 17, 8, 600);
-  climb(2, 98, 12, 4, 600);
+  climb(3, 98, 12, 4, 600);
+  climb(9, 38, 12, 6, 600);
+  climb2(11, 12, 21, 12, 600, -1);
   return 0;
 }
