@@ -633,7 +633,7 @@ static void start_level(int n) {
 void game_init(void) {
   state = ST_TITLE; state_t = 0; frame = 0;
   load_progress();
-  hd_init();
+  hd_init(); m3d_build();
   load_level(0); respawn();
 }
 
@@ -1033,9 +1033,9 @@ static void draw_world(void) {
       char c = tile(tx, ty);
       if (c == ' ' || c == '#' || c == 'X' || tx < 0 || tx >= LW) continue;
       int X = tx * HT - CX, Y = ty * HT - CY;
-      if (c == 'o') hblit(&HD_BANANA, X, Y + (int)lroundf(sinf((frame + tx * 9) * 0.08f) * 3.5f), 0);
-      else if (c == '?') hblit(&HD_BOX[0], X, Y, 0);
-      else if (c == 'u') hblit(&HD_BOX[1], X, Y, 0);
+      if (c == 'o') hblit(&HD_COIN[(frame / 2 + tx * 5) % COIN_FRAMES], X, Y + (int)lroundf(sinf((frame + tx * 9) * 0.08f) * 2), 0);
+      else if (c == '?') hblit(&HD_QBOX[0], X - 4, Y - 6, 0);
+      else if (c == 'u') hblit(&HD_QBOX[1], X - 4, Y - 6, 0);
       else if (c == 's') hblit(&HD_SPRING, X, Y, 0);
       else if (c == 'c') {
         int on = check_x == tx * T + 3 && check_y == ty * T + T - PH;
@@ -1064,13 +1064,13 @@ static void draw_world(void) {
     e->fz += (want - e->fz) * 0.22f;   // turns round smoothly instead of snapping
     if (e->type == E_BEETLE) {
       float sq = e->dying ? maxf(0.28f, 1 - e->dying * 0.14f) : 1 + sinf(e->t * 0.64f) * 0.02f;
-      beetle_render(&ESCR, e->t * 0.32f, sq, fabsf(e->fz), L->theme >= 5, e->dying, e->t);
+      beetle3d(&ESCR, e->t * 0.32f, sq, e->fz * 1.15f, L->theme >= 5, e->dying, e->t);
       if (!e->dying) fb_shadow(ex + 12, ey + 21, 12, 2.5f, 0.18f);
-      hblit(&ESCR, (int)ex + 12 - 26, (int)ey + 20 - 36, e->fz < 0);
+      hblit(&ESCR, (int)ex + 12 - 26, (int)ey + 20 - 36, 0);
     } else {
       float tilt = cosf(e->t * 0.07f) * 0.22f + (e->dying ? e->dying * 0.35f : 0);
-      bee_render(&ESCR, e->t, tilt, e->dying);
-      hblit(&ESCR, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, e->fz < 0);
+      bee3d(&ESCR, e->t, tilt, e->fz * 1.15f, e->dying);
+      hblit(&ESCR, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, 0);
     }
   }
   // Dino
@@ -1082,7 +1082,7 @@ static void draw_world(void) {
     int X = (int)floorf((px + PW * 0.5f) * 2) - CX, Y = (int)floorf((py + PH) * 2) - CY;
     int show = !(inv_t && (inv_t / 4) % 2);
     if (on_ground && !dead_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
-    if (show) { dino_render(&DSCR, &p, flip, 1); hblit(&DSCR, X - 36, Y - 64, flip); }
+    if (show) { dino3d(&DSCR, &p, DA.yaw, 1); hblit(&DSCR, X - 36, Y - 64, 0); }
     if (power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
       float hx = X + (flip ? -7 : 7), hy = Y - 22, ang;
@@ -1119,19 +1119,19 @@ static void draw_world(void) {
 }
 
 // a still Dino for the HUD, the title and the map
-static void draw_dino_at(int X, int Y, float S, const DinoPose* p, int flip) {
+static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
   static Bmp big;
-  dino_render(&big, p, flip, S);
-  hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), flip);
+  dino3d(&big, p, yaw, S);
+  hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), 0);
 }
 
 static void draw_hud(void) {
   char buf[64];
-  hblit(&HD_BANANA, 6, 3, 0);
+  hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 6, 3, 0);
   snprintf(buf, sizeof buf, "%02d", bananas);
   text(buf, 21, 6, 2, 0xFFFFF4C2);
   DinoPose p; dino_idle_pose(&p, frame);
-  draw_dino_at(FB_W - 94, 34, 0.72f, &p, 0);
+  draw_dino_at(FB_W - 94, 34, 0.72f, &p, 0.5f);
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
   if (power) {
@@ -1300,7 +1300,7 @@ static void draw_map(void) {
     if (moving) for (int i = 0; i < 2; i++) { float a = map_t * 0.55f + i * 3.14159f; p.lx[i] = sinf(a) * 7.5f + (i ? -2.8f : 2.8f); p.ly[i] = maxf(0, cosf(a)) * 5.5f; p.tilt = 0.12f; p.bob = fabsf(cosf(map_t * 0.55f)) * 1.5f; }
     int X = (int)(dx * 2), Y = (int)(dy * 2) - 2;
     fb_shadow(X, Y + 1, 12, 2.8f, 0.22f);
-    draw_dino_at(X, Y, 1, &p, w->xy[map_node][0] < w->xy[map_from][0]);
+    draw_dino_at(X, Y, 1, &p, moving ? (w->xy[map_node][0] < w->xy[map_from][0] ? -0.8f : 0.8f) : 0.3f);
   }
   // labels
   fill(0, 0, SCR_W, 16, 0xFF1B1020);
@@ -1317,7 +1317,7 @@ static void draw_map(void) {
   }
   int nc = 0; for (int i = 1; i <= NLEVELS; i++) nc += cleared[i];
   fill(0, SCR_H - 11, SCR_W, 11, 0xFF1B1020);
-  snprintf(buf, sizeof buf, "%s   CLEARED %d/%d   BANANAS %d   LIVES %d", w->name, nc, NLEVELS, total_bananas, lives);
+  snprintf(buf, sizeof buf, "%s   CLEARED %d/%d   COINS %d   LIVES %d", w->name, nc, NLEVELS, total_bananas, lives);
   text(buf, 4, SCR_H - 8, 1, 0xFFFFF4C2);
 }
 
@@ -1338,10 +1338,10 @@ void game_draw(uint32_t* fb) {
       float hop = fabsf(sinf(state_t * 0.05f));
       p.bob = hop * 5; p.sq = 1 + 0.06f * sinf(state_t * 0.1f); p.spk = sinf(state_t * 0.1f + 1) * 0.15f; p.mouth = hop > 0.5f ? (hop - 0.5f) * 2 : 0;
       fb_shadow(320, 293, 44 - hop * 6, 6, 0.2f);
-      draw_dino_at(320, 292, 3, &p, 0);
+      draw_dino_at(320, 292, 3, &p, 0.35f + sinf(state_t * 0.025f) * 0.45f);
     }
-    hblit(&HD_BANANA, 80, 256 + (int)(sinf(frame * 0.08f) * 4), 0);
-    hblit(&HD_BANANA, 528, 256 + (int)(sinf(frame * 0.08f + 2) * 4), 1);
+    hblit(&HD_COIN[(frame / 2) % COIN_FRAMES], 80, 250 + (int)(sinf(frame * 0.08f) * 4), 0);
+    hblit(&HD_COIN[(frame / 2 + 8) % COIN_FRAMES], 528, 250 + (int)(sinf(frame * 0.08f + 2) * 4), 0);
     text_c("CANOPY DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
@@ -1383,8 +1383,8 @@ void game_draw(uint32_t* fb) {
   if (state == ST_WIN) {
     darken(0, 0, SCR_W, SCR_H, 0.55f);
     text_c("YOU WIN!", 36, 5, 0xFFF7D038);
-    { DinoPose p; dino_idle_pose(&p, state_t); p.mood = 4; p.mouth = 1; p.bob = 6 * fabsf(sinf(state_t * 0.12f)); p.spk = sinf(state_t * 0.24f) * 0.2f; draw_dino_at(FB_W / 2, 246, 2.6f, &p, 0); }
-    snprintf(buf, sizeof buf, "BANANAS: %d", total_bananas);
+    { DinoPose p; dino_idle_pose(&p, state_t); p.mood = 4; p.mouth = 1; p.bob = 6 * fabsf(sinf(state_t * 0.12f)); p.spk = sinf(state_t * 0.24f) * 0.2f; draw_dino_at(FB_W / 2, 246, 2.6f, &p, sinf(state_t * 0.05f) * 0.5f); }
+    snprintf(buf, sizeof buf, "COINS: %d", total_bananas);
     text_c(buf, 128, 2, 0xFFFFFFFF);
     if (state_t > 60) text_c("PRESS A", 150, 2, 0xFFFFF4C2);
   }
@@ -1393,8 +1393,6 @@ void game_draw(uint32_t* fb) {
 // ============================================================ sound
 typedef struct { float f0, f1, t, dur, vol, phase; int wave; uint32_t lfsr; } Voice;
 static Voice voices[8];
-static float mus_t; static int mus_step; static float lead_ph, bass_ph, lead_env;
-static int lead_note, bass_note;
 
 void synth_trigger(int id) {
   Voice v = { 0 };
@@ -1419,43 +1417,127 @@ void synth_trigger(int id) {
   voices[0] = v;
 }
 
-// background tune: 32 sixteenth-note steps, lead and bass (MIDI note numbers, 0 = rest)
-static const uint8_t LEAD[64] = {
-  76, 0, 79, 81, 0, 79, 76, 0, 74, 0, 72, 74, 76, 0, 79, 0,
-  81, 0, 79, 76, 0, 74, 72, 0, 74, 0, 76, 0, 74, 0, 0, 0,
-  76, 0, 79, 81, 0, 84, 83, 0, 81, 0, 79, 81, 79, 0, 76, 0,
-  74, 0, 76, 79, 0, 76, 74, 0, 72, 0, 0, 0, 0, 0, 0, 0,
+// ---- music. Every tune here is our own: a melody line, a chord for each bar, and the band
+// (bouncy bass, off-beat chord "pah"s and a little drum kit) is worked out from the chords.
+// Melody: one character per eighth note. '.' = rest, '-' = hold, otherwise semitones above the
+// tune's base note (0-9, then A=10, B=11, C=12 ...). Chords: two characters per bar, the root
+// (same code) and M for major or m for minor.
+typedef struct { int base, bpm, lead; float swing; const char* mel; const char* chords; } Song;
+enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_CAVE, SONG_SNOW, SONG_BOSS, NSONGS };
+static const Song SONGS[NSONGS] = {
+  { 62, 164, 0, 0.60f,   // Hello Dino (title)
+    "0.47.C.7" "9.CH.L.H" "J.EB.7.B" "C.7C.G.." "L.GL.G.C" "H.CH.L.H" "J.EJ.E.B" "E.B.7-.."
+    "0.47.C.G" "H.L.H.C9" "B.E.J.EB" "C.G.J.G." "L.H.L.H." "J.E.J.N." "O.JG.C.G" "C--.0...",
+    "0M5M7M0M9m5M7M7M0M5M7M0M5M7M0M0M" },
+  { 67, 124, 2, 0.62f,   // Which Way? (map)
+    "7.47.C.7" "9.49.C.G" "H.C9.5.9" "7.B.E.B7" "C.GC.J.G" "G.C9.C.G" "H.C9.E.B" "C--.0...",
+    "0M9m5M7M0M9m5M0M" },
+  { 60, 150, 0, 0.62f,   // Jungle Hop (grassy levels)
+    "7.47.C.7" "974.0.24" "5.9C.95." "7.BE.B7-" "7.47.C.G" "EC9.C.EG" "H.GE.C9." "B.E.C--."
+    "9.CH.GH." "G.CG.EC." "E.HE.95." "7BE.J.HE" "G.JG.EC." "L.JG.E.C" "9CH.BEJ." "O--.C...",
+    "0M0M5M7M0M9m5M7M5M0M2m7M0M9m7M0M" },
+  { 57, 118, 1, 0.5f,    // Sneaky Steps (temples and caves)
+    "C..F.E.C" "7..C.A.7" "H.FH.K.H" "J.EJ.N.J" "O.JF.C.." "K.FC.8.C" "H.FH.K.H" "J.N.J-.."
+    "K.K.O.K." "M.H.M.J." "O.J.F.J." "C.F.J-.." "H.K.H.F." "J.N.J.E." "C.7C.F.J" "O--.C...",
+    "0m0m5m7M0m8M5m7M8MAM0m0m5m7M0m0m" },
+  { 65, 132, 2, 0.58f,   // Frosty Skip (snow levels)
+    "C.7C.G.E" "C.9.7.9C" "H.EC.9C." "E.B.7.BE" "G.CG.J.G" "E.C9.C.9" "E.H.L.HE" "J.G.E-.."
+    "H.E.C.EH" "J.E.B.EJ" "G.B.7.BG" "L.G.C.9." "H.E.9.5." "E.B.7.B." "C.7C.G.J" "C--.0...",
+    "0M9m5M7M0M9m2m7M5M7M4m9m2m7M0M0M" },
+  { 64, 172, 1, 0.5f,    // Big Trouble (bosses)
+    "0.0C.0.A" "0.0C.F.E" "8.8F.8.C" "A.AH.E.A" "C.CJ.C.F" "C.EF.H.J" "K.JF.C.F" "J.N.J.E-",
+    "0m0m8MAM0m0m8M7M" },
 };
-static const uint8_t BASS[64] = {
-  48, 0, 55, 0, 48, 0, 55, 0, 45, 0, 52, 0, 45, 0, 52, 0,
-  41, 0, 48, 0, 41, 0, 48, 0, 43, 0, 50, 0, 43, 0, 47, 0,
-  48, 0, 55, 0, 48, 0, 55, 0, 45, 0, 52, 0, 45, 0, 52, 0,
-  41, 0, 48, 0, 43, 0, 50, 0, 48, 0, 43, 0, 48, 0, 0, 0,
-};
+static int note_code(char c) { return c >= '0' && c <= '9' ? c - '0' : c - 'A' + 10; }
 static float midi_hz(int n) { return 440.0f * powf(2.0f, (n - 69) / 12.0f); }
+static int song_now = -1, mus_step;
+static float mus_t, mus_len;
+static struct { float hz, ph, ph2, t; int on; } m_lead;
+static struct { float hz, ph, t; } m_bass, m_stab[3];
+static struct { float t, ph; } m_kick;
+static float m_snare = 9, m_hat = 9; static uint32_t m_noise = 12345;
+int g_boss_music;   // set by the game while a boss is awake
+
+static int pick_song(void) {
+  if (state == ST_TITLE) return SONG_TITLE;
+  if (state == ST_MAP) return SONG_MAP;
+  if (state == ST_PLAY || state == ST_PAUSE) {
+    if (g_boss_music) return SONG_BOSS;
+    int th = L->theme;
+    return th == 1 || th == 2 || th == 6 ? SONG_CAVE : (th == 5 || th == 7 ? SONG_SNOW : SONG_GRASS);
+  }
+  return -1;
+}
+static void music_step(const Song* sg) {
+  int nsteps = (int)strlen(sg->mel), bar = mus_step / 8, st = mus_step % 8;
+  char m = sg->mel[mus_step % nsteps];
+  if (m == '.') m_lead.on = 0;
+  else if (m != '-') { m_lead.hz = midi_hz(sg->base + note_code(m)); m_lead.t = 0; m_lead.on = 1; }
+  int root = sg->base - 24 + note_code(sg->chords[(bar * 2) % strlen(sg->chords)]);
+  int minor = sg->chords[(bar * 2 + 1) % strlen(sg->chords)] == 'm';
+  if (root > sg->base - 24 + 7) root -= 12;
+  if (st == 0 || st == 4 || st == 7) { m_bass.hz = midi_hz(st == 4 ? root + 7 : (st == 7 ? root + 12 : root)); m_bass.t = 0; }
+  if (st == 2 || st == 6 || (sg->bpm > 160 && st == 3)) {
+    int tri[3] = { root + 24, root + 24 + (minor ? 3 : 4), root + 24 + 7 };
+    for (int i = 0; i < 3; i++) { m_stab[i].hz = midi_hz(tri[i]); m_stab[i].t = 0; }
+    m_snare = 0;
+  }
+  if (st == 0 || st == 4 || (sg->bpm > 160 && st == 5)) { m_kick.t = 0; m_kick.ph = 0; }
+  if (st % 2 == 1 || sg->bpm > 160) m_hat = 0;
+}
+static float music_sample(float dt) {
+  int want = pick_song();
+  if (want != song_now) { song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_bass.t = 9; m_stab[0].t = m_stab[1].t = m_stab[2].t = 9; m_kick.t = 9; m_snare = m_hat = 9; }
+  if (want < 0) return 0;
+  const Song* sg = &SONGS[want];
+  mus_t += dt;
+  if (mus_t >= mus_len) {
+    mus_t -= mus_len;
+    mus_step = (mus_step + 1) % (int)strlen(sg->mel);
+    float beat = 60.0f / sg->bpm;                       // two eighth notes, the first one longer (swing)
+    mus_len = beat * (mus_step % 2 == 0 ? sg->swing : 1 - sg->swing);
+    music_step(sg);
+  }
+  float s = 0, quiet = state == ST_PAUSE ? 0.35f : 1;
+  // lead
+  {
+    float env = m_lead.on ? minf(1, m_lead.t * 90) * (0.55f + 0.45f * expf(-m_lead.t * 7)) : 0;
+    if (!m_lead.on && m_lead.t < 0.08f) env = 0.5f * (1 - m_lead.t / 0.08f);
+    float vib = m_lead.t > 0.18f ? 1 + 0.006f * sinf(m_lead.t * 36) : 1;
+    m_lead.ph += m_lead.hz * vib * dt; m_lead.ph -= (int)m_lead.ph;
+    m_lead.ph2 += m_lead.hz * 2 * dt; m_lead.ph2 -= (int)m_lead.ph2;
+    float w;
+    if (sg->lead == 2) w = (sinf(m_lead.ph * 6.28318f) + 0.45f * sinf(m_lead.ph2 * 6.28318f * 1.5f) * expf(-m_lead.t * 9)) * expf(-m_lead.t * 3.5f) * 1.5f;   // bell
+    else if (sg->lead == 1) w = ((m_lead.ph < 0.3f ? 1 : -1) * 0.6f + (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.5f) * expf(-m_lead.t * 5);                       // plucky
+    else w = (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.75f + (m_lead.ph < 0.5f ? 0.3f : -0.3f) + 0.25f * sinf(m_lead.ph2 * 6.28318f);                          // round whistle
+    s += w * env * 0.085f;
+    m_lead.t += dt;
+  }
+  // bass: a bouncy, short note
+  if (m_bass.t < 0.4f) {
+    m_bass.ph += m_bass.hz * dt; m_bass.ph -= (int)m_bass.ph;
+    s += ((4 * fabsf(m_bass.ph - 0.5f) - 1) + 0.5f * sinf(m_bass.ph * 6.28318f)) * expf(-m_bass.t * 7) * 0.13f;
+    m_bass.t += dt;
+  }
+  // off-beat chord "pah"
+  for (int i = 0; i < 3; i++) if (m_stab[i].t < 0.25f) {
+    m_stab[i].ph += m_stab[i].hz * dt; m_stab[i].ph -= (int)m_stab[i].ph;
+    s += ((m_stab[i].ph < 0.5f ? 0.5f : -0.5f) + sinf(m_stab[i].ph * 6.28318f)) * expf(-m_stab[i].t * 22) * 0.028f;
+    m_stab[i].t += dt;
+  }
+  // drums
+  if (m_kick.t < 0.14f) { m_kick.ph += (50 + 110 * expf(-m_kick.t * 40)) * dt; s += sinf(m_kick.ph * 6.28318f) * (1 - m_kick.t / 0.14f) * 0.16f; m_kick.t += dt; }
+  m_noise = m_noise * 1664525u + 1013904223u;
+  float nz = ((m_noise >> 16) & 0xFFFF) / 32768.0f - 1;
+  if (m_snare < 0.09f) { s += nz * (1 - m_snare / 0.09f) * 0.045f; m_snare += dt; }
+  if (m_hat < 0.025f) { s += nz * (1 - m_hat / 0.025f) * 0.022f; m_hat += dt; }
+  return s * quiet;
+}
 
 void synth_render(int16_t* out, int frames, int rate) {
-  const float step_len = 0.115f;
-  int music = state == ST_PLAY || state == ST_TITLE || state == ST_MAP;
   for (int f = 0; f < frames; f++) {
-    float s = 0, dt = 1.0f / rate;
-    if (music) {
-      mus_t += dt;
-      if (mus_t >= step_len) {
-        mus_t -= step_len; mus_step = (mus_step + 1) % 64;
-        if (LEAD[mus_step]) { lead_note = LEAD[mus_step]; lead_env = 1; }
-        if (BASS[mus_step]) bass_note = BASS[mus_step];
-      }
-      if (lead_note) {
-        lead_ph += midi_hz(lead_note) * dt; lead_ph -= (int)lead_ph;
-        s += (lead_ph < 0.25f ? 1 : -1) * 0.045f * lead_env;
-        lead_env *= 0.99985f;
-      }
-      if (bass_note) {
-        bass_ph += midi_hz(bass_note) * dt; bass_ph -= (int)bass_ph;
-        s += (4 * fabsf(bass_ph - 0.5f) - 1) * 0.10f;
-      }
-    }
+    float dt = 1.0f / rate;
+    float s = music_sample(dt);
     for (int i = 0; i < 8; i++) {
       Voice* v = &voices[i];
       if (v->t >= v->dur) continue;

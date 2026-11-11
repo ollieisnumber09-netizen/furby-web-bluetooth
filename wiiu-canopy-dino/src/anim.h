@@ -121,7 +121,7 @@ static void dino_render(Bmp* b, const DinoPose* p, int flip, float S) {
 }
 
 // the moving parts of Dino's pose, carried from one tick to the next
-static struct { float sq, sqv, tilt, bob, ph, lx[2], ly[2], spk, spkv, mouth, wing; int wasg, mood, air; float vy0; } DA = { 1 };
+static struct { float sq, sqv, tilt, bob, ph, lx[2], ly[2], spk, spkv, mouth, wing; int wasg, mood, air; float vy0, yaw; } DA = { 1 };
 
 static void dino_tick(void) {
   float sp = fabsf(pvx) / 2.1f; if (sp > 1) sp = 1;
@@ -130,7 +130,7 @@ static void dino_tick(void) {
   int butting = atk_t > 4 && power != 2;
   DA.mood = 0; DA.air = !on_ground;
   if (dead_t) {
-    DA.tilt -= 0.22f; DA.mood = 2; DA.air = 1; tsq = 1.05f;
+    DA.mood = 2; DA.air = 1; tsq = 1.05f;
     tl[0][0] = -3; tl[1][0] = 3; tl[0][1] = tl[1][1] = 1.5f;
   } else {
     if (fabsf(DA.tilt) > 1.5f) DA.tilt = 0;   // back upright after a tumble
@@ -172,6 +172,13 @@ static void dino_tick(void) {
   if (butting) tspk = -0.35f;
   DA.spkv += (tspk - DA.spk) * 0.16f; DA.spkv *= 0.8f; DA.spk += DA.spkv;
   DA.wing = power == 1 ? (on_ground ? 0.25f + sinf(frame * 0.12f) * 0.2f : sinf(frame * 0.9f) * 0.8f) : -9;
+  // which way he is turned: he swings round through facing you, like a real model would
+  float tyaw = face * 0.75f;
+  if (walling) tyaw = wall_dir > 0 ? -0.8f : 0.8f;
+  if (butting) tyaw = face * 1.05f;
+  if (state == ST_CLEAR && on_ground) tyaw = 0.2f;
+  if (dead_t) { DA.yaw += 0.3f; DA.tilt = -0.4f; }
+  else { if (fabsf(DA.yaw) > 2) DA.yaw = fmodf(DA.yaw, 6.28318f) > 3.14159f ? 0 : DA.yaw > 0 ? 1 : -1; DA.yaw += (tyaw - DA.yaw) * 0.22f; }
   DA.wasg = on_ground; DA.vy0 = pvy;
 }
 static void dino_pose(DinoPose* p) {
@@ -298,3 +305,5 @@ static void fb_flag(float X, float Y, int len, int hgt, uint32_t c0, uint32_t c1
     }
   }
 }
+
+#include "m3d.h"

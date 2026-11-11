@@ -2,7 +2,7 @@
 #include "../src/game.c"
 void plat_sfx(int id) { synth_trigger(id); }
 int main(void) {
-  hd_init();
+  hd_init(); m3d_build();
   int S = 3, cw = DN * S, n = 12, rows = 4;
   int W = cw * n, H = cw * rows;
   uint32_t* big = malloc(W * H * 4);
@@ -27,15 +27,15 @@ int main(void) {
       else if (k < 10) { p.mood = 4; p.mouth = 1; p.bob = 3; }
       else { p.wing = k == 10 ? 0.6f : -0.6f; p.air = 1; p.ly[0] = p.ly[1] = 1; }
     } else {
-      if (k < 6) beetle_render(&b, k * 1.05f, k == 5 ? 0.3f : 1, k == 4 ? 0.4f : 1, k == 3, k == 5, 100);
-      else bee_render(&b, k * 2 + (k == 11 ? 1 : 0), (k - 8) * 0.1f, k == 11);
+      if (k < 6) beetle3d(&b, k * 1.05f, k == 5 ? 0.3f : 1, 1.15f - k * 0.46f, k == 3, k == 5, 100);
+      else if (k < 10) bee3d(&b, k * 2, (k - 8) * 0.1f, 1.15f - (k - 6) * 0.7f, 0); else if (k == 10) coin3d(&b, 0.6f, 1.5f); else box3d(&b, 0);
       for (int y = 0; y < b.h; y++) for (int x = 0; x < b.w; x++) for (int yy = 0; yy < 3; yy++) for (int xx = 0; xx < 3; xx++) {
         uint32_t c = b.px[y * b.w + x]; if ((c >> 24) < 128) continue;
-        big[(r * cw + 30 + y * 3 + yy) * W + k * cw + 20 + x * 3 + xx] = c;
+        if (k * cw + 20 + x * 3 + xx < W && r * cw + 30 + y * 3 + yy < H) big[(r * cw + 30 + y * 3 + yy) * W + k * cw + 20 + x * 3 + xx] = c;
       }
       continue;
     }
-    dino_render(&b, &p, 0, S);
+    dino3d(&b, &p, r == 0 ? 0.75f : r == 1 ? 0.75f - k * 0.14f : 0.75f, S);
     for (int y = 0; y < b.h; y++) for (int x = 0; x < b.w; x++) {
       uint32_t c = b.px[y * b.w + x], a = c >> 24; if (!a) continue;
       uint32_t* d = &big[(r * cw + y) * W + k * cw + x];
