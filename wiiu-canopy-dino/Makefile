@@ -18,7 +18,7 @@ BUILD		:=	build
 SOURCES		:=	src
 INCLUDES	:=	src
 
-CFLAGS	:=	-g -O2 -ffunction-sections -Wall -Wno-missing-field-initializers $(MACHDEP)
+CFLAGS	:=	-g -O3 -ffast-math -funroll-loops -ffunction-sections -Wall -Wno-missing-field-initializers $(MACHDEP)
 CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSAVE_PATH=\"fs:/vol/external01/wiiu/apps/CanopyDino/save.txt\" $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --cflags sdl2)
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)

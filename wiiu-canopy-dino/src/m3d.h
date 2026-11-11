@@ -34,17 +34,20 @@ static void m3_nrm(const M3* a, const float* n, float* o) {
 }
 
 // ---- the drawing target (twice the final size, with depth)
-static struct { int w, h, cap; float* z; uint32_t* c; float ox, oy, sc; } RT;
+static struct { int w, h, cap, ss; float* z; uint32_t* c; float ox, oy, sc; } RT;
+static int RT_SS = 2;   // 2: draw at twice the size and shrink (smooth edges); 1: draw directly (four times quicker, for big things)
 static void rt_begin(int w, int h, float ox, float oy, float sc) {   // w, h: final size; ox, oy: where the model's origin lands
-  int n = w * 2 * h * 2;
+  int ss = RT_SS, n = w * ss * h * ss;
   if (n > RT.cap) { free(RT.z); free(RT.c); RT.z = (float*)malloc(n * sizeof(float)); RT.c = (uint32_t*)malloc(n * 4); RT.cap = n; }
-  RT.w = w * 2; RT.h = h * 2; RT.ox = ox * 2; RT.oy = oy * 2; RT.sc = sc * 2;
-  for (int i = 0; i < n; i++) { RT.z[i] = -1e9f; RT.c[i] = 0; }
+  RT.ss = ss; RT.w = w * ss; RT.h = h * ss; RT.ox = ox * ss; RT.oy = oy * ss; RT.sc = sc * ss;
+  memset(RT.z, 0, (size_t)n * sizeof(float));   // depths are stored +1000, so 0 means "nothing here yet"
+  memset(RT.c, 0, (size_t)n * 4);
 }
 static int RT_EDGE = 1, RT_TMP;
 static void rt_end(Bmp* b) {
-  bmp_fit(b, RT.w / 2, RT.h / 2);
-  for (int y = 0; y < b->h; y++) for (int x = 0; x < b->w; x++) {
+  bmp_fit(b, RT.w / RT.ss, RT.h / RT.ss);
+  if (RT.ss == 1) memcpy(b->px, RT.c, (size_t)RT.w * RT.h * 4);
+  else for (int y = 0; y < b->h; y++) for (int x = 0; x < b->w; x++) {
     int r = 0, g = 0, bl = 0, n = 0;
     for (int k = 0; k < 4; k++) {
       uint32_t c = RT.c[(y * 2 + (k >> 1)) * RT.w + x * 2 + (k & 1)];
@@ -76,7 +79,7 @@ static uint32_t mat_colour(uint32_t col, int mat, const float* o, float* gloss) 
   *gloss = 0.12f;
   switch (mat) {
     case MAT_DINO: {
-      if (o[2] <= 0) return col;
+      if (o[2] <= 0 || o[0] < -6.5f || o[0] > 6.5f || o[1] > 11 || o[1] < -11) return col;
       // the face, painted on the front: two tall line eyes and a little "w" mouth
       float bx = o[0] + 4.2f, by = -o[1];
       float e1 = 1.6f, e2 = 6.8f, eyc = -5.5f, eh = 4.2f * maxf(FACE.eye, 0.02f), de;
@@ -156,6 +159,7 @@ static uint32_t mat_colour(uint32_t col, int mat, const float* o, float* gloss) 
 // ---- triangles
 typedef struct { float p[3], n[3], o[3]; } V3;   // p: screen x, y and depth; n: which way the surface faces; o: place on the model
 static void rt_tri(const V3* a, const V3* b, const V3* c, uint32_t col, int mat) {
+  if (a->n[2] < 0 && b->n[2] < 0 && c->n[2] < 0) return;   // faces away from the camera: never seen, so skip it
   float area = (b->p[0] - a->p[0]) * (c->p[1] - a->p[1]) - (b->p[1] - a->p[1]) * (c->p[0] - a->p[0]);
   if (fabsf(area) < 1e-6f) return;
   int x0 = (int)floorf(minf(a->p[0], minf(b->p[0], c->p[0]))), x1 = (int)ceilf(maxf(a->p[0], maxf(b->p[0], c->p[0])));
@@ -165,13 +169,17 @@ static void rt_tri(const V3* a, const V3* b, const V3* c, uint32_t col, int mat)
   if (x1 > RT.w - 1) x1 = RT.w - 1;
   if (y1 > RT.h - 1) y1 = RT.h - 1;
   float inv = 1.0f / area;
-  for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
-    float fx = x + 0.5f, fy = y + 0.5f;
-    float w0 = ((b->p[0] - fx) * (c->p[1] - fy) - (b->p[1] - fy) * (c->p[0] - fx)) * inv;
-    float w1 = ((c->p[0] - fx) * (a->p[1] - fy) - (c->p[1] - fy) * (a->p[0] - fx)) * inv;
+  // the three weights change by a fixed step from one pixel to the next, so they are stepped, not recalculated
+  float sx0 = x0 + 0.5f, sy0 = y0 + 0.5f;
+  float r0 = ((b->p[0] - sx0) * (c->p[1] - sy0) - (b->p[1] - sy0) * (c->p[0] - sx0)) * inv, r1 = ((c->p[0] - sx0) * (a->p[1] - sy0) - (c->p[1] - sy0) * (a->p[0] - sx0)) * inv;
+  float dx0 = (b->p[1] - c->p[1]) * inv, dy0 = (c->p[0] - b->p[0]) * inv, dx1 = (c->p[1] - a->p[1]) * inv, dy1 = (a->p[0] - c->p[0]) * inv;
+  for (int y = y0; y <= y1; y++, r0 += dy0, r1 += dy1) {
+    float w0 = r0 - dx0, w1 = r1 - dx1;
+    for (int x = x0; x <= x1; x++) {
+    w0 += dx0; w1 += dx1;
     float w2 = 1 - w0 - w1;
-    if (w0 < 0 || w1 < 0 || w2 < 0) continue;
-    float z = w0 * a->p[2] + w1 * b->p[2] + w2 * c->p[2];
+    if (w0 < -1e-5f || w1 < -1e-5f || w2 < -1e-5f) continue;
+    float z = w0 * a->p[2] + w1 * b->p[2] + w2 * c->p[2] + 1000;
     int i = y * RT.w + x;
     if (z <= RT.z[i]) continue;
     float n[3], o[3];
@@ -185,28 +193,51 @@ static void rt_tri(const V3* a, const V3* b, const V3* c, uint32_t col, int mat)
     float d = n[0] * -0.42f + n[1] * 0.68f + n[2] * 0.60f, h = d * 0.5f + 0.5f;
     float lit = 0.62f + 0.48f * h;
     float hx = -0.25f, hy = 0.40f, hz = 0.88f, sp = n[0] * hx + n[1] * hy + n[2] * hz;
-    sp = sp > 0 ? powf(sp, 30) * gloss : 0;
+    if (sp > 0.8f) { sp *= sp; sp *= sp; sp *= sp; sp *= sp; sp *= sp; sp *= gloss; } else sp = 0;
     float rim = 1 - n[2]; lit *= 1 - 0.30f * rim * rim * rim;
     int r = (int)(((base >> 16) & 255) * lit + 255 * sp), g = (int)(((base >> 8) & 255) * lit + 255 * sp), bl = (int)((base & 255) * lit + 250 * sp);
     if (n[1] < 0) { float sh = -n[1] * 0.18f; r = (int)(r * (1 - sh)); g = (int)(g * (1 - sh * 0.8f)); }   // cool shadow underneath
     RT.z[i] = z;
     RT.c[i] = 0xFF000000 | ((r > 255 ? 255 : r) << 16) | ((g > 255 ? 255 : g) << 8) | (bl > 255 ? 255 : bl);
+    }
   }
 }
 static M3 VIEW;   // model space -> what the camera sees
-static void v3_make(V3* v, const M3* W, const M3* P, const float* lp, const float* ln) {
-  float wp[3], wn[3], vn[3];
-  m3_pt(P, lp, v->o);
-  M3 WV = m3_mul(VIEW, *W);
-  m3_pt(&WV, v->o, wp);
-  m3_nrm(P, ln, wn); m3_nrm(&WV, wn, vn);
+static M3 CUR_P, CUR_WV; static float CUR_N[9];
+static void cof(const float* m, float* c) {
+  c[0] = m[4] * m[8] - m[5] * m[7]; c[1] = m[5] * m[6] - m[3] * m[8]; c[2] = m[3] * m[7] - m[4] * m[6];
+  c[3] = m[2] * m[7] - m[1] * m[8]; c[4] = m[0] * m[8] - m[2] * m[6]; c[5] = m[1] * m[6] - m[0] * m[7];
+  c[6] = m[1] * m[5] - m[2] * m[4]; c[7] = m[2] * m[3] - m[0] * m[5]; c[8] = m[0] * m[4] - m[1] * m[3];
+}
+// called once per part: W places the whole model, P places this part in it
+static void set_mats(const M3* W, const M3* P) {
+  CUR_P = *P; CUR_WV = m3_mul(VIEW, *W);
+  M3 all = m3_mul(CUR_WV, *P);
+  cof(all.m, CUR_N);
+}
+static void v3_make(V3* v, const float* lp, const float* ln) {
+  float wp[3];
+  m3_pt(&CUR_P, lp, v->o);
+  m3_pt(&CUR_WV, v->o, wp);
   v->p[0] = RT.ox + wp[0] * RT.sc; v->p[1] = RT.oy - wp[1] * RT.sc; v->p[2] = wp[2];
-  v->n[0] = vn[0]; v->n[1] = vn[1]; v->n[2] = vn[2];
+  for (int i = 0; i < 3; i++) v->n[i] = CUR_N[i * 3] * ln[0] + CUR_N[i * 3 + 1] * ln[1] + CUR_N[i * 3 + 2] * ln[2];
 }
 // spin a profile (pairs of radius, height) round the y axis. W places the whole model, P places this part in it.
 #define LATHE_MAX 20
-static void lathe(const M3* W, const M3* P, const float* prof, int np, int nseg, int flat, uint32_t col, int mat) {
+static int LATHE_COARSE;   // 1: use every other profile point (half the triangles), for small models
+static void lathe(const M3* W, const M3* P, const float* prof0, int np0, int nseg, int flat, uint32_t col, int mat) {
+  static float thin[LATHE_MAX * 2];
+  const float* prof = prof0; int np = np0;
+  if (LATHE_COARSE && !flat && np0 >= 9) {
+    np = 0;
+    for (int i = 0; i < np0; i += 2) { thin[np * 2] = prof0[i * 2]; thin[np * 2 + 1] = prof0[i * 2 + 1]; np++; }
+    if ((np0 - 1) % 2) { thin[np * 2] = prof0[(np0 - 1) * 2]; thin[np * 2 + 1] = prof0[(np0 - 1) * 2 + 1]; np++; }
+    prof = thin;
+  }
   static V3 ring[2][LATHE_MAX * 2][33];
+  static float CS[33], SN[33]; static int cs_n;
+  if (cs_n != nseg) { cs_n = nseg; for (int j = 0; j <= nseg; j++) { CS[j] = cosf(j * 6.28318f / nseg); SN[j] = sinf(j * 6.28318f / nseg); } }
+  set_mats(W, P);
   int rows = 0;
   // each profile point gives one row of vertices (or two, with different normals, when "flat" keeps edges sharp)
   for (int i = 0; i < np; i++) {
@@ -218,9 +249,9 @@ static void lathe(const M3* W, const M3* P, const float* prof, int np, int nseg,
       float nl = sqrtf(dr * dr + dy * dy); if (nl < 1e-6f) nl = 1;
       float nr = dy / nl, ny = -dr / nl;
       for (int j = 0; j <= nseg; j++) {
-        float a = j * 6.28318f / nseg, ca = cosf(a), sa = sinf(a);
+        float ca = CS[j], sa = SN[j];
         float lp[3] = { prof[i * 2] * ca, prof[i * 2 + 1], prof[i * 2] * sa }, ln[3] = { nr * ca, ny, nr * sa };
-        v3_make(&ring[0][rows][j], W, P, lp, ln);
+        v3_make(&ring[0][rows][j], lp, ln);
       }
       rows++;
     }
@@ -268,7 +299,8 @@ static void stub(const M3* W, const float* a, const float* b, float r, uint32_t 
 }
 static void quad(const M3* W, const float* a, const float* b, const float* c, const float* d, const float* n, uint32_t col, int mat) {
   M3 I = m3_id(); V3 v[4];
-  v3_make(&v[0], W, &I, a, n); v3_make(&v[1], W, &I, b, n); v3_make(&v[2], W, &I, c, n); v3_make(&v[3], W, &I, d, n);
+  set_mats(W, &I);
+  v3_make(&v[0], a, n); v3_make(&v[1], b, n); v3_make(&v[2], c, n); v3_make(&v[3], d, n);
   rt_tri(&v[0], &v[1], &v[2], col, mat); rt_tri(&v[0], &v[2], &v[3], col, mat);
 }
 
@@ -279,6 +311,7 @@ static void quad(const M3* W, const float* a, const float* b, const float* c, co
 static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
   int W = (int)(DN * S);
   rt_begin(W, W, 36 * S, 64 * S, S);
+  LATHE_COARSE = S <= 1.5f;
   VIEW = m3_rotx(CAM_TILT);
   FACE.eye = p->eye; FACE.mouth = p->mouth; FACE.mood = p->mood;
   float sy = p->sq, sx = 1.0f / sqrtf(p->sq);
@@ -293,20 +326,21 @@ static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
       float fl[3] = { hl[0], -9.5f - (7.2f - p->ly[i]) / sy, p->lx[i] / sx };
       m3_pt(&body, fl, foot);
     } else { foot[0] = hl[0]; foot[1] = 4.6f + p->ly[i]; foot[2] = p->lx[i]; }
-    stub(&turn, hip, foot, 5.4f, 0xFFF8FAFF, 14);
+    stub(&turn, hip, foot, 5.4f, 0xFFF8FAFF, S > 1.5f ? 14 : 10);
   }
   // two smooth spikes on his back
   M3 s1 = m3_mul(m3_trans(0, 7.5f, -5.5f), m3_mul(m3_rotx(-(0.80f - p->spk)), m3_scale(7.2f, 18, 5.4f)));
   M3 s2 = m3_mul(m3_trans(0, -1.5f, -7.5f), m3_mul(m3_rotx(-(1.25f - p->spk * 1.35f)), m3_scale(6.0f, 14, 4.6f)));
-  lathe(&Wb, &s1, PROF_SPIKE, 10, 14, 0, 0xFF5FD04A, MAT_SHINY);
-  lathe(&Wb, &s2, PROF_SPIKE, 10, 14, 0, 0xFF5FD04A, MAT_SHINY);
+  lathe(&Wb, &s1, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, 0xFF5FD04A, MAT_SHINY);
+  lathe(&Wb, &s2, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, 0xFF5FD04A, MAT_SHINY);
   if (p->wing > -5) for (int i = 0; i < 2; i++) {
     float sgn = i ? 1 : -1;
     M3 wg = m3_mul(m3_trans(sgn * 7, 2, -5), m3_mul(m3_rotz(sgn * (0.5f + p->wing)), m3_mul(m3_trans(sgn * 8, 0, 0), m3_scale(9, 4.2f, 2))));
     lathe(&Wb, &wg, PROF_BALL, 13, 12, 0, 0xFFEAF4FF, MAT_PLAIN);
   }
   M3 bd = m3_scale(11.5f, 14.5f, 10.6f);
-  lathe(&Wb, &bd, PROF_EGG, 15, 28, 0, 0xFFF8FAFF, MAT_DINO);
+  lathe(&Wb, &bd, PROF_EGG, 15, S > 1.5f ? 28 : 16, 0, 0xFFF8FAFF, MAT_DINO);
+  LATHE_COARSE = 0;
   rt_end(b);
 }
 
@@ -327,7 +361,7 @@ static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, 
   rt_begin((int)(52 * S), (int)(40 * S) + (crown ? (int)(10 * S) : 0), 26 * S, 36 * S + (crown ? (int)(10 * S) : 0), S);
   VIEW = m3_rotx(CAM_TILT);
   uint32_t shell = snow == 2 ? 0xFFE8503C : snow ? 0xFF9FD4F2 : 0xFF58C85A;
-  float bobb = sinf(ph * 2) * 0.6f, ant = sinf(ph * 0.7f) * 1.5f;
+  float bobb = sinf(ph * 2) * 0.6f, ant = sinf(ph) * 1.5f;
   M3 Wm = m3_mul(m3_roty(yaw), m3_scale(1.0f / sqrtf(sq), sq, 1.0f / sqrtf(sq)));
   for (int k = 0; k < 6; k++) {   // six little legs, walking in turn
     float sgn = k < 3 ? -1 : 1, z = -7 + (k % 3) * 6.5f, a = ph + (k % 3) * 2.094f + (k < 3 ? 0 : 3.14159f);
@@ -357,11 +391,11 @@ static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, 
 }
 
 // bee: 56x52 picture, middle at (28, 28)
-static void bee3d(Bmp* b, int t, float pitch, float yaw, int dead, float S, int crown) {
+static void bee3d(Bmp* b, float fph, float pitch, float yaw, int dead, float S, int crown) {
   rt_begin((int)(56 * S), (int)(52 * S), 28 * S, 28 * S, S);
   VIEW = m3_rotx(CAM_TILT * 0.5f);
   M3 Wm = m3_mul(m3_roty(yaw), m3_rotx(pitch));
-  float flap = sinf(t * 1.25f), sway = sinf(t * 0.2f) * 1.2f;
+  float flap = sinf(fph), sway = sinf(fph) * 0.7f;
   float st0[3] = { 0, 0, -9 }, st1[3] = { 0, -1, -15.5f };
   M3 sting = m3_mul(m3_trans(0, 0, -9.5f), m3_mul(m3_rotx(-1.65f), m3_scale(2.6f, 7, 2.6f)));
   lathe(&Wm, &sting, PROF_SPIKE, 10, 8, 0, 0xFF3A2A22, MAT_PLAIN);

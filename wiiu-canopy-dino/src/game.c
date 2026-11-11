@@ -255,7 +255,7 @@ static void text_hd(const char* s, int x, int y, int sc, uint32_t col, int ol) {
         uint32_t p = b->px[j * b->w + i];
         if (!(p >> 24) || (unsigned)(X + i) >= FB_W) continue;
         uint32_t* d = &FB[(Y + j) * FB_W + X + i];
-        *d = mixc(*d, mixc(0xFF1B1020, col, ((p >> 16) & 255) / 255.0f), (p >> 24) / 255.0f);
+        { uint32_t f = (p >> 16) & 255, a = p >> 24; *d = lerpc(*d, lerpc(0xFF1B1020, col, f + (f >> 7)), a + (a >> 7)); }
       }
     }
   }
@@ -482,6 +482,9 @@ static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double ju
 static int LW, LH, lvl;
 static const Level* L;
 #define MAXENT 110
+static Bmp FLAKE[3];
+int g_lowq;   // set by the platform when frames are taking too long: draw Dino the quick way
+static Bmp BEETLE_C[2][2][20], BEE_C[2][8], BOSS_C[2][20], QBEE_C[2][8];
 static Ent ents[MAXENT]; static int nents;
 static int boss_i, boss_hp, boss_max, boss_inv, boss_awake, boss_dead, arena_x0, arena_x1;
 int g_boss_music;
@@ -747,6 +750,7 @@ static void load_level(int n) {
   check_x = start_x; check_y = start_y;
   lvl_frames = 0;
   hd_render_level();
+  for (int d = 0; d < 2; d++) for (int i = 0; i < 20; i++) if (BOSS_C[d][i].px) { free(BOSS_C[d][i].px); BOSS_C[d][i].px = NULL; BOSS_C[d][i].w = 0; }
 }
 
 static void respawn(void) {
@@ -773,6 +777,10 @@ void game_init(void) {
   state = ST_TITLE; state_t = 0; frame = 0;
   load_progress();
   hd_init(); m3d_build();
+  for (int k = 0; k < 3; k++) {
+    FLAKE[k] = bmp_new(8, 8);
+    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) FLAKE[k].px[y * 8 + x] = ((uint32_t)(cov(sd_circle(x + 0.5f, y + 0.5f, 4, 4, 1.4f + k * 0.7f)) * 230) << 24) | 0xFFFFFF;
+  }
   load_level(0); respawn();
 }
 
@@ -1179,20 +1187,15 @@ void game_update(const Input* in) {
 static void blit_level(int CX, int CY) {
   for (int y = 0; y < FB_H; y++) {
     int sy = y + CY;
-    if (sy < 0 || sy >= LVB.h) continue;
+    if (sy < 0 || sy >= LVB.h || !LV_ROW[sy]) continue;
     const uint32_t* src = LVB.px + sy * LVB.w;
     uint32_t* dst = FB + y * FB_W;
-    for (int x = 0; x < FB_W; x++) {
-      int sx = x + CX;
-      if ((unsigned)sx >= (unsigned)LVB.w) continue;
-      uint32_t c = src[sx], a = c >> 24;
+    int x0 = CX < 0 ? -CX : 0, x1 = LVB.w - CX < FB_W ? LVB.w - CX : FB_W;
+    for (int x = x0; x < x1; x++) {
+      uint32_t c = src[x + CX], a = c >> 24;
       if (!a) continue;
       if (a == 255) dst[x] = c;
-      else {
-        uint32_t d = dst[x], ia = 255 - a;
-        dst[x] = 0xFF000000 | (((((c >> 16) & 255) * a + ((d >> 16) & 255) * ia) / 255) << 16)
-               | (((((c >> 8) & 255) * a + ((d >> 8) & 255) * ia) / 255) << 8) | (((c & 255) * a + (d & 255) * ia) / 255);
-      }
+      else dst[x] = lerpc(dst[x], c, a + (a >> 7));
     }
   }
 }
@@ -1252,30 +1255,39 @@ static void draw_world(void) {
     if (e->type == E_BOSS && !boss_awake) want = -0.3f;
     if (e->fz == 0) e->fz = want;
     e->fz += (want - e->fz) * 0.22f;   // turns round smoothly instead of snapping
+    // A creature walking or flying steadily repeats the same few frames, so each frame of each
+    // model is drawn once (the first time it is needed) and kept. Only turning round and being
+    // squashed are drawn fresh.
+    int steady = !e->dying && fabsf(e->fz) > 0.97f, dir = e->fz > 0;
     if (e->type == E_BOSS) {
       float S = 2.4f;
       if (boss_inv && (frame / 3) % 2 && !e->dying) continue;   // flashes after a hit
+      const Bmp* pic = &ESCR;
       if (e->k == 2) {
-        bee3d(&ESCR, e->t, cosf(e->t * 0.08f) * 0.15f, e->fz * 1.0f + e->dying * 0.3f, e->dying, S, 1);
-        hblit(&ESCR, (int)ex + 30 - (int)(28 * S), (int)ey + 24 - (int)(28 * S) + e->dying, 0);
+        if (steady) { Bmp* c = &QBEE_C[dir][e->t % 8]; if (!c->px) bee3d(c, (e->t % 8) * 0.7854f, 0, dir ? 1.0f : -1.0f, 0, S, 1); pic = c; }
+        else { RT_SS = 1; bee3d(&ESCR, (e->t % 8) * 0.7854f, 0, e->fz * 1.0f + e->dying * 0.3f, e->dying, S, 1); RT_SS = 2; }
+        hblit(pic, (int)ex + 30 - (int)(28 * S), (int)ey + 24 - (int)(28 * S) + e->dying, 0);
       } else {
         float air = e->by - e->y;
-        float sq = e->dying ? maxf(0.3f, 1 - e->dying * 0.02f) : 1 + clampf(air * 0.004f, 0, 0.15f) + sinf(e->t * 0.3f) * 0.02f;
         fb_shadow(ex + 30, (e->by + 24) * 2 - CY + 1, 30 - air * 0.2f, 5, 0.2f);
-        beetle3d(&ESCR, e->t * 0.25f, sq, e->fz * 1.0f + e->dying * 0.25f, e->k ? 1 : 2, e->dying, e->t, S, 1);
-        hblit(&ESCR, (int)ex + 30 - (int)(26 * S), (int)ey + 48 - (int)(36 * S), 0);
+        if (steady) { Bmp* c = &BOSS_C[dir][e->t % 20]; if (!c->px) beetle3d(c, (e->t % 20) * 0.31416f, 1, dir ? 1.0f : -1.0f, e->k ? 1 : 2, 0, 0, S, 1); pic = c; }
+        else { RT_SS = 1; beetle3d(&ESCR, (e->t % 20) * 0.31416f, e->dying ? maxf(0.3f, 1 - e->dying * 0.02f) : 1, e->fz * 1.0f + e->dying * 0.25f, e->k ? 1 : 2, e->dying, e->t, S, 1); RT_SS = 2; }
+        hblit(pic, (int)ex + 30 - (int)(26 * S), (int)ey + 48 - (int)(36 * S), 0);
       }
       continue;
     }
     if (e->type == E_BEETLE) {
-      float sq = e->dying ? maxf(0.28f, 1 - e->dying * 0.14f) : 1 + sinf(e->t * 0.64f) * 0.02f;
-      beetle3d(&ESCR, e->t * 0.32f, sq, e->fz * 1.15f, L->theme >= 5, e->dying, e->t, 1, 0);
+      const Bmp* pic = &ESCR;
+      int sn = L->theme >= 5;
+      if (steady) { Bmp* c = &BEETLE_C[sn][dir][e->t % 20]; if (!c->px) beetle3d(c, (e->t % 20) * 0.31416f, 1, dir ? 1.15f : -1.15f, sn, 0, 0, 1, 0); pic = c; }
+      else beetle3d(&ESCR, (e->t % 20) * 0.31416f, e->dying ? maxf(0.28f, 1 - e->dying * 0.14f) : 1, e->fz * 1.15f, sn, e->dying, e->t, 1, 0);
       if (!e->dying) fb_shadow(ex + 12, ey + 21, 12, 2.5f, 0.18f);
-      hblit(&ESCR, (int)ex + 12 - 26, (int)ey + 20 - 36, 0);
+      hblit(pic, (int)ex + 12 - 26, (int)ey + 20 - 36, 0);
     } else {
-      float tilt = cosf(e->t * 0.07f) * 0.22f + (e->dying ? e->dying * 0.35f : 0);
-      bee3d(&ESCR, e->t, tilt, e->fz * 1.15f, e->dying, 1, 0);
-      hblit(&ESCR, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, 0);
+      const Bmp* pic = &ESCR;
+      if (steady) { Bmp* c = &BEE_C[dir][e->t % 8]; if (!c->px) bee3d(c, (e->t % 8) * 0.7854f, 0, dir ? 1.15f : -1.15f, 0, 1, 0); pic = c; }
+      else bee3d(&ESCR, (e->t % 8) * 0.7854f, e->dying ? e->dying * 0.35f : 0, e->fz * 1.15f, e->dying, 1, 0);
+      hblit(pic, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, 0);
     }
   }
   // Dino
@@ -1287,7 +1299,7 @@ static void draw_world(void) {
     int X = (int)floorf((px + PW * 0.5f) * 2) - CX, Y = (int)floorf((py + PH) * 2) - CY;
     int show = !(inv_t && (inv_t / 4) % 2);
     if (on_ground && !dead_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
-    if (show) { dino3d(&DSCR, &p, DA.yaw, 1); hblit(&DSCR, X - 36, Y - 64, 0); }
+    if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
     if (power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
       float hx = X + (flip ? -7 : 7), hy = Y - 22, ang;
@@ -1326,7 +1338,9 @@ static void draw_world(void) {
 // a still Dino for the HUD, the title and the map
 static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
   static Bmp big;
+  if (S > 1.5f) RT_SS = 1;   // when he is drawn big, skip the draw-double-and-shrink step: four times quicker
   dino3d(&big, p, yaw, S);
+  RT_SS = 2;
   hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), 0);
 }
 
@@ -1335,8 +1349,9 @@ static void draw_hud(void) {
   hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 6, 3, 0);
   snprintf(buf, sizeof buf, "%02d", bananas);
   text(buf, 21, 6, 2, 0xFFFFF4C2);
-  DinoPose p; dino_idle_pose(&p, frame);
-  draw_dino_at(FB_W - 94, 34, 0.72f, &p, 0.5f);
+  static Bmp hud_dino;   // the little Dino by the lives count is drawn once and kept
+  if (!hud_dino.px) { DinoPose p; dino_idle_pose(&p, 50); dino3d(&hud_dino, &p, 0.5f, 0.72f); }
+  hblit(&hud_dino, FB_W - 94 - (int)(36 * 0.72f), 34 - (int)(64 * 0.72f), 0);
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
   if (boss_awake && boss_i >= 0) {
@@ -1465,6 +1480,10 @@ static void map_snow(int night) {
 static void draw_map(void) {
   char buf[64];
   const World* w = &WORLDS[world];
+  static uint32_t* map_keep; static int keep_world = -1, keep_n;
+  if (!map_keep) map_keep = (uint32_t*)malloc(FB_W * FB_H * 4);
+  if (keep_world == world && (keep_n++ & 3)) { memcpy(FB, map_keep, FB_W * FB_H * 4); goto dino; }
+  keep_world = world;
   // sea
   uint32_t sea0 = 0xFF2F7FC1, sea1 = 0xFF5BB3E6, wave = 0xFF9ED6F5;
   if (world == 1) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
@@ -1504,6 +1523,8 @@ static void draw_map(void) {
     snprintf(buf, sizeof buf, "%d", kind + 1);
     text_raw(buf, x - (kind + 1 >= 10 ? 3 : 1), y - 2, 1, 0xFF2B1A12);
   }
+  memcpy(map_keep, FB, FB_W * FB_H * 4);
+dino:;
   // Dino walking between stops
   float t = map_t >= 24 ? 1 : map_t / 24.0f;
   float dx = w->xy[map_from][0] + (w->xy[map_node][0] - w->xy[map_from][0]) * t;
@@ -1539,14 +1560,19 @@ void game_draw(uint32_t* fb) {
   FB = fb;
   char buf[64];
   if (state == ST_TITLE) {
-    hd_background();
-    // a round grassy hill for Dino to stand on
-    for (int y = 280; y < FB_H; y++) for (int x = 0; x < FB_W; x++) {
-      float dd = sd_ellipse(x + 0.5f, y + 0.5f, 320, 700, 620, 410);
-      if (dd > 1) continue;
-      uint32_t c = dd > -12 ? mixc(0xFFC8F27A, 0xFF6CC943, clampf(-dd / 12, 0, 1)) : mixc(0xFF6CC943, 0xFF3B9A36, clampf((-dd - 12) / 60, 0, 1));
-      fb_over(x, y, c, cov(dd));
-    }
+    static uint32_t* title_bg;   // the sky, trees and hill never change, so they are painted once and kept
+    if (!title_bg) {
+      title_bg = (uint32_t*)malloc(FB_W * FB_H * 4);
+      hd_background();
+      // a round grassy hill for Dino to stand on
+      for (int y = 280; y < FB_H; y++) for (int x = 0; x < FB_W; x++) {
+        float dd = sd_ellipse(x + 0.5f, y + 0.5f, 320, 700, 620, 410);
+        if (dd > 1) continue;
+        uint32_t c = dd > -12 ? mixc(0xFFC8F27A, 0xFF6CC943, clampf(-dd / 12, 0, 1)) : mixc(0xFF6CC943, 0xFF3B9A36, clampf((-dd - 12) / 60, 0, 1));
+        fb_over(x, y, c, cov(dd));
+      }
+      memcpy(title_bg, FB, FB_W * FB_H * 4);
+    } else memcpy(FB, title_bg, FB_W * FB_H * 4);
     {
       DinoPose p; dino_idle_pose(&p, state_t);
       float hop = fabsf(sinf(state_t * 0.05f));
@@ -1571,7 +1597,7 @@ void game_draw(uint32_t* fb) {
       float fx = fmodf(h % FB_W + frame * (0.5f + (i % 3) * 0.24f) + sinf(frame * 0.03f + i) * 6 - camx * 1.2f, FB_W), fy = fmodf((h >> 9) % FB_H + frame * (1.0f + (i % 4) * 0.4f) - camy * 1.2f, FB_H);
       if (fx < 0) fx += FB_W;
       if (fy < 0) fy += FB_H;
-      fb_dot(fx, fy, 1.4f + (i % 3) * 0.7f, 0xFFFFFFFF, 0.9f);
+      hblit(&FLAKE[i % 3], (int)fx - 4, (int)fy - 4, 0);
     }
   }
   if (!g_no_hud) draw_hud();
@@ -1669,7 +1695,9 @@ static float mus_t, mus_len;
 static struct { float hz, ph, ph2, t; int on; } m_lead;
 // the band: besides the lead there is a pool of short notes, each played by one "instrument"
 enum { I_BASS, I_STAB, I_MARIMBA, I_BRASS, I_BELL, I_KICK, I_SNARE, I_HAT, I_CLAP };
-typedef struct { float hz, ph, t; int ins; } MNote;
+typedef struct { float hz, ph, t, env, env2; int ins; } MNote;
+static float SINT[1024], M_DEC[9], M_DEC2[9]; static int m_rate;
+#define SIN1(ph) SINT[(int)((ph) * 1024) & 1023]   /* sine of a phase 0..1, from a table */
 static MNote m_pool[28];
 static struct { float hz, ph, t; int on; } m_harm;
 static uint32_t m_noise = 12345;
@@ -1677,7 +1705,7 @@ static uint32_t m_noise = 12345;
 static void m_play(int ins, float hz) {
   int best = 0;
   for (int i = 0; i < 28; i++) { if (m_pool[i].ins < 0) { best = i; break; } if (m_pool[i].t > m_pool[best].t) best = i; }
-  m_pool[best].ins = ins; m_pool[best].hz = hz; m_pool[best].ph = 0; m_pool[best].t = 0;
+  m_pool[best].ins = ins; m_pool[best].hz = hz; m_pool[best].ph = 0; m_pool[best].t = 0; m_pool[best].env = m_pool[best].env2 = 1;
 }
 static int pick_song(void) {
   if (state == ST_TITLE) return SONG_TITLE;
@@ -1740,22 +1768,26 @@ static float music_sample(float dt) {
     music_step(sg, 0); half_done = 0;
   } else if (!half_done && mus_t >= mus_len * 0.5f) { half_done = 1; music_step(sg, 1); }
   float s = 0, quiet = state == ST_PAUSE ? 0.35f : 1;
-  // lead
+  // lead and second voice. Their loudness curves change slowly, so they are only worked out every 32 samples.
   {
-    float env = m_lead.on ? minf(1, m_lead.t * 90) * (0.55f + 0.45f * expf(-m_lead.t * 7)) : 0;
-    float vib = m_lead.t > 0.18f ? 1 + 0.006f * sinf(m_lead.t * 36) : 1;
+    static int ctl; static float env, henv, e9, e35, e5, vib;
+    if ((ctl++ & 31) == 0) {
+      env = m_lead.on ? minf(1, m_lead.t * 90) * (0.55f + 0.45f * expf(-m_lead.t * 7)) : 0;
+      henv = m_harm.on ? minf(1, m_harm.t * 40) * (0.6f + 0.4f * expf(-m_harm.t * 5)) : 0;
+      e9 = expf(-m_lead.t * 9); e35 = expf(-m_lead.t * 3.5f); e5 = expf(-m_lead.t * 5);
+      vib = m_lead.t > 0.18f ? 1 + 0.006f * SIN1(m_lead.t * 5.73f - (int)(m_lead.t * 5.73f)) : 1;
+    }
     m_lead.ph += m_lead.hz * vib * dt; m_lead.ph -= (int)m_lead.ph;
-    m_lead.ph2 += m_lead.hz * 2 * dt; m_lead.ph2 -= (int)m_lead.ph2;
-    float w;
-    if (sg->lead == 2) w = (sinf(m_lead.ph * 6.28318f) + 0.45f * sinf(m_lead.ph2 * 6.28318f * 1.5f) * expf(-m_lead.t * 9)) * expf(-m_lead.t * 3.5f) * 1.5f;   // bell
-    else if (sg->lead == 1) w = ((m_lead.ph < 0.3f ? 1 : -1) * 0.6f + (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.5f) * expf(-m_lead.t * 5);                       // plucky
-    else w = (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.75f + (m_lead.ph < 0.5f ? 0.3f : -0.3f) + 0.25f * sinf(m_lead.ph2 * 6.28318f);                          // round whistle
+    m_lead.ph2 += m_lead.hz * 3 * dt; m_lead.ph2 -= (int)m_lead.ph2;
+    float w, tri = 4 * fabsf(m_lead.ph - 0.5f) - 1;
+    if (sg->lead == 2) w = (SIN1(m_lead.ph) + 0.45f * SIN1(m_lead.ph2) * e9) * e35 * 1.5f;          // bell
+    else if (sg->lead == 1) w = ((m_lead.ph < 0.3f ? 1 : -1) * 0.6f + tri * 0.5f) * e5;             // plucky
+    else w = tri * 0.75f + (m_lead.ph < 0.5f ? 0.3f : -0.3f) + 0.25f * SIN1(m_lead.ph2);            // round whistle
     s += w * env * 0.075f;
     m_lead.t += dt;
-    // the second voice: a soft flute
-    float henv = m_harm.on ? minf(1, m_harm.t * 40) * (0.6f + 0.4f * expf(-m_harm.t * 5)) : 0;
-    m_harm.ph += m_harm.hz * (1 + 0.004f * sinf(m_harm.t * 30)) * dt; m_harm.ph -= (int)m_harm.ph;
-    s += (sinf(m_harm.ph * 6.28318f) + 0.3f * sinf(m_harm.ph * 12.56636f)) * henv * 0.034f;
+    m_harm.ph += m_harm.hz * dt; m_harm.ph -= (int)m_harm.ph;   // a soft flute
+    float h2 = m_harm.ph * 2; h2 -= (int)h2;
+    s += (SIN1(m_harm.ph) + 0.3f * SIN1(h2)) * henv * 0.034f;
     m_harm.t += dt;
   }
   m_noise = m_noise * 1664525u + 1013904223u;
@@ -1765,14 +1797,14 @@ static float music_sample(float dt) {
     if (n->ins < 0) continue;
     float t = n->t, w = 0, len = 0.3f;
     n->ph += n->hz * dt; n->ph -= (int)n->ph;
-    float sn = sinf(n->ph * 6.28318f), tr = 4 * fabsf(n->ph - 0.5f) - 1;
+    n->env *= M_DEC[n->ins]; n->env2 *= M_DEC2[n->ins];   // fading out: one multiply instead of working out a curve
     switch (n->ins) {
-      case I_BASS: len = 0.3f; w = (tr + 0.5f * sn) * expf(-t * 9) * 0.12f; break;
-      case I_STAB: len = 0.2f; w = ((n->ph < 0.5f ? 0.5f : -0.5f) + sn) * expf(-t * 24) * 0.024f; break;
-      case I_MARIMBA: len = 0.22f; w = (sn + 0.35f * sinf(n->ph * 6.28318f * 4) * expf(-t * 60)) * expf(-t * 18) * 0.034f; break;
-      case I_BRASS: len = 0.3f; w = ((2 * n->ph - 1) * 0.7f + tr * 0.5f) * minf(1, t * 60) * expf(-t * 9) * 0.03f; break;
-      case I_BELL: len = 0.35f; w = (sn + 0.5f * sinf(n->ph * 6.28318f * 3)) * expf(-t * 12) * 0.02f; break;
-      case I_KICK: len = 0.14f; n->ph += (50 + 110 * expf(-t * 40)) * dt; w = sinf(n->ph * 6.28318f) * (1 - t / 0.14f) * 0.16f; break;
+      case I_BASS: len = 0.3f; w = ((4 * fabsf(n->ph - 0.5f) - 1) + 0.5f * SIN1(n->ph)) * n->env * 0.12f; break;
+      case I_STAB: len = 0.2f; w = ((n->ph < 0.5f ? 0.5f : -0.5f) + SIN1(n->ph)) * n->env * 0.024f; break;
+      case I_MARIMBA: { len = 0.22f; float p4 = n->ph * 4; p4 -= (int)p4; w = (SIN1(n->ph) + 0.35f * SIN1(p4) * n->env2) * n->env * 0.034f; break; }
+      case I_BRASS: len = 0.3f; w = ((2 * n->ph - 1) * 0.7f + (4 * fabsf(n->ph - 0.5f) - 1) * 0.5f) * minf(1, t * 60) * n->env * 0.03f; break;
+      case I_BELL: { len = 0.35f; float p3 = n->ph * 3; p3 -= (int)p3; w = (SIN1(n->ph) + 0.5f * SIN1(p3)) * n->env * 0.02f; break; }
+      case I_KICK: len = 0.14f; n->ph += (50 + 110 * n->env2) * dt; n->ph -= (int)n->ph; w = SIN1(n->ph) * (1 - t / 0.14f) * 0.16f; break;
       case I_SNARE: len = 0.09f; w = nz * (1 - t / 0.09f) * 0.04f; break;
       case I_HAT: len = 0.022f; w = nz * (1 - t / 0.022f) * 0.018f; break;
       case I_CLAP: len = 0.07f; w = nz * (t < 0.012f || (t > 0.02f && t < 0.07f) ? 1 : 0) * (1 - t / 0.07f) * 0.03f; break;
@@ -1785,6 +1817,12 @@ static float music_sample(float dt) {
 }
 
 void synth_render(int16_t* out, int frames, int rate) {
+  if (m_rate != rate) {
+    static const float K[9] = { 9, 24, 18, 9, 12, 0, 0, 0, 0 }, K2[9] = { 0, 0, 60, 0, 0, 40, 0, 0, 0 };
+    m_rate = rate;
+    for (int i = 0; i < 1024; i++) SINT[i] = sinf(i * 6.28318f / 1024);
+    for (int i = 0; i < 9; i++) { M_DEC[i] = expf(-K[i] / rate); M_DEC2[i] = expf(-K2[i] / rate); }
+  }
   for (int f = 0; f < frames; f++) {
     float dt = 1.0f / rate;
     float s = music_sample(dt);

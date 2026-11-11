@@ -167,7 +167,12 @@ int main(int argc, char** argv) {
       if (g_audio) SDL_UnlockAudioDevice(g_audio);
       acc -= tick; steps++;
     }
+    Uint64 d0 = SDL_GetPerformanceCounter();
     game_draw(fb);
+    // if drawing keeps taking longer than a 60th of a second, ask the game to draw more simply
+    static double slow_avg; static int slow_n;
+    slow_avg = slow_avg * 0.95 + ((double)(SDL_GetPerformanceCounter() - d0) / freq) * 0.05;
+    if (++slow_n > 120 && slow_avg > 0.014) g_lowq = 1;
     SDL_UpdateTexture(tex, NULL, fb, FB_W * 4);
     SDL_RenderClear(r);
     SDL_RenderCopy(r, tex, NULL, NULL);

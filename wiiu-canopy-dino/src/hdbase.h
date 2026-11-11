@@ -33,6 +33,11 @@ static inline void over(uint32_t* d, uint32_t c, float a) {
 }
 static inline float cov(float d) { return clampf(0.5f - d, 0, 1); }   // distance to edge -> coverage
 
+static inline uint32_t lerpc(uint32_t a, uint32_t b, int t) {   // t 0..256, whole-number maths
+  uint32_t rb = (((a & 0xFF00FF) * (256 - t) + (b & 0xFF00FF) * t) >> 8) & 0xFF00FF;
+  uint32_t g = (((a & 0x00FF00) * (256 - t) + (b & 0x00FF00) * t) >> 8) & 0x00FF00;
+  return 0xFF000000 | rb | g;
+}
 // distances to shapes (negative inside)
 static inline float sd_circle(float x, float y, float cx, float cy, float r) { return sqrtf((x - cx) * (x - cx) + (y - cy) * (y - cy)) - r; }
 static inline float sd_ellipse(float x, float y, float cx, float cy, float rx, float ry) {

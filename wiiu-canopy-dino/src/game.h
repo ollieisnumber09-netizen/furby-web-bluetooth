@@ -26,3 +26,6 @@ void game_draw(uint32_t* fb);            // fb is FB_W*FB_H, 0xAARRGGBB
 void synth_render(int16_t* out, int frames, int rate);   // interleaved stereo
 void synth_trigger(int id);
 void plat_sfx(int id);
+
+// The platform sets this to 1 if frames are taking too long; the game then draws a little more simply.
+extern int g_lowq;
