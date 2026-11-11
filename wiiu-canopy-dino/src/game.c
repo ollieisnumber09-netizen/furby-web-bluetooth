@@ -1559,7 +1559,7 @@ void game_draw(uint32_t* fb) {
     text_c("CANOPY DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
-    text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
+    if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
     return;
   }
   if (state == ST_MAP) { draw_map(); return; }
