@@ -253,6 +253,19 @@ static void stick(const M3* W, const float* a, const float* b, float r, uint32_t
   M3 P = m3_mul(m3_trans((a[0] + b[0]) * 0.5f, (a[1] + b[1]) * 0.5f, (a[2] + b[2]) * 0.5f), m3_mul(m3_roty(yaw), m3_mul(m3_rotx(pit), m3_scale(r, len * 0.5f + r, r))));
   lathe(W, &P, PROF_BALL, 13, nseg, 0, col, MAT_PLAIN);
 }
+// a stub leg: straight sides like a cylinder, with a softly rounded end
+static float PROF_STUB[12 * 2];
+static void stub(const M3* W, const float* a, const float* b, float r, uint32_t col, int nseg) {
+  if (PROF_STUB[1] == 0) for (int i = 0; i < 12; i++) {
+    if (i < 4) { PROF_STUB[i * 2] = 1; PROF_STUB[i * 2 + 1] = 1 - i * 0.5f; }                     // straight part, top to near the bottom
+    else { float t = (i - 3) / 8.0f * 1.5708f; PROF_STUB[i * 2] = cosf(t) > 0 ? powf(cosf(t), 0.7f) : 0; PROF_STUB[i * 2 + 1] = -0.5f - sinf(t) * 0.5f; }
+  }
+  float d[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  float yaw = atan2f(-d[0], -d[2]), pit = len > 0 ? acosf(clampf(-d[1] / len, -1, 1)) : 0;
+  float hl2 = len * 0.5f + r * 0.5f;
+  M3 P = m3_mul(m3_trans((a[0] + b[0]) * 0.5f, (a[1] + b[1]) * 0.5f - r * 0.5f + r * 0.5f, (a[2] + b[2]) * 0.5f), m3_mul(m3_roty(yaw), m3_mul(m3_rotx(pit), m3_scale(r, hl2 + r * 0.5f, r))));
+  lathe(W, &P, PROF_STUB, 12, nseg, 0, col, MAT_PLAIN);
+}
 static void quad(const M3* W, const float* a, const float* b, const float* c, const float* d, const float* n, uint32_t col, int mat) {
   M3 I = m3_id(); V3 v[4];
   v3_make(&v[0], W, &I, a, n); v3_make(&v[1], W, &I, b, n); v3_make(&v[2], W, &I, c, n); v3_make(&v[3], W, &I, d, n);
@@ -274,13 +287,13 @@ static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
   M3 Wb = m3_mul(turn, body);
   // legs first (they join the body at the hips; on the ground the feet stay planted)
   for (int i = 0; i < 2; i++) {
-    float hl[3] = { i ? 4.6f : -4.6f, -9.5f, 0 }, hip[3], foot[3];
+    float hl[3] = { i ? 5.9f : -5.9f, -8.5f, 0 }, hip[3], foot[3];   // stubs: their outer sides line up with the body
     m3_pt(&body, hl, hip);
     if (p->air) {
       float fl[3] = { hl[0], -9.5f - (7.2f - p->ly[i]) / sy, p->lx[i] / sx };
       m3_pt(&body, fl, foot);
-    } else { foot[0] = hl[0]; foot[1] = 3.9f + p->ly[i]; foot[2] = p->lx[i]; }
-    stick(&turn, hip, foot, 3.9f, 0xFFF4F6FC, 12);
+    } else { foot[0] = hl[0]; foot[1] = 4.6f + p->ly[i]; foot[2] = p->lx[i]; }
+    stub(&turn, hip, foot, 5.4f, 0xFFF8FAFF, 14);
   }
   // two smooth spikes on his back
   M3 s1 = m3_mul(m3_trans(0, 7.5f, -5.5f), m3_mul(m3_rotx(-(0.80f - p->spk)), m3_scale(7.2f, 18, 5.4f)));
@@ -298,10 +311,22 @@ static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
 }
 
 // beetle: 52x40 picture, feet at (26, 36)
-static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, int t) {
-  rt_begin(52, 40, 26, 36, 1);
+// a little gold crown for the bosses
+static void crown3d(const M3* Wm, float x, float y, float z, float r) {
+  static const float BAND[4 * 2] = { 1, 0, 1, 1, 0.8f, 1, 0.8f, 0 };
+  M3 P = m3_mul(m3_trans(x, y, z), m3_scale(r, r * 0.7f, r));
+  lathe(Wm, &P, BAND, 4, 14, 1, 0xFFFFC61E, MAT_SHINY);
+  for (int k = 0; k < 5; k++) {
+    float a = k * 1.2566f;
+    M3 sp = m3_mul(m3_trans(x + cosf(a) * r * 0.85f, y + r * 0.5f, z + sinf(a) * r * 0.85f), m3_scale(r * 0.32f, r * 1.1f, r * 0.32f));
+    lathe(Wm, &sp, PROF_SPIKE, 10, 6, 0, 0xFFFFC61E, MAT_SHINY);
+  }
+}
+// kind: 0 green, 1 icy blue, 2 royal red
+static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, int t, float S, int crown) {
+  rt_begin((int)(52 * S), (int)(40 * S) + (crown ? (int)(10 * S) : 0), 26 * S, 36 * S + (crown ? (int)(10 * S) : 0), S);
   VIEW = m3_rotx(CAM_TILT);
-  uint32_t shell = snow ? 0xFF9FD4F2 : 0xFF58C85A;
+  uint32_t shell = snow == 2 ? 0xFFE8503C : snow ? 0xFF9FD4F2 : 0xFF58C85A;
   float bobb = sinf(ph * 2) * 0.6f, ant = sinf(ph * 0.7f) * 1.5f;
   M3 Wm = m3_mul(m3_roty(yaw), m3_scale(1.0f / sqrtf(sq), sq, 1.0f / sqrtf(sq)));
   for (int k = 0; k < 6; k++) {   // six little legs, walking in turn
@@ -326,13 +351,14 @@ static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, 
     stick(&Wm, a0, a1, 0.7f, 0xFF4A3830, 5);
     ball(&Wm, a1[0], a1[1], a1[2], 1.5f, 1.5f, 1.5f, 0xFF4A3830, MAT_SHINY, 8);
   }
+  if (crown) crown3d(&Wm, 0, 14.2f + bobb, -2.5f, 4.2f);
   (void)t;
   rt_end(b);
 }
 
 // bee: 56x52 picture, middle at (28, 28)
-static void bee3d(Bmp* b, int t, float pitch, float yaw, int dead) {
-  rt_begin(56, 52, 28, 28, 1);
+static void bee3d(Bmp* b, int t, float pitch, float yaw, int dead, float S, int crown) {
+  rt_begin((int)(56 * S), (int)(52 * S), 28 * S, 28 * S, S);
   VIEW = m3_rotx(CAM_TILT * 0.5f);
   M3 Wm = m3_mul(m3_roty(yaw), m3_rotx(pitch));
   float flap = sinf(t * 1.25f), sway = sinf(t * 0.2f) * 1.2f;
@@ -361,6 +387,7 @@ static void bee3d(Bmp* b, int t, float pitch, float yaw, int dead) {
     stick(&Wm, a0, a1, 0.6f, 0xFF3A2A22, 5);
     ball(&Wm, a1[0], a1[1], a1[2], 1.3f, 1.3f, 1.3f, 0xFF3A2A22, MAT_SHINY, 6);
   }
+  if (crown) crown3d(&Wm, 0, 7.6f, 4, 3.4f);
   rt_end(b);
 }
 

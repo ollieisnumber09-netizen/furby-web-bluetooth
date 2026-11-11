@@ -39,7 +39,14 @@ int main(int argc, char** argv) {
   for (int i = 0; i < 30; i++) tick(&in);
   in.jump = 1; tick(&in); in.jump = 0; tick(&in);
   int hold = 0, rest = 0, f = 0;
-  while (state == ST_PLAY && f < 60 * 120) {
+  if (argc > 2) {   // test only the added stretch: start at the old flag
+    int cx = -1, cy = 0;
+    for (int xx = L->w - 12; xx < L->w && cx < 0; xx++) for (int yy = 0; yy < LH; yy++) if (G[yy][xx] == 'c') { cx = xx; cy = yy; }
+    if (cx >= 0) { px = check_x = cx * T + 3; py = check_y = cy * T + T - PH; }
+    lives = 99;
+    printf("start at %d,%d of %d (boss %d)\n", cx, cy, LW, boss_i);
+  }
+  while (state == ST_PLAY && f < 60 * 150) {
     f++;
     memset(&in, 0, sizeof in);
     in.right = 1;
@@ -82,7 +89,7 @@ int main(int argc, char** argv) {
     tick(&in);
   }
   for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (G[y][x] == '?') printf("unopened box at %d,%d\n", x, y);
-  printf("level %d: state=%d after %d frames, deaths=%d x=%.0f/%d power=%d\n", level, state, f, 3 - lives, px / 16, LW, power);
+  printf("level %d: state=%d after %d frames, deaths=%d x=%.0f/%d power=%d\n", level, state, f, (argc > 2 ? 99 : 3) - lives, px / 16, LW, power);
   for (int i = 0; i < 160; i++) { memset(&in, 0, sizeof in); tick(&in); }
   fclose(fv); fclose(fa);
   return 0;

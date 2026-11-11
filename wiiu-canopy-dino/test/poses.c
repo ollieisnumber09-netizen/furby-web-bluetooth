@@ -27,8 +27,8 @@ int main(void) {
       else if (k < 10) { p.mood = 4; p.mouth = 1; p.bob = 3; }
       else { p.wing = k == 10 ? 0.6f : -0.6f; p.air = 1; p.ly[0] = p.ly[1] = 1; }
     } else {
-      if (k < 6) beetle3d(&b, k * 1.05f, k == 5 ? 0.3f : 1, 1.15f - k * 0.46f, k == 3, k == 5, 100);
-      else if (k < 10) bee3d(&b, k * 2, (k - 8) * 0.1f, 1.15f - (k - 6) * 0.7f, 0); else if (k == 10) coin3d(&b, 0.6f, 1.5f); else box3d(&b, 0);
+      if (k < 6) beetle3d(&b, k * 1.05f, k == 5 ? 0.3f : 1, 1.15f - k * 0.46f, k == 3, k == 5, 100, 1, 0);
+      else if (k < 10) bee3d(&b, k * 2, (k - 8) * 0.1f, 1.15f - (k - 6) * 0.7f, 0, 1, 0); else if (k == 10) coin3d(&b, 0.6f, 1.5f); else box3d(&b, 0);
       for (int y = 0; y < b.h; y++) for (int x = 0; x < b.w; x++) for (int yy = 0; yy < 3; yy++) for (int xx = 0; xx < 3; xx++) {
         uint32_t c = b.px[y * b.w + x]; if ((c >> 24) < 128) continue;
         if (k * cw + 20 + x * 3 + xx < W && r * cw + 30 + y * 3 + yy < H) big[(r * cw + 30 + y * 3 + yy) * W + k * cw + 20 + x * 3 + xx] = c;

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 #define T 16                 // tile size in pixels
-#define MAXW 160
+#define MAXW 340
 #define MAXH 40
 
 // ============================================================ sprites
@@ -471,17 +471,20 @@ static const Level LEVELS[] = {
 
 // ============================================================ state
 enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP };
-enum { E_BEETLE, E_BEE, E_POW, E_ICE };   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
+enum { E_BEETLE, E_BEE, E_POW, E_ICE, E_BOSS };   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
 enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL, SFX_DASH, SFX_SWORD, SFX_JUMP2 };
 
-typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz; } Ent;
+typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz, x0; } Ent;
 typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 
 static char G[MAXH][MAXW];
 static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
 static int LW, LH, lvl;
 static const Level* L;
-static Ent ents[64]; static int nents;
+#define MAXENT 110
+static Ent ents[MAXENT]; static int nents;
+static int boss_i, boss_hp, boss_max, boss_inv, boss_awake, boss_dead, arena_x0, arena_x1;
+int g_boss_music;
 static Part parts[160];
 static int sign_x[4], sign_y[4], nsigns;
 static int goal_x, goal_y;
@@ -565,6 +568,140 @@ static void spawn_parts(float x, float y, int n, uint32_t c, float spd, float up
   }
 }
 
+// ---- every side-scrolling level gets a long extra stretch built from set pieces (always the same
+// for the same level), and the last level of each world ends in a boss arena.
+static uint32_t gen_seed;
+static int grnd(int n) { gen_seed = gen_seed * 1664525u + 1013904223u; return (int)((gen_seed >> 10) % (uint32_t)n); }
+static Ent* add_ent(int type, int tx, int ty) {
+  if (nents >= MAXENT) return NULL;
+  Ent* e = &ents[nents++];
+  memset(e, 0, sizeof *e);
+  e->type = type; e->alive = 1;
+  e->x = tx * T + 2; e->y = type == E_BEETLE ? ty * T + 6 : ty * T; e->by = e->y;
+  e->vx = -0.5f; e->t = tx * 13;
+  return e;
+}
+static const char* const BOSS_NAME[3] = { "KING BEETLE", "FROST KING", "QUEEN BEE" };
+static int boss_kind(int n) { return n == 5 ? 0 : n == 8 ? 1 : n == 10 ? 2 : -1; }
+static void extend_level(int n) {
+  boss_i = -1; boss_awake = boss_dead = 0; g_boss_music = 0;
+  if (LH > 20) return;   // the tall climbing levels stay as they are
+  int th = L->theme, stone = th == 1 || th == 2 || th == 6, snow = th >= 5;
+  char gc = stone ? 'X' : '#';
+  int x = LW, gy = goal_y + 1, bk = boss_kind(n);
+  if (gy < 7) gy = 7;
+  if (gy > LH - 2) gy = LH - 2;
+#define COL(cx, top) do { for (int yy = (top); yy < LH; yy++) G[yy][cx] = gc; } while (0)
+  for (int c = goal_x - 1; c < LW; c++) if (c >= 0 && !solid_c(G[goal_y + 1][c])) COL(c, goal_y + 1);
+  G[goal_y][goal_x] = 'c';   // the old flag spot becomes a checkpoint
+  gy = goal_y + 1;
+  gen_seed = 1234567u + n * 7919u;
+  int end = LW + (bk >= 0 ? 90 : 130), cnt = 0, last = -1;
+  while (x < end) {
+    int k = grnd(snow ? 9 : 8);
+    if (k == last) k = (k + 1) % 8;
+    last = k; cnt++;
+    if (cnt % 5 == 0) { for (int i = 0; i < 6; i++) COL(x + i, gy); G[gy - 1][x + 2] = 'c'; x += 6; continue; }
+    switch (k) {
+      case 0: {   // a run with coins and beetles
+        int w = 10 + grnd(5);
+        for (int i = 0; i < w; i++) COL(x + i, gy);
+        for (int i = 3; i < 8; i++) G[gy - 3 - (i > 3 && i < 7)][x + i] = 'o';
+        add_ent(E_BEETLE, x + w - 3, gy - 1);
+        if (grnd(2)) add_ent(E_BEETLE, x + 5, gy - 1);
+        x += w; break;
+      }
+      case 1: {   // a gap to jump
+        int w = 3 + grnd(2);
+        for (int i = 0; i < 3; i++) COL(x + i, gy);
+        x += 3;
+        for (int i = 0; i < w; i++) G[gy - 3][x + i] = 'o';
+        x += w;
+        for (int i = 0; i < 3; i++) COL(x + i, gy);
+        x += 3; break;
+      }
+      case 2: {   // a step up or down
+        int ny = gy + (grnd(2) ? 1 : -1) * (1 + grnd(2));
+        if (ny < 7) ny = gy + 1;
+        if (ny > LH - 2) ny = gy - 1;
+        for (int i = 0; i < 4; i++) COL(x + i, gy);
+        x += 4; gy = ny;
+        for (int i = 0; i < 5; i++) COL(x + i, gy);
+        G[gy - 2][x + 2] = 'o'; G[gy - 2][x + 3] = 'o';
+        x += 5; break;
+      }
+      case 3: {   // a log bridge over a pit, with a bee
+        for (int i = 0; i < 2; i++) COL(x + i, gy);
+        x += 2;
+        int w = 8 + grnd(4);
+        for (int i = 0; i < w; i++) { G[gy][x + i] = '='; if (i % 2) G[gy - 2][x + i] = 'o'; }
+        add_ent(E_BEE, x + w / 2, gy - 4);
+        x += w;
+        for (int i = 0; i < 2; i++) COL(x + i, gy);
+        x += 2; break;
+      }
+      case 4: {   // spikes to hop over
+        for (int i = 0; i < 4; i++) COL(x + i, gy);
+        x += 4;
+        for (int i = 0; i < 2; i++) { COL(x + i, gy); G[gy - 1][x + i] = '^'; G[gy - 4][x + i] = 'o'; }
+        x += 2;
+        for (int i = 0; i < 4; i++) COL(x + i, gy);
+        x += 4; break;
+      }
+      case 5: {   // a row of ? boxes
+        for (int i = 0; i < 9; i++) COL(x + i, gy);
+        for (int i = 3; i < 6; i++) { G[gy - 4][x + i] = '?'; BOXK[gy - 4][x + i] = 0; }
+        if (grnd(3) == 0) BOXK[gy - 4][x + 4] = (char)(1 + grnd(2));
+        add_ent(E_BEETLE, x + 7, gy - 1);
+        x += 9; break;
+      }
+      case 6: {   // stone steps up and over
+        for (int i = 0; i < 3; i++) COL(x + i, gy);
+        x += 3;
+        for (int i = 0; i < 6; i++) {
+          int hgt = i < 2 ? 1 : (i < 4 ? 2 : 1);
+          COL(x + i, gy);
+          for (int j = 1; j <= hgt; j++) G[gy - j][x + i] = 'X';
+          if (i == 2 || i == 3) G[gy - 4][x + i] = 'o';
+        }
+        x += 6;
+        for (int i = 0; i < 3; i++) COL(x + i, gy);
+        x += 3; break;
+      }
+      case 7: {   // a spring up to a high bridge of coins
+        for (int i = 0; i < 15; i++) COL(x + i, gy);
+        G[gy - 1][x + 2] = 's';
+        for (int i = 4; i < 9; i++) { G[gy - 6][x + i] = '='; G[gy - 7][x + i] = 'o'; }
+        add_ent(E_BEETLE, x + 10, gy - 1);
+        x += 15; break;
+      }
+      case 8: {   // a slippery stretch of ice
+        int w = 9 + grnd(4);
+        for (int i = 0; i < w; i++) { COL(x + i, gy); G[gy][x + i] = 'I'; if (i > 2 && i < 7) G[gy - 2][x + i] = 'o'; }
+        add_ent(E_BEETLE, x + w - 2, gy - 1);
+        x += w; break;
+      }
+    }
+  }
+  if (bk >= 0) {
+    // the boss arena: a checkpoint and a sword box, then a wide flat floor
+    for (int i = 0; i < 38; i++) COL(x + i, gy);
+    G[gy - 1][x + 2] = 'c'; G[gy - 4][x + 5] = '?'; BOXK[gy - 4][x + 5] = 2;
+    arena_x0 = (x + 9) * T; arena_x1 = (x + 34) * T;
+    Ent* e = add_ent(E_BOSS, x + 26, gy - 1);
+    if (e) {
+      boss_i = (int)(e - ents); e->k = bk;
+      e->x = e->x0 = (x + 26) * T; e->y = e->by = bk == 2 ? gy * T - 84 : gy * T - 26;
+      boss_max = boss_hp = 3 + bk;
+    }
+    x += 38;
+  }
+  for (int i = 0; i < 9; i++) COL(x + i, gy);
+  goal_x = x + 4; goal_y = gy - 1;
+  LW = x + 9;
+#undef COL
+}
+
 static void load_level(int n) {
   lvl = n; L = &LEVELS[n]; LW = L->w; LH = L->h;
   memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK);
@@ -584,7 +721,7 @@ static void load_level(int n) {
       case 'B': G[o->y][o->x] = '?'; BOXK[o->y][o->x] = (char)o->w; break;
       case 'I': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = 'I'; break;
       case 'v':
-        if (nents < 64) {
+        if (nents < MAXENT) {
           Ent* e = &ents[nents++];
           memset(e, 0, sizeof *e);
           e->type = E_ICE; e->alive = 1; e->x = o->x * T + 2; e->y = e->by = o->y * T;
@@ -595,7 +732,7 @@ static void load_level(int n) {
       case 'P': start_x = o->x * T + 3; start_y = o->y * T + T - PH; break;
       case 'i': if (nsigns < 4) { sign_x[o->w] = o->x; sign_y[o->w] = o->y; nsigns++; } break;
       case 'b': case 'z':
-        if (nents < 64) {
+        if (nents < MAXENT) {
           Ent* e = &ents[nents++];
           memset(e, 0, sizeof *e);
           e->type = o->op == 'b' ? E_BEETLE : E_BEE; e->alive = 1;
@@ -606,6 +743,7 @@ static void load_level(int n) {
     }
   }
   for (int i = 0; i < nsigns; i++) if (!L->signs[i]) nsigns = i;
+  extend_level(n);
   check_x = start_x; check_y = start_y;
   lvl_frames = 0;
   hd_render_level();
@@ -618,6 +756,7 @@ static void respawn(void) {
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (e->type == E_POW) continue;
+    if (e->type == E_BOSS) { if (!boss_dead) { e->alive = 1; e->dying = 0; e->x = e->x0; e->y = e->by; e->vy = 0; e->vx = -0.5f; boss_hp = boss_max; boss_inv = 0; boss_awake = 0; g_boss_music = 0; } continue; }
     if (e->type == E_ICE) { e->alive = 1; e->k = 0; e->y = e->by; e->vy = 0; continue; }
     if (!e->alive || e->dying) { e->alive = 1; e->dying = 0; e->y = e->by; }
   }
@@ -663,7 +802,7 @@ static void open_box(int tx, int ty) {
     for (int i = 0; i < 5; i++) { bananas++; total_bananas++; }
     if (bananas >= 50) { bananas -= 50; lives++; plat_sfx(SFX_LIFE); } else plat_sfx(SFX_BANANA);
     spawn_parts(tx * T + 8, ty * T - 2, 14, 0xFFF7D038, 2.0f, 1.2f);
-  } else if (nents < 64) {
+  } else if (nents < MAXENT) {
     Ent* e = &ents[nents++];
     memset(e, 0, sizeof *e);
     e->type = E_POW; e->alive = 1; e->k = k; e->vx = 0.8f;
@@ -822,7 +961,7 @@ static void update_player(const Input* in) {
     }
   }
   // goal: a flag on a pole, touch anywhere on the pole
-  if (px + PW > goal_x * T + 5 && px < goal_x * T + 11 && py + PH > goal_y * T - 3 * T && py < goal_y * T + T) {
+  if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5) {
     state = ST_CLEAR; state_t = 0; plat_sfx(SFX_CLEAR);
     spawn_parts(goal_x * T + 8, goal_y * T - 32, 24, 0xFFF7D038, 2.5f, 0.5f);
   }
@@ -831,11 +970,61 @@ static void update_player(const Input* in) {
   if (on_ground && pvx != 0) run_t++; else run_t = 0;
 }
 
+static void update_boss(Ent* e) {
+  float bw = 30, bh = 24;
+  if (e->dying) {
+    e->dying++;
+    if (e->dying % 5 == 0) { spawn_parts(e->x + 4 + (e->dying * 7) % 24, e->y + (e->dying * 5) % 20, 8, 0xFFFFE27A, 2.4f, 0.6f); plat_sfx(SFX_STOMP); }
+    if (e->dying > 80) { e->alive = 0; boss_dead = 1; boss_awake = 0; g_boss_music = 0; plat_sfx(SFX_LIFE); total_bananas += 20; bananas += 20; }
+    return;
+  }
+  if (!boss_awake) {
+    if (px > arena_x0 + 16 && !dead_t) { boss_awake = 1; g_boss_music = 1; e->t = 1; } else return;
+  }
+  if (boss_inv > 0) boss_inv--;
+  float spd = 0.7f + 0.28f * (boss_max - boss_hp);
+  if (e->k == 2) {
+    // the Queen Bee hovers out of reach, then swoops down low at Dino
+    if (e->vx == 0) e->vx = -spd;
+    e->vx = e->vx > 0 ? spd : -spd;
+    e->x += e->vx;
+    int cyc = e->t % 260;
+    float ty = cyc < 130 ? e->by + sinf(e->t * 0.08f) * 6 : e->by + 56;
+    e->y += (ty - e->y) * 0.07f;
+  } else {
+    // the beetle kings march up and down and leap at Dino
+    int grounded = e->y >= e->by;
+    if (grounded && e->t % (e->k ? 120 : 140) == 0) { e->vy = -5.6f; e->vx = (px > e->x + 15 ? 1 : -1) * spd * 1.6f; grounded = 0; }
+    e->vy += 0.3f; e->y += e->vy;
+    if (e->y >= e->by) {
+      if (e->vy > 2) { plat_sfx(SFX_STOMP); spawn_parts(e->x + 15, e->y + bh, 14, 0xFFE8E0C8, 2.2f, 0.4f); }
+      e->y = e->by; e->vy = 0; e->vx = e->vx > 0 ? spd : -spd;
+    }
+    e->x += e->vx;
+  }
+  if (e->x < arena_x0) { e->x = arena_x0; e->vx = fabsf(e->vx); }
+  if (e->x + bw > arena_x1) { e->x = arena_x1 - bw; e->vx = -fabsf(e->vx); }
+  if (dead_t || state != ST_PLAY) return;
+  float ax, ay, aw, ah; int hit = 0;
+  if (!boss_inv && attack_box(&ax, &ay, &aw, &ah) && ax + aw > e->x && ax < e->x + bw && ay + ah > e->y && ay < e->y + bh) hit = 1;
+  if (px + PW > e->x + 2 && px < e->x + bw - 2 && py + PH > e->y + 2 && py < e->y + bh) {
+    if (pvy > 0.5f && py + PH - e->y < 13) { pvy = -5.6f; if (!boss_inv) hit = 2; }
+    else if (!hit && boss_inv < 40) hurt();
+  }
+  if (hit) {
+    boss_hp--; boss_inv = 70; plat_sfx(SFX_STOMP); plat_sfx(SFX_CHECK);
+    spawn_parts(e->x + 15, e->y + 6, 18, 0xFFFFFFFF, 2.6f, 0.5f);
+    if (hit == 1) { pvx = -face * 3.0f; pvy = -2.5f; wall_lock = 12; atk_t = 0; }
+    if (boss_hp <= 0) e->dying = 1;
+  }
+}
+
 static void update_ents(void) {
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (!e->alive) continue;
     e->t++;
+    if (e->type == E_BOSS) { update_boss(e); continue; }
     if (e->dying) { if (++e->dying > 24) e->alive = 0; continue; }
     float ew = 12, eh = 10;
     if (e->type == E_ICE) {
@@ -1060,16 +1249,32 @@ static void draw_world(void) {
       continue;
     }
     float want = e->vx > 0 ? 1 : -1;
+    if (e->type == E_BOSS && !boss_awake) want = -0.3f;
     if (e->fz == 0) e->fz = want;
     e->fz += (want - e->fz) * 0.22f;   // turns round smoothly instead of snapping
+    if (e->type == E_BOSS) {
+      float S = 2.4f;
+      if (boss_inv && (frame / 3) % 2 && !e->dying) continue;   // flashes after a hit
+      if (e->k == 2) {
+        bee3d(&ESCR, e->t, cosf(e->t * 0.08f) * 0.15f, e->fz * 1.0f + e->dying * 0.3f, e->dying, S, 1);
+        hblit(&ESCR, (int)ex + 30 - (int)(28 * S), (int)ey + 24 - (int)(28 * S) + e->dying, 0);
+      } else {
+        float air = e->by - e->y;
+        float sq = e->dying ? maxf(0.3f, 1 - e->dying * 0.02f) : 1 + clampf(air * 0.004f, 0, 0.15f) + sinf(e->t * 0.3f) * 0.02f;
+        fb_shadow(ex + 30, (e->by + 24) * 2 - CY + 1, 30 - air * 0.2f, 5, 0.2f);
+        beetle3d(&ESCR, e->t * 0.25f, sq, e->fz * 1.0f + e->dying * 0.25f, e->k ? 1 : 2, e->dying, e->t, S, 1);
+        hblit(&ESCR, (int)ex + 30 - (int)(26 * S), (int)ey + 48 - (int)(36 * S), 0);
+      }
+      continue;
+    }
     if (e->type == E_BEETLE) {
       float sq = e->dying ? maxf(0.28f, 1 - e->dying * 0.14f) : 1 + sinf(e->t * 0.64f) * 0.02f;
-      beetle3d(&ESCR, e->t * 0.32f, sq, e->fz * 1.15f, L->theme >= 5, e->dying, e->t);
+      beetle3d(&ESCR, e->t * 0.32f, sq, e->fz * 1.15f, L->theme >= 5, e->dying, e->t, 1, 0);
       if (!e->dying) fb_shadow(ex + 12, ey + 21, 12, 2.5f, 0.18f);
       hblit(&ESCR, (int)ex + 12 - 26, (int)ey + 20 - 36, 0);
     } else {
       float tilt = cosf(e->t * 0.07f) * 0.22f + (e->dying ? e->dying * 0.35f : 0);
-      bee3d(&ESCR, e->t, tilt, e->fz * 1.15f, e->dying);
+      bee3d(&ESCR, e->t, tilt, e->fz * 1.15f, e->dying, 1, 0);
       hblit(&ESCR, (int)ex + 12 - 28, (int)ey + 12 - 28 + e->dying * e->dying / 3, 0);
     }
   }
@@ -1134,6 +1339,15 @@ static void draw_hud(void) {
   draw_dino_at(FB_W - 94, 34, 0.72f, &p, 0.5f);
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
+  if (boss_awake && boss_i >= 0) {
+    const char* nm = BOSS_NAME[ents[boss_i].k];
+    text(nm, (SCR_W - text_w(nm, 1)) / 2, 4, 1, 0xFFFFFFFF);
+    for (int i = 0; i < boss_max; i++) {
+      float hx = FB_W / 2 - (boss_max - 1) * 11 + i * 22, hy = 32;
+      fb_dot(hx, hy, 8.5f, 0xFF1B1020, 1); fb_dot(hx, hy, 6.5f, i < boss_hp ? 0xFFF0584A : 0xFF4A4458, 1);
+      if (i < boss_hp) fb_dot(hx - 2, hy - 2, 2, 0xFFFFC0B8, 1);
+    }
+  } else if (boss_i >= 0 && !boss_dead && px > arena_x0 - 200) text_c("DEFEAT THE BOSS TO REACH THE FLAG", 24, 1, 0xFFFFF4C2);
   if (power) {
     fill(SCR_W - 82, 1, 18, 18, 0xFF1B1020); fill(SCR_W - 81, 2, 16, 16, 0xFF3B2F6B);
     hblit(power == 2 ? &HD_SWORDI : &HD_WINGI, (SCR_W - 81) * 2, 4, 0);
@@ -1425,26 +1639,26 @@ void synth_trigger(int id) {
 typedef struct { int base, bpm, lead; float swing; const char* mel; const char* chords; } Song;
 enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_CAVE, SONG_SNOW, SONG_BOSS, NSONGS };
 static const Song SONGS[NSONGS] = {
-  { 62, 164, 0, 0.60f,   // Hello Dino (title)
+  { 62, 178, 0, 0.60f,   // Hello Dino (title)
     "0.47.C.7" "9.CH.L.H" "J.EB.7.B" "C.7C.G.." "L.GL.G.C" "H.CH.L.H" "J.EJ.E.B" "E.B.7-.."
     "0.47.C.G" "H.L.H.C9" "B.E.J.EB" "C.G.J.G." "L.H.L.H." "J.E.J.N." "O.JG.C.G" "C--.0...",
     "0M5M7M0M9m5M7M7M0M5M7M0M5M7M0M0M" },
-  { 67, 124, 2, 0.62f,   // Which Way? (map)
+  { 67, 140, 2, 0.62f,   // Which Way? (map)
     "7.47.C.7" "9.49.C.G" "H.C9.5.9" "7.B.E.B7" "C.GC.J.G" "G.C9.C.G" "H.C9.E.B" "C--.0...",
     "0M9m5M7M0M9m5M0M" },
-  { 60, 150, 0, 0.62f,   // Jungle Hop (grassy levels)
+  { 60, 170, 0, 0.62f,   // Jungle Hop (grassy levels)
     "7.47.C.7" "974.0.24" "5.9C.95." "7.BE.B7-" "7.47.C.G" "EC9.C.EG" "H.GE.C9." "B.E.C--."
     "9.CH.GH." "G.CG.EC." "E.HE.95." "7BE.J.HE" "G.JG.EC." "L.JG.E.C" "9CH.BEJ." "O--.C...",
     "0M0M5M7M0M9m5M7M5M0M2m7M0M9m7M0M" },
-  { 57, 118, 1, 0.5f,    // Sneaky Steps (temples and caves)
+  { 57, 134, 1, 0.56f,    // Sneaky Steps (temples and caves)
     "C..F.E.C" "7..C.A.7" "H.FH.K.H" "J.EJ.N.J" "O.JF.C.." "K.FC.8.C" "H.FH.K.H" "J.N.J-.."
     "K.K.O.K." "M.H.M.J." "O.J.F.J." "C.F.J-.." "H.K.H.F." "J.N.J.E." "C.7C.F.J" "O--.C...",
     "0m0m5m7M0m8M5m7M8MAM0m0m5m7M0m0m" },
-  { 65, 132, 2, 0.58f,   // Frosty Skip (snow levels)
+  { 65, 152, 2, 0.6f,   // Frosty Skip (snow levels)
     "C.7C.G.E" "C.9.7.9C" "H.EC.9C." "E.B.7.BE" "G.CG.J.G" "E.C9.C.9" "E.H.L.HE" "J.G.E-.."
     "H.E.C.EH" "J.E.B.EJ" "G.B.7.BG" "L.G.C.9." "H.E.9.5." "E.B.7.B." "C.7C.G.J" "C--.0...",
     "0M9m5M7M0M9m2m7M5M7M4m9m2m7M0M0M" },
-  { 64, 172, 1, 0.5f,    // Big Trouble (bosses)
+  { 64, 186, 1, 0.5f,    // Big Trouble (bosses)
     "0.0C.0.A" "0.0C.F.E" "8.8F.8.C" "A.AH.E.A" "C.CJ.C.F" "C.EF.H.J" "K.JF.C.F" "J.N.J.E-",
     "0m0m8MAM0m0m8M7M" },
 };
@@ -1453,11 +1667,18 @@ static float midi_hz(int n) { return 440.0f * powf(2.0f, (n - 69) / 12.0f); }
 static int song_now = -1, mus_step;
 static float mus_t, mus_len;
 static struct { float hz, ph, ph2, t; int on; } m_lead;
-static struct { float hz, ph, t; } m_bass, m_stab[3];
-static struct { float t, ph; } m_kick;
-static float m_snare = 9, m_hat = 9; static uint32_t m_noise = 12345;
-int g_boss_music;   // set by the game while a boss is awake
+// the band: besides the lead there is a pool of short notes, each played by one "instrument"
+enum { I_BASS, I_STAB, I_MARIMBA, I_BRASS, I_BELL, I_KICK, I_SNARE, I_HAT, I_CLAP };
+typedef struct { float hz, ph, t; int ins; } MNote;
+static MNote m_pool[28];
+static struct { float hz, ph, t; int on; } m_harm;
+static uint32_t m_noise = 12345;
 
+static void m_play(int ins, float hz) {
+  int best = 0;
+  for (int i = 0; i < 28; i++) { if (m_pool[i].ins < 0) { best = i; break; } if (m_pool[i].t > m_pool[best].t) best = i; }
+  m_pool[best].ins = ins; m_pool[best].hz = hz; m_pool[best].ph = 0; m_pool[best].t = 0;
+}
 static int pick_song(void) {
   if (state == ST_TITLE) return SONG_TITLE;
   if (state == ST_MAP) return SONG_MAP;
@@ -1468,26 +1689,46 @@ static int pick_song(void) {
   }
   return -1;
 }
-static void music_step(const Song* sg) {
+// one eighth-note step: who plays what
+static void music_step(const Song* sg, int half) {
   int nsteps = (int)strlen(sg->mel), bar = mus_step / 8, st = mus_step % 8;
-  char m = sg->mel[mus_step % nsteps];
-  if (m == '.') m_lead.on = 0;
-  else if (m != '-') { m_lead.hz = midi_hz(sg->base + note_code(m)); m_lead.t = 0; m_lead.on = 1; }
   int root = sg->base - 24 + note_code(sg->chords[(bar * 2) % strlen(sg->chords)]);
   int minor = sg->chords[(bar * 2 + 1) % strlen(sg->chords)] == 'm';
   if (root > sg->base - 24 + 7) root -= 12;
-  if (st == 0 || st == 4 || st == 7) { m_bass.hz = midi_hz(st == 4 ? root + 7 : (st == 7 ? root + 12 : root)); m_bass.t = 0; }
-  if (st == 2 || st == 6 || (sg->bpm > 160 && st == 3)) {
-    int tri[3] = { root + 24, root + 24 + (minor ? 3 : 4), root + 24 + 7 };
-    for (int i = 0; i < 3; i++) { m_stab[i].hz = midi_hz(tri[i]); m_stab[i].t = 0; }
-    m_snare = 0;
+  int tri[4] = { root + 24, root + 24 + (minor ? 3 : 4), root + 24 + 7, root + 36 };
+  if (half) {   // the "and" between steps: a marimba note and a shaker tick keep it bubbling along
+    static const int UP[8] = { 1, 2, 3, 2, 1, 2, 3, 0 };
+    m_play(I_MARIMBA, midi_hz(tri[UP[st]] + 12));
+    m_play(I_HAT, 0);
+    return;
   }
-  if (st == 0 || st == 4 || (sg->bpm > 160 && st == 5)) { m_kick.t = 0; m_kick.ph = 0; }
-  if (st % 2 == 1 || sg->bpm > 160) m_hat = 0;
+  char m = sg->mel[mus_step % nsteps];
+  if (m == '.') { m_lead.on = 0; m_harm.on = 0; }
+  else if (m != '-') {
+    int note = sg->base + note_code(m);
+    m_lead.hz = midi_hz(note); m_lead.t = 0; m_lead.on = 1;
+    m_play(I_BELL, midi_hz(note + 12));                       // a glockenspiel doubles the tune an octave up
+    // a second voice sings along underneath, on the nearest chord note
+    int h = note - 3;
+    for (; h > note - 10; h--) { int pc = ((h - root) % 12 + 12) % 12; if (pc == 0 || pc == 7 || pc == (minor ? 3 : 4)) break; }
+    m_harm.hz = midi_hz(h); m_harm.t = 0; m_harm.on = 1;
+  }
+  static const int WALK[8] = { 0, 12, 7, 12, 0, 12, 7, 10 };
+  m_play(I_BASS, midi_hz(root + WALK[st]));
+  if (st == 2 || st == 6 || st == 3) for (int i = 0; i < 3; i++) m_play(I_STAB, midi_hz(tri[i]));
+  if (st == 0 && bar % 2 == 0) for (int i = 0; i < 3; i++) m_play(I_BRASS, midi_hz(tri[i] - (i == 2 ? 12 : 0)));   // a brass hit to start each phrase
+  { static const int ARP[8] = { 0, 1, 2, 3, 2, 1, 2, 3 }; m_play(I_MARIMBA, midi_hz(tri[ARP[st]] + 12)); }
+  if (st == 0 || st == 4 || st == 5) m_play(I_KICK, 0);
+  if (st == 2 || st == 6) { m_play(I_SNARE, 0); m_play(I_CLAP, 0); }
+  m_play(I_HAT, 0);
 }
 static float music_sample(float dt) {
+  static int half_done;
   int want = pick_song();
-  if (want != song_now) { song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_bass.t = 9; m_stab[0].t = m_stab[1].t = m_stab[2].t = 9; m_kick.t = 9; m_snare = m_hat = 9; }
+  if (want != song_now) {
+    song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_harm.on = 0; half_done = 1;
+    for (int i = 0; i < 28; i++) m_pool[i].ins = -1;
+  }
   if (want < 0) return 0;
   const Song* sg = &SONGS[want];
   mus_t += dt;
@@ -1496,13 +1737,12 @@ static float music_sample(float dt) {
     mus_step = (mus_step + 1) % (int)strlen(sg->mel);
     float beat = 60.0f / sg->bpm;                       // two eighth notes, the first one longer (swing)
     mus_len = beat * (mus_step % 2 == 0 ? sg->swing : 1 - sg->swing);
-    music_step(sg);
-  }
+    music_step(sg, 0); half_done = 0;
+  } else if (!half_done && mus_t >= mus_len * 0.5f) { half_done = 1; music_step(sg, 1); }
   float s = 0, quiet = state == ST_PAUSE ? 0.35f : 1;
   // lead
   {
     float env = m_lead.on ? minf(1, m_lead.t * 90) * (0.55f + 0.45f * expf(-m_lead.t * 7)) : 0;
-    if (!m_lead.on && m_lead.t < 0.08f) env = 0.5f * (1 - m_lead.t / 0.08f);
     float vib = m_lead.t > 0.18f ? 1 + 0.006f * sinf(m_lead.t * 36) : 1;
     m_lead.ph += m_lead.hz * vib * dt; m_lead.ph -= (int)m_lead.ph;
     m_lead.ph2 += m_lead.hz * 2 * dt; m_lead.ph2 -= (int)m_lead.ph2;
@@ -1510,27 +1750,37 @@ static float music_sample(float dt) {
     if (sg->lead == 2) w = (sinf(m_lead.ph * 6.28318f) + 0.45f * sinf(m_lead.ph2 * 6.28318f * 1.5f) * expf(-m_lead.t * 9)) * expf(-m_lead.t * 3.5f) * 1.5f;   // bell
     else if (sg->lead == 1) w = ((m_lead.ph < 0.3f ? 1 : -1) * 0.6f + (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.5f) * expf(-m_lead.t * 5);                       // plucky
     else w = (4 * fabsf(m_lead.ph - 0.5f) - 1) * 0.75f + (m_lead.ph < 0.5f ? 0.3f : -0.3f) + 0.25f * sinf(m_lead.ph2 * 6.28318f);                          // round whistle
-    s += w * env * 0.085f;
+    s += w * env * 0.075f;
     m_lead.t += dt;
+    // the second voice: a soft flute
+    float henv = m_harm.on ? minf(1, m_harm.t * 40) * (0.6f + 0.4f * expf(-m_harm.t * 5)) : 0;
+    m_harm.ph += m_harm.hz * (1 + 0.004f * sinf(m_harm.t * 30)) * dt; m_harm.ph -= (int)m_harm.ph;
+    s += (sinf(m_harm.ph * 6.28318f) + 0.3f * sinf(m_harm.ph * 12.56636f)) * henv * 0.034f;
+    m_harm.t += dt;
   }
-  // bass: a bouncy, short note
-  if (m_bass.t < 0.4f) {
-    m_bass.ph += m_bass.hz * dt; m_bass.ph -= (int)m_bass.ph;
-    s += ((4 * fabsf(m_bass.ph - 0.5f) - 1) + 0.5f * sinf(m_bass.ph * 6.28318f)) * expf(-m_bass.t * 7) * 0.13f;
-    m_bass.t += dt;
-  }
-  // off-beat chord "pah"
-  for (int i = 0; i < 3; i++) if (m_stab[i].t < 0.25f) {
-    m_stab[i].ph += m_stab[i].hz * dt; m_stab[i].ph -= (int)m_stab[i].ph;
-    s += ((m_stab[i].ph < 0.5f ? 0.5f : -0.5f) + sinf(m_stab[i].ph * 6.28318f)) * expf(-m_stab[i].t * 22) * 0.028f;
-    m_stab[i].t += dt;
-  }
-  // drums
-  if (m_kick.t < 0.14f) { m_kick.ph += (50 + 110 * expf(-m_kick.t * 40)) * dt; s += sinf(m_kick.ph * 6.28318f) * (1 - m_kick.t / 0.14f) * 0.16f; m_kick.t += dt; }
   m_noise = m_noise * 1664525u + 1013904223u;
   float nz = ((m_noise >> 16) & 0xFFFF) / 32768.0f - 1;
-  if (m_snare < 0.09f) { s += nz * (1 - m_snare / 0.09f) * 0.045f; m_snare += dt; }
-  if (m_hat < 0.025f) { s += nz * (1 - m_hat / 0.025f) * 0.022f; m_hat += dt; }
+  for (int i = 0; i < 28; i++) {
+    MNote* n = &m_pool[i];
+    if (n->ins < 0) continue;
+    float t = n->t, w = 0, len = 0.3f;
+    n->ph += n->hz * dt; n->ph -= (int)n->ph;
+    float sn = sinf(n->ph * 6.28318f), tr = 4 * fabsf(n->ph - 0.5f) - 1;
+    switch (n->ins) {
+      case I_BASS: len = 0.3f; w = (tr + 0.5f * sn) * expf(-t * 9) * 0.12f; break;
+      case I_STAB: len = 0.2f; w = ((n->ph < 0.5f ? 0.5f : -0.5f) + sn) * expf(-t * 24) * 0.024f; break;
+      case I_MARIMBA: len = 0.22f; w = (sn + 0.35f * sinf(n->ph * 6.28318f * 4) * expf(-t * 60)) * expf(-t * 18) * 0.034f; break;
+      case I_BRASS: len = 0.3f; w = ((2 * n->ph - 1) * 0.7f + tr * 0.5f) * minf(1, t * 60) * expf(-t * 9) * 0.03f; break;
+      case I_BELL: len = 0.35f; w = (sn + 0.5f * sinf(n->ph * 6.28318f * 3)) * expf(-t * 12) * 0.02f; break;
+      case I_KICK: len = 0.14f; n->ph += (50 + 110 * expf(-t * 40)) * dt; w = sinf(n->ph * 6.28318f) * (1 - t / 0.14f) * 0.16f; break;
+      case I_SNARE: len = 0.09f; w = nz * (1 - t / 0.09f) * 0.04f; break;
+      case I_HAT: len = 0.022f; w = nz * (1 - t / 0.022f) * 0.018f; break;
+      case I_CLAP: len = 0.07f; w = nz * (t < 0.012f || (t > 0.02f && t < 0.07f) ? 1 : 0) * (1 - t / 0.07f) * 0.03f; break;
+    }
+    s += w;
+    n->t += dt;
+    if (n->t >= len) n->ins = -1;
+  }
   return s * quiet;
 }
 
