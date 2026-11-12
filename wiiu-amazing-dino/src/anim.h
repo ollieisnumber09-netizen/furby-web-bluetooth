@@ -102,7 +102,7 @@ static void dino_render(Bmp* b, const DinoPose* p, int flip, float S) {
       }
       float mx = bx - 0.2f, my = by - 3.4f, dm;
       if (p->mood == 2) dm = sd_seg(mx, my, 1, 1.5f, 7.4f, 1.5f) - 0.8f;
-      else if (p->mood == 5) dm = minf(minf(sd_seg(mx, my, 0.6f, 2.6f, 2.6f, 0.8f), sd_seg(mx, my, 2.6f, 0.8f, 5.8f, 0.8f)), sd_seg(mx, my, 5.8f, 0.8f, 7.8f, 2.6f)) - 0.8f;   // a frown
+      else if (p->mood == 5) dm = minf(minf(sd_seg(mx, my, 0, 3.0f, 2.1f, 0.6f), sd_seg(mx, my, 2.1f, 0.6f, 4.2f, 2.2f)), minf(sd_seg(mx, my, 4.2f, 2.2f, 6.3f, 0.6f), sd_seg(mx, my, 6.3f, 0.6f, 8.4f, 3.0f))) - 0.75f;   // his squiggly mouth, turned down
       else {
         dm = minf(minf(sd_seg(mx, my, 0, 0, 2.1f, 2.1f), sd_seg(mx, my, 2.1f, 2.1f, 4.2f, 0)),
                   minf(sd_seg(mx, my, 4.2f, 0, 6.3f, 2.1f), sd_seg(mx, my, 6.3f, 2.1f, 8.4f, 0))) - 0.75f;

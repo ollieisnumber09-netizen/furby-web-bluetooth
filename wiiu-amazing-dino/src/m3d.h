@@ -97,7 +97,7 @@ static uint32_t mat_colour(uint32_t col, int mat, const float* o, float* gloss) 
       }
       float mx = bx, my = by - 3.4f, dm;
       if (FACE.mood == 2) dm = sd_seg(mx, my, 1, 1.5f, 7.4f, 1.5f) - 0.8f;
-      else if (FACE.mood == 5) dm = minf(minf(sd_seg(mx, my, 0.6f, 2.8f, 2.6f, 0.8f), sd_seg(mx, my, 2.6f, 0.8f, 5.8f, 0.8f)), sd_seg(mx, my, 5.8f, 0.8f, 7.8f, 2.8f)) - 0.8f;   // a frown
+      else if (FACE.mood == 5) dm = minf(minf(sd_seg(mx, my, 0, 3.0f, 2.1f, 0.6f), sd_seg(mx, my, 2.1f, 0.6f, 4.2f, 2.2f)), minf(sd_seg(mx, my, 4.2f, 2.2f, 6.3f, 0.6f), sd_seg(mx, my, 6.3f, 0.6f, 8.4f, 3.0f))) - 0.75f;   // his squiggly mouth, turned down
       else {
         dm = minf(minf(sd_seg(mx, my, 0, 0, 2.1f, 2.1f), sd_seg(mx, my, 2.1f, 2.1f, 4.2f, 0)),
                   minf(sd_seg(mx, my, 4.2f, 0, 6.3f, 2.1f), sd_seg(mx, my, 6.3f, 2.1f, 8.4f, 0))) - 0.75f;
