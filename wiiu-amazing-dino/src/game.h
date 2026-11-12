@@ -1,4 +1,4 @@
-// Canopy Dino: an original little platformer. The game itself is plain C with no
+// Amazing Dino: an original little platformer. The game itself is plain C with no
 // platform code: it draws into a 640x360 pixel buffer and makes its own sound, so the same
 // code runs on the Wii U and in the desktop test harness.
 #pragma once

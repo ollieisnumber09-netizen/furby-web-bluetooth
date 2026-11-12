@@ -1,4 +1,4 @@
-// Canopy Dino: Wii U (and desktop SDL2) front end. Opens the window (on the Wii U SDL shows it
+// Amazing Dino: Wii U (and desktop SDL2) front end. Opens the window (on the Wii U SDL shows it
 // on both the TV and the GamePad), reads the controllers, runs the game at 60 ticks a second
 // and plays its sound.
 #include <SDL2/SDL.h>
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
   WPADEnableURCC(1);
   WPADEnableWiiRemote(1);
 #endif
-  SDL_Window* win = SDL_CreateWindow("Canopy Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
+  SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
   SDL_Renderer* r = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_RenderSetLogicalSize(r, 1280, 720);
   SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);

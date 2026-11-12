@@ -3,8 +3,8 @@ void plat_sfx(int id) {}
 static uint32_t fb[FB_W * FB_H];
 int main(void) {
   game_init();
-  int lv[3] = { 5, 8, 10 };
-  for (int k = 0; k < 3; k++) {
+  int lv[5] = { 5, 8, 10, 14, 17 };
+  for (int k = 0; k < 5; k++) {
     start_level(lv[k]); lives = 9;
     Ent* b = &ents[boss_i];
     px = arena_x0 + 40; py = b->by - 40; update_camera(1);
@@ -16,7 +16,7 @@ int main(void) {
         // a simple fighter: walk towards the boss and jump so as to land on it
         float dx = b->x + 15 - (px + 5);
         in.right = dx > 4; in.left = dx < -4;
-        if (on_ground && fabsf(dx) < 60 && fabsf(dx) > 20 && !boss_inv && (b->k != 2 || b->y > b->by + 40)) in.jump = 1;
+        if (on_ground && fabsf(dx) < 60 && fabsf(dx) > 20 && !boss_inv && (!BOSS_BEE(b->k) || b->y > b->by + 40)) in.jump = 1;
         if (!on_ground && pvy < 0) in.jump = 1;
       } else in.right = 1;
       game_update(&in);

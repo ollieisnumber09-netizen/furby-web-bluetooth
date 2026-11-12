@@ -415,8 +415,9 @@ static unsigned char NEAR_ROW[FB_H];   // 0 empty, 1 solid, 2 mixed
 static int bg_theme = -1;
 static void hd_render_bg(void) {
   int th = L->theme;
-  if (bg_theme == th) return;
-  bg_theme = th;
+  static uint32_t bg_cols[4];
+  if (bg_theme == th && bg_cols[0] == L->sky0 && bg_cols[1] == L->sky1 && bg_cols[2] == L->far && bg_cols[3] == L->nearc) return;
+  bg_theme = th; bg_cols[0] = L->sky0; bg_cols[1] = L->sky1; bg_cols[2] = L->far; bg_cols[3] = L->nearc;
   if (!BG_FAR.px) {
     BG_FAR = bmp_new(BGW, FB_H); BG_NEAR = bmp_new(BGW, FB_H);
     HD_SUN = bmp_new(68, 68); HD_MOON = bmp_new(62, 62);

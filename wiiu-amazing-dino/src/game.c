@@ -1,4 +1,4 @@
-// Canopy Dino: game logic, drawing and sound. See game.h.
+// Amazing Dino: game logic, drawing and sound. See game.h.
 #include "game.h"
 #include <math.h>
 #include <string.h>
@@ -446,6 +446,81 @@ static const Op L12[] = {   // The Summit: the last climb
   {'I', 23, 5, 4, 1}, {'z', 27, 2}, {'x', 8, 3, 13, 1}, {'F', 11, 2},
   {0}
 };
+static const Op L13[] = {   // Vine Valley
+  {'g', 0, 11, 22}, {'P', 3, 10}, {'B', 8, 7, 0}, {'o', 12, 8, 4}, {'b', 17, 10},
+  {'=', 23, 9, 3}, {'=', 27, 7, 3}, {'o', 27, 6, 3}, {'=', 31, 9, 3},
+  {'g', 35, 11, 16}, {'b', 39, 10}, {'b', 45, 10}, {'B', 42, 7, 1}, {'x', 47, 9, 2, 2}, {'o', 47, 7, 2},
+  {'g', 51, 12, 3}, {'^', 51, 11, 3},
+  {'g', 54, 11, 14}, {'c', 56, 10}, {'z', 61, 6}, {'o', 59, 8, 5},
+  {'=', 69, 9, 4}, {'=', 74, 7, 4}, {'o', 74, 6, 4}, {'z', 76, 3}, {'=', 79, 9, 4},
+  {'g', 84, 11, 12}, {'s', 86, 10}, {'=', 90, 6, 4}, {'o', 90, 5, 4}, {'b', 93, 10},
+  {'g', 96, 9, 6}, {'o', 97, 7, 4},
+  {'g', 102, 11, 28}, {'b', 107, 10}, {'b', 112, 10}, {'B', 110, 7, 2}, {'z', 116, 6}, {'o', 118, 8, 5}, {'F', 124, 10},
+  {0}
+};
+static const Op L14[] = {   // Bamboo Bridges
+  {'g', 0, 13, 12}, {'P', 2, 12}, {'B', 6, 9, 0}, {'b', 9, 12},
+  {'=', 13, 12, 5}, {'=', 19, 11, 5}, {'o', 19, 10, 5}, {'z', 22, 7}, {'=', 25, 10, 5}, {'=', 31, 11, 4},
+  {'g', 36, 13, 8}, {'c', 38, 12}, {'b', 41, 12}, {'B', 40, 9, 1},
+  {'=', 45, 11, 3}, {'=', 49, 9, 3}, {'=', 53, 7, 3}, {'o', 53, 6, 3}, {'=', 57, 9, 3}, {'=', 61, 11, 3}, {'z', 55, 3},
+  {'g', 65, 13, 10}, {'x', 68, 11, 2, 2}, {'b', 72, 12}, {'o', 68, 9, 2},
+  {'g', 75, 13, 3}, {'s', 76, 12}, {'=', 80, 6, 6}, {'o', 80, 5, 6}, {'=', 87, 8, 4}, {'b', 88, 7},
+  {'g', 92, 13, 12}, {'^', 95, 12, 2}, {'^', 99, 12, 2}, {'o', 95, 9, 2}, {'o', 99, 9, 2},
+  {'=', 105, 11, 4}, {'=', 110, 10, 4}, {'z', 112, 6}, {'=', 115, 11, 4},
+  {'g', 120, 13, 20}, {'b', 125, 12}, {'B', 127, 9, 0}, {'o', 129, 10, 4}, {'F', 134, 12},
+  {0}
+};
+static const Op L15[] = {   // Thunder Grove: the Jungle King waits at the end
+  {'g', 0, 11, 18}, {'P', 2, 10}, {'B', 6, 7, 1}, {'b', 10, 10}, {'b', 14, 10},
+  {'g', 18, 9, 5}, {'o', 18, 7, 5},
+  {'g', 23, 11, 12}, {'^', 27, 10, 2}, {'z', 30, 5}, {'x', 32, 9, 2, 2},
+  {'g', 35, 11, 4},
+  {'=', 41, 9, 3}, {'=', 46, 7, 3}, {'o', 46, 6, 3}, {'=', 51, 9, 3},
+  {'g', 56, 11, 16}, {'c', 58, 10}, {'b', 62, 10}, {'b', 66, 10}, {'b', 70, 10}, {'=', 61, 8, 8}, {'o', 62, 7, 6},
+  {'g', 72, 12, 3}, {'^', 72, 11, 3},
+  {'g', 75, 11, 10}, {'s', 77, 10}, {'o', 80, 4, 4}, {'z', 82, 7},
+  {'g', 87, 9, 5}, {'o', 87, 7, 5},
+  {'g', 94, 11, 26}, {'x', 98, 9, 2, 2}, {'b', 103, 10}, {'b', 108, 10}, {'z', 106, 6}, {'B', 111, 7, 0}, {'F', 114, 10},
+  {0}
+};
+static const Op L16[] = {   // Snowball Hills
+  {'g', 0, 11, 16}, {'P', 3, 10}, {'B', 8, 7, 0}, {'b', 12, 10},
+  {'g', 16, 10, 5}, {'g', 21, 9, 5}, {'o', 21, 7, 5}, {'g', 26, 10, 5},
+  {'I', 31, 11, 12, 3}, {'b', 36, 10}, {'o', 33, 9, 6},
+  {'g', 46, 11, 10}, {'x', 49, 9, 2, 2}, {'B', 52, 7, 1}, {'b', 54, 10},
+  {'I', 59, 11, 5, 3}, {'I', 67, 11, 5, 3}, {'z', 65, 7}, {'o', 60, 9, 3}, {'o', 68, 9, 3},
+  {'g', 75, 11, 12}, {'c', 77, 10}, {'^', 81, 10, 2}, {'b', 85, 10},
+  {'g', 87, 9, 5}, {'o', 87, 7, 5}, {'g', 92, 7, 5}, {'o', 92, 5, 5}, {'g', 97, 9, 5},
+  {'I', 102, 11, 14, 3}, {'b', 106, 10}, {'b', 112, 10}, {'z', 109, 6},
+  {'g', 116, 11, 24}, {'B', 121, 7, 2}, {'b', 126, 10}, {'o', 128, 8, 5}, {'F', 134, 10},
+  {0}
+};
+static const Op L17[] = {   // Crystal Cavern
+  {'x', 0, 0, 140, 5},
+  {'G', 0, 13, 16}, {'P', 2, 12}, {'v', 8, 5}, {'v', 12, 5}, {'b', 13, 12}, {'B', 5, 9, 0},
+  {'I', 16, 13, 12, 3}, {'v', 19, 5}, {'v', 23, 5}, {'o', 18, 11, 8},
+  {'G', 31, 11, 5}, {'o', 31, 9, 5},
+  {'G', 39, 13, 14}, {'b', 43, 12}, {'b', 49, 12}, {'v', 45, 5}, {'v', 50, 5}, {'B', 41, 9, 1},
+  {'=', 55, 11, 4}, {'=', 61, 10, 4}, {'o', 61, 9, 4}, {'v', 62, 5}, {'=', 67, 11, 4},
+  {'G', 72, 13, 14}, {'c', 74, 12}, {'^', 78, 12, 2}, {'^', 83, 12, 2}, {'z', 81, 8}, {'v', 80, 5},
+  {'I', 86, 13, 14, 3}, {'v', 89, 5}, {'v', 93, 5}, {'v', 97, 5}, {'b', 95, 12},
+  {'G', 103, 13, 4}, {'s', 104, 12}, {'o', 107, 7, 4}, {'=', 107, 13, 3},
+  {'G', 110, 11, 6}, {'o', 111, 9, 5},
+  {'G', 118, 13, 22}, {'b', 123, 12}, {'b', 128, 12}, {'B', 125, 9, 2}, {'v', 127, 5}, {'F', 134, 12},
+  {0}
+};
+static const Op L18[] = {   // Blizzard Pass: the Snow Queen waits at the end
+  {'g', 0, 13, 14}, {'P', 2, 12}, {'B', 6, 9, 1}, {'b', 10, 12},
+  {'I', 16, 12, 4, 1}, {'I', 22, 11, 4, 1}, {'o', 22, 10, 4}, {'I', 28, 12, 4, 1}, {'z', 25, 7},
+  {'g', 34, 13, 12}, {'x', 38, 11, 2, 2}, {'b', 43, 12}, {'o', 38, 9, 2},
+  {'I', 46, 13, 10, 3}, {'o', 48, 11, 6},
+  {'=', 58, 11, 3}, {'=', 63, 9, 3}, {'o', 63, 8, 3}, {'=', 68, 11, 3}, {'z', 66, 5},
+  {'g', 73, 13, 12}, {'c', 75, 12}, {'b', 79, 12}, {'b', 83, 12}, {'B', 81, 9, 0},
+  {'g', 85, 11, 5}, {'g', 90, 9, 5}, {'o', 90, 7, 5},
+  {'I', 97, 9, 4, 1}, {'I', 103, 10, 4, 1}, {'I', 109, 12, 4, 1}, {'z', 105, 6},
+  {'g', 115, 13, 25}, {'^', 119, 12, 2}, {'b', 125, 12}, {'b', 131, 12}, {'B', 128, 9, 2}, {'F', 134, 12},
+  {0}
+};
 static const Level LEVELS[] = {
   { "1  JUNGLE FLOOR", 140, 14, 0xFF7EC8F0, 0xFFD4F1F9, 0xFF6FB07E, 0xFF3F8452, 0, L1,
     { "A: JUMP. HOLD IT TO JUMP HIGHER", "X OR Y: HEADBUTT. JUMP UNDER BOXES TO OPEN THEM", "SPRINGS BOUNCE YOU UP HIGH" } },
@@ -466,6 +541,14 @@ static const Level LEVELS[] = {
   { "10 NORTHERN LIGHTS", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L10, { 0 } },
   { "11 GLACIER GAP", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L11, { 0 } },
   { "12 THE SUMMIT", 40, 40, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L12, { 0 } },
+  // world 4: Wild Jungle
+  { "13 VINE VALLEY", 130, 14, 0xFFF08A4A, 0xFFFFE0A8, 0xFF7FA85E, 0xFF3F7A46, 0, L13, { 0 } },
+  { "14 BAMBOO BRIDGES", 140, 16, 0xFF4FC2B8, 0xFFD8F7E4, 0xFF63B08A, 0xFF2F7A5A, 4, L14, { 0 } },
+  { "15 THUNDER GROVE", 120, 14, 0xFF4A4A78, 0xFFB8A8C8, 0xFF4F7A6A, 0xFF2A5244, 0, L15, { 0 } },
+  // world 5: Snowflake Peaks
+  { "16 SNOWBALL HILLS", 140, 14, 0xFFF0A8C0, 0xFFFFF0E0, 0xFFE8DCEC, 0xFF9A9CC4, 5, L16, { 0 } },
+  { "17 CRYSTAL CAVERN", 140, 16, 0xFF141038, 0xFF3A2F7A, 0xFF2A2460, 0xFF1C1848, 6, L17, { 0 } },
+  { "18 BLIZZARD PASS", 140, 16, 0xFF10183C, 0xFF3F5490, 0xFF8FA3D0, 0xFF55689C, 7, L18, { 0 } },
 };
 #define NLEVELS (int)(sizeof LEVELS / sizeof LEVELS[0])
 
@@ -503,26 +586,29 @@ static int ncheck;
 
 static int lvl_frames; int g_no_hud;
 // world map: node 0 is Dino's house, node n is level n
-static int cleared[20], map_node, map_from, map_t, world;
+static int cleared[24], map_node, map_from, map_t, world;
 // Each world is its own map. A stop is a level (kind >= 0, the level's index), Dino's house (-1),
 // the way back to the world before (-2) or the way on to the next world (-3).
 typedef struct { const char* name; int n; short xy[8][2]; signed char kind[8]; } World;
-static const World WORLDS[3] = {
+static const World WORLDS[5] = {
   { "JUNGLE ISLAND", 8, { {38, 146}, {84, 134}, {130, 108}, {96, 62}, {166, 50}, {226, 92}, {282, 44}, {306, 112} }, { -1, 0, 1, 2, 3, 4, 5, -3 } },
   { "FROSTY FOREST", 5, { {22, 150}, {80, 128}, {140, 100}, {204, 74}, {276, 46} }, { -2, 6, 7, 8, -3 } },
-  { "ICE MOUNTAIN", 4, { {26, 150}, {92, 128}, {164, 98}, {238, 54} }, { -2, 9, 10, 11 } },
+  { "ICE MOUNTAIN", 5, { {26, 150}, {92, 128}, {164, 98}, {238, 54}, {298, 104} }, { -2, 9, 10, 11, -3 } },
+  { "WILD JUNGLE", 5, { {24, 150}, {84, 120}, {150, 138}, {214, 98}, {290, 62} }, { -2, 12, 13, 14, -3 } },
+  { "SNOWFLAKE PEAKS", 4, { {24, 62}, {92, 98}, {168, 72}, {252, 120} }, { -2, 15, 16, 17 } },
 };
-#define NWORLDS 3
+#define NWORLDS 5
+#define SNOW_WORLD (world == 1 || world == 2 || world == 4)
 #define MAP_XY (WORLDS[world].xy)
 #ifndef SAVE_PATH
-#define SAVE_PATH "canopydino-save.txt"
+#define SAVE_PATH "amazingdino-save.txt"
 #endif
 #ifdef __WIIU__
 #include <sys/stat.h>
 #endif
 static void save_progress(void) {
 #ifdef __WIIU__
-  mkdir("fs:/vol/external01/wiiu/apps/CanopyDino", 0777);
+  mkdir("fs:/vol/external01/wiiu/apps/AmazingDino", 0777);
 #endif
   FILE* f = fopen(SAVE_PATH, "w");
   if (!f) return;
@@ -532,6 +618,9 @@ static void save_progress(void) {
 }
 static void load_progress(void) {
   FILE* f = fopen(SAVE_PATH, "r");
+#ifdef __WIIU__
+  if (!f) f = fopen("fs:/vol/external01/wiiu/apps/CanopyDino/save.txt", "r");   // progress from before the game was renamed
+#endif
   if (!f) return;
   char b[32] = { 0 };
   if (fgets(b, sizeof b, f)) for (int i = 1; i <= NLEVELS && b[i - 1]; i++) cleared[i] = b[i - 1] == '1';
@@ -584,8 +673,10 @@ static Ent* add_ent(int type, int tx, int ty) {
   e->vx = -0.5f; e->t = tx * 13;
   return e;
 }
-static const char* const BOSS_NAME[3] = { "KING BEETLE", "FROST KING", "QUEEN BEE" };
-static int boss_kind(int n) { return n == 5 ? 0 : n == 8 ? 1 : n == 10 ? 2 : -1; }
+static const char* const BOSS_NAME[5] = { "KING BEETLE", "FROST KING", "QUEEN BEE", "JUNGLE KING", "SNOW QUEEN" };
+#define BOSS_BEE(k) ((k) == 2 || (k) == 4)
+#define BOSS_COL(k) ((k) == 0 ? 2 : (k) == 1 ? 1 : 0)   // beetle3d colour: red, icy, green
+static int boss_kind(int n) { return n == 5 ? 0 : n == 8 ? 1 : n == 10 ? 2 : n == 14 ? 3 : n == 17 ? 4 : -1; }
 static void extend_level(int n) {
   boss_i = -1; boss_awake = boss_dead = 0; g_boss_music = 0;
   if (LH > 20) return;   // the tall climbing levels stay as they are
@@ -601,7 +692,8 @@ static void extend_level(int n) {
   gen_seed = 1234567u + n * 7919u;
   int end = LW + (bk >= 0 ? 90 : 130), cnt = 0, last = -1;
   while (x < end) {
-    int k = grnd(snow ? 9 : 8);
+    int k = grnd(n >= 12 ? 11 : (snow ? 9 : 8));   // the two newest worlds have extra set pieces
+    if (!snow && k == 8) k = 10;
     if (k == last) k = (k + 1) % 8;
     last = k; cnt++;
     if (cnt % 5 == 0) { for (int i = 0; i < 6; i++) COL(x + i, gy); G[gy - 1][x + 2] = 'c'; x += 6; continue; }
@@ -684,6 +776,31 @@ static void extend_level(int n) {
         add_ent(E_BEETLE, x + w - 2, gy - 1);
         x += w; break;
       }
+      case 9: {   // zigzag planks over a pit, with a bee
+        for (int i = 0; i < 2; i++) COL(x + i, gy);
+        x += 2;
+        for (int j = 0; j < 4; j++) {
+          int yy = gy - 1 - (j % 2) * 2;
+          for (int i = 0; i < 4; i++) G[yy][x + j * 4 + i] = '=';
+          G[yy - 2][x + j * 4 + 1] = 'o';
+        }
+        add_ent(E_BEE, x + 8, gy - 7);
+        x += 16;
+        for (int i = 0; i < 2; i++) COL(x + i, gy);
+        x += 2; break;
+      }
+      case 10: {
+        for (int i = 0; i < 12; i++) COL(x + i, gy);
+        if (snow) {   // icicles hanging under an ice ledge
+          for (int i = 3; i < 9; i++) G[gy - 5][x + i] = 'I';
+          for (int i = 4; i < 9; i += 2) { Ent* e = add_ent(E_ICE, x + i, gy - 4); if (e) { e->y = e->by = (gy - 4) * T; e->vx = 0; e->t = 0; } }
+          for (int i = 5; i < 8; i++) G[gy - 2][x + i] = 'o';
+        } else {      // a beetle parade under a plank roof
+          for (int i = 2; i < 10; i++) { G[gy - 3][x + i] = '='; G[gy - 4][x + i] = 'o'; }
+          add_ent(E_BEETLE, x + 4, gy - 1); add_ent(E_BEETLE, x + 7, gy - 1); add_ent(E_BEETLE, x + 10, gy - 1);
+        }
+        x += 12; break;
+      }
     }
   }
   if (bk >= 0) {
@@ -694,8 +811,8 @@ static void extend_level(int n) {
     Ent* e = add_ent(E_BOSS, x + 26, gy - 1);
     if (e) {
       boss_i = (int)(e - ents); e->k = bk;
-      e->x = e->x0 = (x + 26) * T; e->y = e->by = bk == 2 ? gy * T - 84 : gy * T - 26;
-      boss_max = boss_hp = 3 + bk;
+      e->x = e->x0 = (x + 26) * T; e->y = e->by = BOSS_BEE(bk) ? gy * T - 84 : gy * T - 26;
+      boss_max = boss_hp = bk >= 3 ? bk + 2 : 3 + bk;
     }
     x += 38;
   }
@@ -990,19 +1107,19 @@ static void update_boss(Ent* e) {
     if (px > arena_x0 + 16 && !dead_t) { boss_awake = 1; g_boss_music = 1; e->t = 1; } else return;
   }
   if (boss_inv > 0) boss_inv--;
-  float spd = 0.7f + 0.28f * (boss_max - boss_hp);
-  if (e->k == 2) {
+  float spd = 0.7f + (e->k >= 3 ? 0.2f : 0.28f) * (boss_max - boss_hp);
+  if (BOSS_BEE(e->k)) {
     // the Queen Bee hovers out of reach, then swoops down low at Dino
     if (e->vx == 0) e->vx = -spd;
     e->vx = e->vx > 0 ? spd : -spd;
     e->x += e->vx;
-    int cyc = e->t % 260;
-    float ty = cyc < 130 ? e->by + sinf(e->t * 0.08f) * 6 : e->by + 56;
+    int per = e->k == 4 ? 220 : 260, cyc = e->t % per;
+    float ty = cyc < per / 2 ? e->by + sinf(e->t * 0.08f) * 6 : e->by + 56;
     e->y += (ty - e->y) * 0.07f;
   } else {
     // the beetle kings march up and down and leap at Dino
     int grounded = e->y >= e->by;
-    if (grounded && e->t % (e->k ? 120 : 140) == 0) { e->vy = -5.6f; e->vx = (px > e->x + 15 ? 1 : -1) * spd * 1.6f; grounded = 0; }
+    if (grounded && e->t % (e->k == 3 ? 100 : e->k ? 120 : 140) == 0) { e->vy = -5.6f; e->vx = (px > e->x + 15 ? 1 : -1) * spd * 1.6f; grounded = 0; }
     e->vy += 0.3f; e->y += e->vy;
     if (e->y >= e->by) {
       if (e->vy > 2) { plat_sfx(SFX_STOMP); spawn_parts(e->x + 15, e->y + bh, 14, 0xFFE8E0C8, 2.2f, 0.4f); }
@@ -1263,15 +1380,15 @@ static void draw_world(void) {
       float S = 2.4f;
       if (boss_inv && (frame / 3) % 2 && !e->dying) continue;   // flashes after a hit
       const Bmp* pic = &ESCR;
-      if (e->k == 2) {
+      if (BOSS_BEE(e->k)) {
         if (steady) { Bmp* c = &QBEE_C[dir][e->t % 8]; if (!c->px) bee3d(c, (e->t % 8) * 0.7854f, 0, dir ? 1.0f : -1.0f, 0, S, 1); pic = c; }
         else { RT_SS = 1; bee3d(&ESCR, (e->t % 8) * 0.7854f, 0, e->fz * 1.0f + e->dying * 0.3f, e->dying, S, 1); RT_SS = 2; }
         hblit(pic, (int)ex + 30 - (int)(28 * S), (int)ey + 24 - (int)(28 * S) + e->dying, 0);
       } else {
         float air = e->by - e->y;
         fb_shadow(ex + 30, (e->by + 24) * 2 - CY + 1, 30 - air * 0.2f, 5, 0.2f);
-        if (steady) { Bmp* c = &BOSS_C[dir][e->t % 20]; if (!c->px) beetle3d(c, (e->t % 20) * 0.31416f, 1, dir ? 1.0f : -1.0f, e->k ? 1 : 2, 0, 0, S, 1); pic = c; }
-        else { RT_SS = 1; beetle3d(&ESCR, (e->t % 20) * 0.31416f, e->dying ? maxf(0.3f, 1 - e->dying * 0.02f) : 1, e->fz * 1.0f + e->dying * 0.25f, e->k ? 1 : 2, e->dying, e->t, S, 1); RT_SS = 2; }
+        if (steady) { Bmp* c = &BOSS_C[dir][e->t % 20]; if (!c->px) beetle3d(c, (e->t % 20) * 0.31416f, 1, dir ? 1.0f : -1.0f, BOSS_COL(e->k), 0, 0, S, 1); pic = c; }
+        else { RT_SS = 1; beetle3d(&ESCR, (e->t % 20) * 0.31416f, e->dying ? maxf(0.3f, 1 - e->dying * 0.02f) : 1, e->fz * 1.0f + e->dying * 0.25f, BOSS_COL(e->k), e->dying, e->t, S, 1); RT_SS = 2; }
         hblit(pic, (int)ex + 30 - (int)(26 * S), (int)ey + 48 - (int)(36 * S), 0);
       }
       continue;
@@ -1466,12 +1583,63 @@ static void map_snow(int night) {
     for (int j = 0; j < 6; j++) fill(239, 22 + j, 7 - j / 2 + (frame / 8) % 2, 1, 0xFFD8463C);
     static const short P[][2] = { {56, 120}, {70, 152}, {118, 108}, {128, 140}, {196, 128}, {150, 70}, {40, 126}, {104, 150} };
     for (unsigned t = 0; t < sizeof P / sizeof P[0]; t++) pine(P[t][0], P[t][1], green);
+    boat(310, 112 + (frame / 30) % 2);
     // lift station back down
     fill(12, 128, 2, 24, 0xFF575A66); fill(6, 128, 14, 2, 0xFF575A66);
     fill(2 + (frame / 8) % 6, 132, 6, 5, 0xFFD8463C);
   }
   // falling snow
   for (int i = 0; i < 50; i++) {
+    uint32_t h = hash2(i, 77);
+    int x = (int)(h % SCR_W + frame * (0.2f + (i % 3) * 0.1f)) % SCR_W, y = (int)((h >> 9) % SCR_H + frame * (0.4f + (i % 4) * 0.15f)) % SCR_H;
+    put(x, y, 0xFFFFFFFF);
+  }
+}
+// The two newest worlds: the land follows the path, with trees scattered on it and one landmark.
+static uint32_t map_px(int x, int y) { return (unsigned)x < SCR_W && (unsigned)y < SCR_H ? FB[y * 2 * FB_W + x * 2] : 0; }
+static void map_land(int snowy) {
+  const World* w = &WORLDS[world];
+  uint32_t rim = snowy ? 0xFFBFE0F5 : 0xFFF0D9A0, land = snowy ? 0xFFF4FAFF : 0xFF4FAE52, shade = snowy ? 0xFFDCEBF7 : 0xFF409A46;
+  for (int pass = 0; pass < 2; pass++) {
+    for (int n = 0; n < w->n; n++) {
+      disc(w->xy[n][0], w->xy[n][1], 28 + 5 * !pass, pass ? land : rim);
+      if (n + 1 < w->n) disc((w->xy[n][0] + w->xy[n + 1][0]) / 2, (w->xy[n][1] + w->xy[n + 1][1]) / 2 + 6, 30 + 5 * !pass, pass ? land : rim);
+    }
+    for (int k = 0; k < 4; k++) { uint32_t h = hash2(k, 31 + world); disc(50 + (int)(h % 220), 50 + (int)((h >> 9) % 90), 20 + 5 * !pass, pass ? land : rim); }
+  }
+  for (int y = 0; y < SCR_H; y++) for (int x = 0; x < SCR_W; x++)
+    if (map_px(x, y) == land && hash2(x, y + world * 50) % 10 == 0) put(x, y, shade);
+  // the landmark sits behind the last level of the world
+  int lx = w->xy[snowy ? 3 : 3][0], ly = w->xy[3][1];
+  if (snowy) {   // an ice castle
+    lx += 26; ly -= 30;
+    fill(lx - 12, ly, 24, 22, 0xFFA9DAF5); fill(lx - 16, ly - 10, 8, 32, 0xFF8FC4EC); fill(lx + 8, ly - 10, 8, 32, 0xFF8FC4EC);
+    for (int j = 0; j < 8; j++) { fill(lx - 12 - j / 2 - 0, ly - 18 + j, 1 + j, 1, 0xFFEAF8FF); fill(lx + 12 - j / 2, ly - 18 + j, 1 + j, 1, 0xFFEAF8FF); }
+    fill(lx - 3, ly + 12, 6, 10, 0xFF24346E); fill(lx - 12, ly, 24, 2, 0xFFEAF8FF);
+    fill(lx, ly - 12, 1, 12, 0xFFE0E0E0); for (int j = 0; j < 5; j++) fill(lx + 1, ly - 12 + j, 6 - j + (frame / 8) % 2, 1, 0xFFD8463C);
+  } else {       // a volcano with a little smoke
+    lx += 2; ly -= 46;
+    for (int j = 0; j < 36; j++) for (int i = -j * 3 / 4 - 3; i <= j * 3 / 4 + 3; i++)
+      put(lx + i, ly + j, j < 5 ? ((i + frame / 10) % 3 ? 0xFFFF8A2C : 0xFFFFD23C) : ((i * 2 + j) % 9 < 2 ? 0xFF5A3A2E : (i < 0 ? 0xFF8A5A46 : 0xFF74483A)));
+    for (int k = 0; k < 3; k++) disc(lx + k * 5 - 2, ly - 6 - k * 6 - (frame / 20) % 3, 4 + k, 0xFFE8E0E0);
+  }
+  uint32_t green = 0xFF2E7D5A;
+  for (int t = 0; t < 40; t++) {
+    uint32_t h = hash2(t, 61 + world);
+    int x = 14 + (int)(h % 292), y = 34 + (int)((h >> 10) % 124), ok = 1;
+    for (int dy = -8; dy <= 4 && ok; dy += 4) for (int dx = -6; dx <= 6; dx += 6) { uint32_t c = map_px(x + dx, y + dy); if (c != land && c != shade) ok = 0; }
+    for (int n = 0; n < w->n && ok; n++) {
+      int ax = w->xy[n][0], ay = w->xy[n][1];
+      if (abs(x - ax) < 14 && abs(y - ay) < 16) ok = 0;
+      if (n + 1 < w->n) for (int q = 1; q < 6; q++) if (abs(x - (ax + (w->xy[n + 1][0] - ax) * q / 6)) < 9 && abs(y - 3 - (ay + (w->xy[n + 1][1] - ay) * q / 6)) < 10) ok = 0;
+    }
+    if (!ok) continue;
+    if (snowy) pine(x, y, green);
+    else { fill(x - 1, y, 3, 6, 0xFF6B3F1D); disc(x, y - 3, 6, t % 3 ? 0xFF2E7D32 : 0xFF3F9A3A); disc(x - 2, y - 5, 2, 0xFF5FC25A); }
+  }
+  boat(w->xy[0][0] - 16, w->xy[0][1] + 8 + (frame / 30) % 2);
+  if (!snowy) boat(w->xy[w->n - 1][0] + 16, w->xy[w->n - 1][1] + 6 + (frame / 30) % 2);
+  if (snowy) for (int i = 0; i < 50; i++) {
     uint32_t h = hash2(i, 77);
     int x = (int)(h % SCR_W + frame * (0.2f + (i % 3) * 0.1f)) % SCR_W, y = (int)((h >> 9) % SCR_H + frame * (0.4f + (i % 4) * 0.15f)) % SCR_H;
     put(x, y, 0xFFFFFFFF);
@@ -1486,7 +1654,7 @@ static void draw_map(void) {
   keep_world = world;
   // sea
   uint32_t sea0 = 0xFF2F7FC1, sea1 = 0xFF5BB3E6, wave = 0xFF9ED6F5;
-  if (world == 1) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
+  if (world == 1 || world == 4) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
   if (world == 2) { sea0 = 0xFF0B1030; sea1 = 0xFF24346E; wave = 0xFF4A5C94; }
   for (int y = 0; y < SCR_H; y++) {
     fill(0, y, SCR_W, 1, blend(sea0, sea1, y / (float)SCR_H));
@@ -1496,7 +1664,7 @@ static void draw_map(void) {
     int x = (int)(h % SCR_W + frame / 6) % SCR_W, y = (h >> 9) % SCR_H;
     if ((frame / 15 + i) % 4) fill(x, y, 3, 1, wave);
   }
-  if (world == 0) map_jungle(); else map_snow(world == 2);
+  if (world == 0) map_jungle(); else if (world >= 3) map_land(world == 4); else map_snow(world == 2);
   // path between the stops
   for (int n = 0; n + 1 < w->n; n++) {
     int open = node_open(n + 1);
@@ -1504,7 +1672,7 @@ static void draw_map(void) {
     float len = sqrtf((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
     for (float d = 6; d < len - 5; d += 6) {
       int x = (int)(x0 + (x1 - x0) * d / len), y = (int)(y0 + (y1 - y0) * d / len);
-      fill(x - 1, y - 1, 3, 3, open ? (world ? 0xFFE08A2C : 0xFFFFF4C2) : (world ? 0xFF9FB4CC : 0xFF3E7D3B));
+      fill(x - 1, y - 1, 3, 3, open ? (SNOW_WORLD ? 0xFFE08A2C : 0xFFFFF4C2) : (SNOW_WORLD ? 0xFF9FB4CC : 0xFF3E7D3B));
     }
   }
   for (int n = 0; n < w->n; n++) {
@@ -1582,7 +1750,7 @@ void game_draw(uint32_t* fb) {
     }
     hblit(&HD_COIN[(frame / 2) % COIN_FRAMES], 80, 250 + (int)(sinf(frame * 0.08f) * 4), 0);
     hblit(&HD_COIN[(frame / 2 + 8) % COIN_FRAMES], 528, 250 + (int)(sinf(frame * 0.08f + 2) * 4), 0);
-    text_c("CANOPY DINO", 24, 5, 0xFFF7D038);
+    text_c("AMAZING DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
     if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
@@ -1662,31 +1830,65 @@ void synth_trigger(int id) {
 // Melody: one character per eighth note. '.' = rest, '-' = hold, otherwise semitones above the
 // tune's base note (0-9, then A=10, B=11, C=12 ...). Chords: two characters per bar, the root
 // (same code) and M for major or m for minor.
-typedef struct { int base, bpm, lead; float swing; const char* mel; const char* chords; } Song;
-enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_CAVE, SONG_SNOW, SONG_BOSS, NSONGS };
+// Each tune also has its own band: patterns (one character per eighth note, repeating) say when
+// the bass, chord stabs, drums and the "bah" singers come in, so no two tunes share a backing.
+//   bass: 0 root, 7 fifth, C octave, 3 third, A seventh.   snare: x snare and clap, c clap only.
+//   bah: b the singers sing the chord, l one low singer.   arp: 1 marimba runs all the time, 2 on the beat only.
+typedef struct {
+  int base, bpm, lead, spb; float swing;   // spb: eighth notes in a bar (8, or 6 for a waltz)
+  const char *mel, *chords, *bass, *stab, *kick, *snare, *hat, *bah;
+  int arp, bell, harm, brass;
+} Song;
+enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_WILD, SONG_CAVE, SONG_FALLS, SONG_SNOW, SONG_ICE, SONG_NIGHT, SONG_BOSS, NSONGS };
 static const Song SONGS[NSONGS] = {
-  { 62, 178, 0, 0.60f,   // Hello Dino (title)
-    "0.47.C.7" "9.CH.L.H" "J.EB.7.B" "C.7C.G.." "L.GL.G.C" "H.CH.L.H" "J.EJ.E.B" "E.B.7-.."
-    "0.47.C.G" "H.L.H.C9" "B.E.J.EB" "C.G.J.G." "L.H.L.H." "J.E.J.N." "O.JG.C.G" "C--.0...",
-    "0M5M7M0M9m5M7M7M0M5M7M0M5M7M0M0M" },
-  { 67, 140, 2, 0.62f,   // Which Way? (map)
-    "7.47.C.7" "9.49.C.G" "H.C9.5.9" "7.B.E.B7" "C.GC.J.G" "G.C9.C.G" "H.C9.E.B" "C--.0...",
-    "0M9m5M7M0M9m5M0M" },
-  { 60, 170, 0, 0.62f,   // Jungle Hop (grassy levels)
-    "7.47.C.7" "974.0.24" "5.9C.95." "7.BE.B7-" "7.47.C.G" "EC9.C.EG" "H.GE.C9." "B.E.C--."
-    "9.CH.GH." "G.CG.EC." "E.HE.95." "7BE.J.HE" "G.JG.EC." "L.JG.E.C" "9CH.BEJ." "O--.C...",
-    "0M0M5M7M0M9m5M7M5M0M2m7M0M9m7M0M" },
-  { 57, 134, 1, 0.56f,    // Sneaky Steps (temples and caves)
-    "C..F.E.C" "7..C.A.7" "H.FH.K.H" "J.EJ.N.J" "O.JF.C.." "K.FC.8.C" "H.FH.K.H" "J.N.J-.."
-    "K.K.O.K." "M.H.M.J." "O.J.F.J." "C.F.J-.." "H.K.H.F." "J.N.J.E." "C.7C.F.J" "O--.C...",
-    "0m0m5m7M0m8M5m7M8MAM0m0m5m7M0m0m" },
-  { 65, 152, 2, 0.6f,   // Frosty Skip (snow levels)
-    "C.7C.G.E" "C.9.7.9C" "H.EC.9C." "E.B.7.BE" "G.CG.J.G" "E.C9.C.9" "E.H.L.HE" "J.G.E-.."
-    "H.E.C.EH" "J.E.B.EJ" "G.B.7.BG" "L.G.C.9." "H.E.9.5." "E.B.7.B." "C.7C.G.J" "C--.0...",
-    "0M9m5M7M0M9m2m7M5M7M4m9m2m7M0M0M" },
-  { 64, 186, 1, 0.5f,    // Big Trouble (bosses)
-    "0.0C.0.A" "0.0C.F.E" "8.8F.8.C" "A.AH.E.A" "C.CJ.C.F" "C.EF.H.J" "K.JF.C.F" "J.N.J.E-",
-    "0m0m8MAM0m0m8M7M" },
+  { 62, 168, 4, 8, 0.60f,   // Hello Dino (title): a little parade
+    "7.77C.G." "E.C.9.7-" "9.99C.9." "7--.4.2." "4.57C.G." "H.G.E.C-" "E.EGE.B." "C--....."
+    "H.HGH.L." "J.G.E.G-" "H.HGH.L." "N--.L.J." "O.L.J.G." "H.E.C.9." "B.EGJ.N." "O--.....",
+    "0M5M5M7M0M9m7M0M5M0M5M7M0M9m7M0M",
+    "0.0.7.7.", "..x...x.", "x...x...", "..x...xx", "x.x.x.x.",
+    "........" "........" "........" "....b.b." "........" "........" "........" "..b.b.b.", 2, 1, 1, 1 },
+  { 67, 112, 2, 8, 0.66f,   // Which Way? (map): a lazy stroll with the singers going bah on the off-beats
+    "4--57--4" "0--24---" "5--79--7" "7--54-2-" "4--57--C" "E--C9---" "5-7-9-B-" "C-----..",
+    "0M9m5M7M0M9m5M0M",
+    "0...7...", "", "x.......", "....c...", "x.x.x.x.", "..b...b.", 0, 0, 1, 0 },
+  { 60, 160, 0, 8, 0.62f,   // Jungle Hop (grassy levels)
+    "C.CG.EC." "9.C.7-.." "5.59.C.H" "G.E.B..." "C.CG.EC." "9.C.E-.." "H.G.E.B." "C--....."
+    "9.CE.C9." "7.BE.B7." "5.9C.95." "7.B.E.G." "L.J.G.E." "H.E.C.9." "7.B.E.J." "O--.C...",
+    "0M0M5M7M0M9m7M0M9m4m5M7M9m5M7M0M",
+    "0.7.0.7.", ".x.x.x.x", "x...x...", "..x...x.", "x.x.x.x.",
+    "........" "........" "........" "....b.b." "........" "........" "........" "....b.b.", 0, 1, 1, 0 },
+  { 64, 150, 3, 8, 0.5f,    // Bongo Party (the Wild Jungle): steel drum and a three-three-two beat
+    "7..9..C." "E..C..9." "9..C..H." "G.E.B.7." "7..9..C." "H..L..H." "J.G.E.B." "C--....."
+    "H.HH.L.H" "G.GG.J.G" "E.EE.H.E" "E.B.7.B." "H.HH.L.O" "N.L.J.G." "H.E.B.E." "C--.C.C.",
+    "0M0M5M7M0M5M7M0M5M0M2m7M5M0M7M0M",
+    "0..0..7.", "...x..x.", "x..x..x.", "....c...", "xxxxxxxx", "........" "b..b..b.", 0, 0, 1, 0 },
+  { 57, 104, 1, 8, 0.5f,    // Sneaky Steps (temples and caves): tiptoeing, nearly no drums
+    "0.3.7.3." "8-7-...." "5.8.C.8." "B-7-...." "C.F.J.F." "K-J-H-F-" "E.B.7.B." "C--.....",
+    "0m0m5m7M0m8M7M0m",
+    "0...7...", "", "", "......c.", "..x...x.", "........" "....l.l.", 0, 0, 0, 0 },
+  { 65, 150, 0, 6, 0.5f,    // Up in the Clouds (waterfalls and sky): a waltz
+    "7-C-G-" "E---C-" "9-C-H-" "E---B-" "C-E-G-" "H---L-" "J-H-E-" "C-----"
+    "L-J-H-" "G---C-" "H-E-9-" "B---7-" "9-C-H-" "G-J-O-" "N-J-E-" "C-----",
+    "0M0M5M7M9m5M7M0M5M0M2m7M5M0M7M0M",
+    "0.....", "..x.x.", "x.....", "", "..x.x.",
+    "......" "......" "......" "......" "......" "......" "......" "..b.b.", 2, 1, 1, 0 },
+  { 62, 132, 2, 8, 0.67f,   // Frosty Skip (snow): skipping along with sleigh bells
+    "G.EC.E.G" "L.HC.H.L" "J.GE.G.J" "G--.C..." "L.GC.G.L" "O.LH.L.O" "N.JE.J.N" "O--....."
+    "H.L.O.L." "G.J.O.J." "E.H.L.H." "J--.E.J." "L.O.L.H." "J.G.E.C." "E.G.J.N." "O--.C...",
+    "0M5M7M0M9m5M7M0M5M0M2m7M5M0M7M0M",
+    "0.7.0.7.", "", "x...x...", "..c...c.", "xxxxxxxx", "........" "......bb", 2, 0, 1, 0 },
+  { 64, 96, 2, 8, 0.5f,     // Crystal Echo (ice caves): slow and sparkly
+    "J---F-C-" "K---F---" "M---J-F-" "N---J---" "O-M-K-J-" "K-H-F-H-" "E-J-N-J-" "C-------",
+    "0m8M3M7M0m5m7M0m",
+    "0.......", "", "", "", "....x...", "b......." "........", 1, 1, 0, 0 },
+  { 58, 120, 0, 8, 0.58f,   // Northern Lights (snow at night): a gentle song
+    "7---C-G-" "J---G-E-" "H---L-O-" "N-L-J---" "L---O-L-" "H---C-9-" "B-E-J-N-" "O-----..",
+    "0M4m5M7M9m5M7M0M",
+    "0...7.0.", "..x...x.", "x...x...", "....c...", "x.x.x.x.", "....b..." "....b.b.", 0, 1, 1, 0 },
+  { 62, 184, 4, 8, 0.5f,    // Big Trouble (bosses)
+    "0.03.5.7" "8.7.5.3." "8.8C.F.C" "E.B.7-.." "C.CF.H.J" "K.J.H.F." "E.EJ.N.J" "O--.C.C.",
+    "0m0m8M7M0m5m7M0m",
+    "0.0C0.0C", "x..x..x.", "x.x.x.x.", "..x...x.", "xxxxxxxx", "b..b...." "........", 0, 0, 0, 1 },
 };
 static int note_code(char c) { return c >= '0' && c <= '9' ? c - '0' : c - 'A' + 10; }
 static float midi_hz(int n) { return 440.0f * powf(2.0f, (n - 69) / 12.0f); }
@@ -1694,17 +1896,18 @@ static int song_now = -1, mus_step;
 static float mus_t, mus_len;
 static struct { float hz, ph, ph2, t; int on; } m_lead;
 // the band: besides the lead there is a pool of short notes, each played by one "instrument"
-enum { I_BASS, I_STAB, I_MARIMBA, I_BRASS, I_BELL, I_KICK, I_SNARE, I_HAT, I_CLAP };
+enum { I_BASS, I_STAB, I_MARIMBA, I_BRASS, I_BELL, I_KICK, I_SNARE, I_HAT, I_CLAP, I_BAH, NINS };
 typedef struct { float hz, ph, t, env, env2; int ins; } MNote;
-static float SINT[1024], M_DEC[9], M_DEC2[9]; static int m_rate;
+static float SINT[1024], M_DEC[NINS], M_DEC2[NINS]; static int m_rate;
 #define SIN1(ph) SINT[(int)((ph) * 1024) & 1023]   /* sine of a phase 0..1, from a table */
-static MNote m_pool[28];
+#define NPOOL 36
+static MNote m_pool[NPOOL];
 static struct { float hz, ph, t; int on; } m_harm;
 static uint32_t m_noise = 12345;
 
 static void m_play(int ins, float hz) {
   int best = 0;
-  for (int i = 0; i < 28; i++) { if (m_pool[i].ins < 0) { best = i; break; } if (m_pool[i].t > m_pool[best].t) best = i; }
+  for (int i = 0; i < NPOOL; i++) { if (m_pool[i].ins < 0) { best = i; break; } if (m_pool[i].t > m_pool[best].t) best = i; }
   m_pool[best].ins = ins; m_pool[best].hz = hz; m_pool[best].ph = 0; m_pool[best].t = 0; m_pool[best].env = m_pool[best].env2 = 1;
 }
 static int pick_song(void) {
@@ -1712,22 +1915,29 @@ static int pick_song(void) {
   if (state == ST_MAP) return SONG_MAP;
   if (state == ST_PLAY || state == ST_PAUSE) {
     if (g_boss_music) return SONG_BOSS;
-    int th = L->theme;
-    return th == 1 || th == 2 || th == 6 ? SONG_CAVE : (th == 5 || th == 7 ? SONG_SNOW : SONG_GRASS);
+    switch (L->theme) {
+      case 1: case 2: return SONG_CAVE;
+      case 3: return SONG_FALLS;
+      case 4: return lvl >= 12 ? SONG_WILD : SONG_FALLS;
+      case 5: return SONG_SNOW;
+      case 6: return SONG_ICE;
+      case 7: return SONG_NIGHT;
+      default: return lvl >= 12 ? SONG_WILD : SONG_GRASS;
+    }
   }
   return -1;
 }
+static char m_pat(const char* p) { return p && *p ? p[mus_step % (int)strlen(p)] : '.'; }
 // one eighth-note step: who plays what
 static void music_step(const Song* sg, int half) {
-  int nsteps = (int)strlen(sg->mel), bar = mus_step / 8, st = mus_step % 8;
+  int nsteps = (int)strlen(sg->mel), bar = mus_step / sg->spb, st = mus_step % sg->spb;
   int root = sg->base - 24 + note_code(sg->chords[(bar * 2) % strlen(sg->chords)]);
   int minor = sg->chords[(bar * 2 + 1) % strlen(sg->chords)] == 'm';
   if (root > sg->base - 24 + 7) root -= 12;
   int tri[4] = { root + 24, root + 24 + (minor ? 3 : 4), root + 24 + 7, root + 36 };
-  if (half) {   // the "and" between steps: a marimba note and a shaker tick keep it bubbling along
+  if (half) {   // the "and" between steps
     static const int UP[8] = { 1, 2, 3, 2, 1, 2, 3, 0 };
-    m_play(I_MARIMBA, midi_hz(tri[UP[st]] + 12));
-    m_play(I_HAT, 0);
+    if (sg->arp == 1) m_play(I_MARIMBA, midi_hz(tri[UP[st]] + 12));
     return;
   }
   char m = sg->mel[mus_step % nsteps];
@@ -1735,27 +1945,33 @@ static void music_step(const Song* sg, int half) {
   else if (m != '-') {
     int note = sg->base + note_code(m);
     m_lead.hz = midi_hz(note); m_lead.t = 0; m_lead.on = 1;
-    m_play(I_BELL, midi_hz(note + 12));                       // a glockenspiel doubles the tune an octave up
-    // a second voice sings along underneath, on the nearest chord note
-    int h = note - 3;
-    for (; h > note - 10; h--) { int pc = ((h - root) % 12 + 12) % 12; if (pc == 0 || pc == 7 || pc == (minor ? 3 : 4)) break; }
-    m_harm.hz = midi_hz(h); m_harm.t = 0; m_harm.on = 1;
+    if (sg->bell) m_play(I_BELL, midi_hz(note + 12));         // a glockenspiel doubles the tune an octave up
+    if (sg->harm) {   // a second voice sings along underneath, on the nearest chord note
+      int h = note - 3;
+      for (; h > note - 10; h--) { int pc = ((h - root) % 12 + 12) % 12; if (pc == 0 || pc == 7 || pc == (minor ? 3 : 4)) break; }
+      m_harm.hz = midi_hz(h); m_harm.t = 0; m_harm.on = 1;
+    }
   }
-  static const int WALK[8] = { 0, 12, 7, 12, 0, 12, 7, 10 };
-  m_play(I_BASS, midi_hz(root + WALK[st]));
-  if (st == 2 || st == 6 || st == 3) for (int i = 0; i < 3; i++) m_play(I_STAB, midi_hz(tri[i]));
-  if (st == 0 && bar % 2 == 0) for (int i = 0; i < 3; i++) m_play(I_BRASS, midi_hz(tri[i] - (i == 2 ? 12 : 0)));   // a brass hit to start each phrase
-  { static const int ARP[8] = { 0, 1, 2, 3, 2, 1, 2, 3 }; m_play(I_MARIMBA, midi_hz(tri[ARP[st]] + 12)); }
-  if (st == 0 || st == 4 || st == 5) m_play(I_KICK, 0);
-  if (st == 2 || st == 6) { m_play(I_SNARE, 0); m_play(I_CLAP, 0); }
-  m_play(I_HAT, 0);
+  char c = m_pat(sg->bass);
+  if (c != '.') m_play(I_BASS, midi_hz(root + (c == '7' ? 7 : c == 'C' ? 12 : c == '3' ? (minor ? 3 : 4) : c == 'A' ? 10 : 0)));
+  if (m_pat(sg->stab) == 'x') for (int i = 0; i < 3; i++) m_play(I_STAB, midi_hz(tri[i]));
+  if (sg->brass && st == 0 && bar % 2 == 0) for (int i = 0; i < 3; i++) m_play(I_BRASS, midi_hz(tri[i] - (i == 2 ? 12 : 0)));
+  if (sg->arp) { static const int ARP[8] = { 0, 1, 2, 3, 2, 1, 2, 3 }; m_play(I_MARIMBA, midi_hz(tri[ARP[st]] + 12)); }
+  if (m_pat(sg->kick) == 'x') m_play(I_KICK, 0);
+  c = m_pat(sg->snare);
+  if (c == 'x') m_play(I_SNARE, 0);
+  if (c == 'x' || c == 'c') m_play(I_CLAP, 0);
+  if (m_pat(sg->hat) == 'x') m_play(I_HAT, 0);
+  c = m_pat(sg->bah);
+  if (c == 'b') for (int i = 0; i < 3; i++) m_play(I_BAH, midi_hz(tri[i]) * (1 + (i - 1) * 0.004f));   // the singers: "bah!"
+  if (c == 'l') m_play(I_BAH, midi_hz(root + 24));
 }
 static float music_sample(float dt) {
   static int half_done;
   int want = pick_song();
   if (want != song_now) {
     song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_harm.on = 0; half_done = 1;
-    for (int i = 0; i < 28; i++) m_pool[i].ins = -1;
+    for (int i = 0; i < NPOOL; i++) m_pool[i].ins = -1;
   }
   if (want < 0) return 0;
   const Song* sg = &SONGS[want];
@@ -1764,7 +1980,7 @@ static float music_sample(float dt) {
     mus_t -= mus_len;
     mus_step = (mus_step + 1) % (int)strlen(sg->mel);
     float beat = 60.0f / sg->bpm;                       // two eighth notes, the first one longer (swing)
-    mus_len = beat * (mus_step % 2 == 0 ? sg->swing : 1 - sg->swing);
+    mus_len = beat * (mus_step % sg->spb % 2 == 0 ? sg->swing : 1 - sg->swing);
     music_step(sg, 0); half_done = 0;
   } else if (!half_done && mus_t >= mus_len * 0.5f) { half_done = 1; music_step(sg, 1); }
   float s = 0, quiet = state == ST_PAUSE ? 0.35f : 1;
@@ -1780,7 +1996,9 @@ static float music_sample(float dt) {
     m_lead.ph += m_lead.hz * vib * dt; m_lead.ph -= (int)m_lead.ph;
     m_lead.ph2 += m_lead.hz * 3 * dt; m_lead.ph2 -= (int)m_lead.ph2;
     float w, tri = 4 * fabsf(m_lead.ph - 0.5f) - 1;
-    if (sg->lead == 2) w = (SIN1(m_lead.ph) + 0.45f * SIN1(m_lead.ph2) * e9) * e35 * 1.5f;          // bell
+    if (sg->lead == 4) w = ((2 * m_lead.ph - 1) * 0.5f + tri * 0.45f + 0.2f * SIN1(m_lead.ph2)) * (0.7f + 0.3f * e5);   // brassy
+    else if (sg->lead == 3) w = (SIN1(m_lead.ph) + 0.55f * SIN1(m_lead.ph2) * e9 + 0.25f * tri) * (0.25f + 0.75f * e5) * 1.5f;   // steel drum
+    else if (sg->lead == 2) w = (SIN1(m_lead.ph) + 0.45f * SIN1(m_lead.ph2) * e9) * e35 * 1.5f;          // bell
     else if (sg->lead == 1) w = ((m_lead.ph < 0.3f ? 1 : -1) * 0.6f + tri * 0.5f) * e5;             // plucky
     else w = tri * 0.75f + (m_lead.ph < 0.5f ? 0.3f : -0.3f) + 0.25f * SIN1(m_lead.ph2);            // round whistle
     s += w * env * 0.075f;
@@ -1792,7 +2010,7 @@ static float music_sample(float dt) {
   }
   m_noise = m_noise * 1664525u + 1013904223u;
   float nz = ((m_noise >> 16) & 0xFFFF) / 32768.0f - 1;
-  for (int i = 0; i < 28; i++) {
+  for (int i = 0; i < NPOOL; i++) {
     MNote* n = &m_pool[i];
     if (n->ins < 0) continue;
     float t = n->t, w = 0, len = 0.3f;
@@ -1807,6 +2025,13 @@ static float music_sample(float dt) {
       case I_KICK: len = 0.14f; n->ph += (50 + 110 * n->env2) * dt; n->ph -= (int)n->ph; w = SIN1(n->ph) * (1 - t / 0.14f) * 0.16f; break;
       case I_SNARE: len = 0.09f; w = nz * (1 - t / 0.09f) * 0.04f; break;
       case I_HAT: len = 0.022f; w = nz * (1 - t / 0.022f) * 0.018f; break;
+      case I_BAH: {   // a sung "bah": each beat of the voice rings at two mouth notes, which open up from "b" to "ah"
+        len = 0.3f;
+        float g = minf(1, t * 28), tau = n->ph / n->hz, win = (1 - n->ph) * (1 - n->ph);
+        float f1 = (330 + 470 * g) * tau, f2 = (950 + 300 * g) * tau, f3 = 2600 * tau;
+        w = (SIN1(f1 - (int)f1) + 0.5f * SIN1(f2 - (int)f2) + 0.12f * SIN1(f3 - (int)f3)) * win * minf(1, t * 150) * minf(1, (len - t) * 30) * n->env * 0.085f;
+        break;
+      }
       case I_CLAP: len = 0.07f; w = nz * (t < 0.012f || (t > 0.02f && t < 0.07f) ? 1 : 0) * (1 - t / 0.07f) * 0.03f; break;
     }
     s += w;
@@ -1818,10 +2043,10 @@ static float music_sample(float dt) {
 
 void synth_render(int16_t* out, int frames, int rate) {
   if (m_rate != rate) {
-    static const float K[9] = { 9, 24, 18, 9, 12, 0, 0, 0, 0 }, K2[9] = { 0, 0, 60, 0, 0, 40, 0, 0, 0 };
+    static const float K[NINS] = { 9, 24, 18, 9, 12, 0, 0, 0, 0, 6 }, K2[NINS] = { 0, 0, 60, 0, 0, 40, 0, 0, 0, 0 };
     m_rate = rate;
     for (int i = 0; i < 1024; i++) SINT[i] = sinf(i * 6.28318f / 1024);
-    for (int i = 0; i < 9; i++) { M_DEC[i] = expf(-K[i] / rate); M_DEC2[i] = expf(-K2[i] / rate); }
+    for (int i = 0; i < NINS; i++) { M_DEC[i] = expf(-K[i] / rate); M_DEC2[i] = expf(-K2[i] / rate); }
   }
   for (int f = 0; f < frames; f++) {
     float dt = 1.0f / rate;

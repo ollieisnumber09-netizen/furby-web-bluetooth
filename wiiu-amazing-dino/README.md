@@ -1,16 +1,16 @@
-# Canopy Dino (Wii U)
+# Amazing Dino (Wii U)
 
-An original pixel-art platformer starring Dino (white egg body, green triangle spikes, floating
-hands). Walk around the island map from Dino's house to 6 levels: Jungle Floor, Canopy Climb,
-Misty Falls, Old Temple, Beetle Cavern and Sky Bridge. Clearing a level opens the next one.
-Stomp or headbutt beetles and bees, grab bananas (50 bananas = 1 extra life).
-? boxes (jump into them from below, or headbutt them) hold 5 bananas or a power-up:
+An original platformer starring Dino (white egg body, smooth green spikes). Walk the world maps
+from Dino's house through 18 levels in 5 worlds: Jungle Island, Frosty Forest, Ice Mountain,
+Wild Jungle and Snowflake Peaks. Clearing a level opens the next one, and five bosses guard the way.
+Stomp or headbutt beetles and bees, grab coins (50 coins = 1 extra life).
+? boxes (jump into them from below, or headbutt them) hold 5 coins or a power-up:
 wings (double jump) or a sword (X/Y swings it). Getting hit loses the power-up instead of a life.
-Progress saves to `SD card/wiiu/apps/CanopyDino/save.txt`.
+Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).
 
 ## Put it on the Wii U (Aroma)
-Copy `CanopyDino.wuhb` to `SD card/wiiu/apps/`, put the card back and start "Canopy Dino" from the Wii U Menu.
-In Cemu: File > Load and pick `CanopyDino.wuhb`.
+Copy `AmazingDino.wuhb` to `SD card/wiiu/apps/`, put the card back and start "Amazing Dino" from the Wii U Menu.
+In Cemu: File > Load and pick `AmazingDino.wuhb`.
 
 ## Controls
 | | GamePad / Pro / Classic | Wii Remote sideways |

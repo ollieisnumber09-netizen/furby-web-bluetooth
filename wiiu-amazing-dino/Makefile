@@ -4,8 +4,8 @@ $(error "Please set DEVKITPRO in your environment.")
 endif
 TOPDIR ?= $(CURDIR)
 
-APP_NAME	:= Canopy Dino
-APP_SHORTNAME	:= Canopy Dino
+APP_NAME	:= Amazing Dino
+APP_SHORTNAME	:= Amazing Dino
 APP_AUTHOR	:= Oliver
 APP_ICON	:= $(TOPDIR)/icon.png
 APP_TV_SPLASH	:= $(TOPDIR)/splash_tv.png
@@ -13,13 +13,13 @@ APP_DRC_SPLASH	:= $(TOPDIR)/splash_drc.png
 
 include $(DEVKITPRO)/wut/share/wut_rules
 
-TARGET		:=	CanopyDino
+TARGET		:=	AmazingDino
 BUILD		:=	build
 SOURCES		:=	src
 INCLUDES	:=	src
 
 CFLAGS	:=	-g -O3 -ffast-math -funroll-loops -ffunction-sections -Wall -Wno-missing-field-initializers $(MACHDEP)
-CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSAVE_PATH=\"fs:/vol/external01/wiiu/apps/CanopyDino/save.txt\" $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --cflags sdl2)
+CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSAVE_PATH=\"fs:/vol/external01/wiiu/apps/AmazingDino/save.txt\" $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --cflags sdl2)
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
 LIBS	:= $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --libs sdl2) -lwut -lm
