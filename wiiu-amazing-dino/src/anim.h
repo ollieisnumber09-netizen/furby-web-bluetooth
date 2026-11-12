@@ -3,7 +3,7 @@
 // and the pose glides smoothly from tick to tick, so every movement is as smooth as the screen.
 
 // ------------------------------------------------------------ Dino
-// mood: 0 normal, 2 hurt, 3 angry (headbutt), 4 happy
+// mood: 0 normal, 2 hurt, 3 angry (headbutt), 4 happy, 5 sad
 typedef struct { float sq, tilt, bob, lx[2], ly[2], spk, eye, mouth, wing; int mood, air; } DinoPose;
 #define DN 72          // drawing area at scale 1; his feet stand at (36, 64)
 static Bmp DSCR, ESCR;
@@ -98,9 +98,11 @@ static void dino_render(Bmp* b, const DinoPose* p, int flip, float S) {
         float top = p->mood == 3 ? eyc - eh * 0.4f : eyc - eh;
         de = minf(sd_seg(bx, by, e1, top, e1, eyc + eh), sd_seg(bx, by, e2, top, e2, eyc + eh)) - 1.15f;
         if (p->mood == 3) de = minf(de, minf(sd_seg(bx, by, e1 - 2.4f, eyc - 5.2f, e1 + 1.6f, eyc - 3.2f), sd_seg(bx, by, e2 - 1.6f, eyc - 3.2f, e2 + 2.4f, eyc - 5.2f)) - 0.8f);
+        if (p->mood == 5) de = minf(de, minf(sd_seg(bx, by, e1 - 2.6f, eyc - 3.4f, e1 + 1.4f, eyc - 5.6f), sd_seg(bx, by, e2 - 1.4f, eyc - 5.6f, e2 + 2.6f, eyc - 3.4f)) - 0.8f);   // sad eyebrows
       }
       float mx = bx - 0.2f, my = by - 3.4f, dm;
       if (p->mood == 2) dm = sd_seg(mx, my, 1, 1.5f, 7.4f, 1.5f) - 0.8f;
+      else if (p->mood == 5) dm = minf(minf(sd_seg(mx, my, 0.6f, 2.6f, 2.6f, 0.8f), sd_seg(mx, my, 2.6f, 0.8f, 5.8f, 0.8f)), sd_seg(mx, my, 5.8f, 0.8f, 7.8f, 2.6f)) - 0.8f;   // a frown
       else {
         dm = minf(minf(sd_seg(mx, my, 0, 0, 2.1f, 2.1f), sd_seg(mx, my, 2.1f, 2.1f, 4.2f, 0)),
                   minf(sd_seg(mx, my, 4.2f, 0, 6.3f, 2.1f), sd_seg(mx, my, 6.3f, 2.1f, 8.4f, 0))) - 0.75f;

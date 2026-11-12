@@ -585,6 +585,11 @@ static int ncheck;
 #define PH 13
 
 static int lvl_frames; int g_no_hud;
+// intro_t: counts up while a level is being introduced (Dino and the counters on black, then they
+// fly to their places). over_sel: which button is picked on the game over screen.
+static int intro_t, over_sel, dino_sx, dino_sy;
+#define INTRO_HOLD 85
+#define INTRO_FLY 60
 // world map: node 0 is Dino's house, node n is level n
 static int cleared[24], map_node, map_from, map_t, world;
 // Each world is its own map. A stop is a level (kind >= 0, the level's index), Dino's house (-1),
@@ -887,7 +892,7 @@ static void start_level(int n) {
   load_level(n);
   // reset enemy spawn positions to the level's original ones
   respawn();
-  state = ST_PLAY; state_t = 0;
+  state = ST_PLAY; state_t = 0; intro_t = 1;
 }
 
 void game_init(void) {
@@ -1253,6 +1258,11 @@ void game_update(const Input* in) {
       if ((jp || sp) && state_t > 20) { lives = 3; bananas = 0; state = ST_MAP; state_t = 0; map_from = map_node; map_t = 99; plat_sfx(SFX_SELECT); }
       break;
     case ST_PLAY:
+      if (intro_t) {   // nothing moves until the intro is over
+        if (++intro_t > INTRO_HOLD + INTRO_FLY) intro_t = 0;
+        if (intro_t == INTRO_HOLD) plat_sfx(SFX_DASH);
+        break;
+      }
       if (sp) { state = ST_PAUSE; plat_sfx(SFX_SELECT); break; }
       lvl_frames++;
       update_player(in);
@@ -1277,7 +1287,16 @@ void game_update(const Input* in) {
       }
       break;
     case ST_OVER:
-      if ((jp || sp) && state_t > 60) { state = ST_TITLE; state_t = 0; save_progress(); }
+      if (state_t == 1) { over_sel = 0; save_progress(); }
+      if (state_t == 82 || state_t == 102) plat_sfx(SFX_STOMP);   // bump, bump: he lands on his bottom
+      if (state_t > 125) {
+        if ((in->left && !prev_left) || (in->right && !prev_right) || (in->up && !prev_up) || (in->down && !prev_down)) { over_sel ^= 1; plat_sfx(SFX_WALL); }
+        if (jp || sp) {
+          plat_sfx(SFX_SELECT);
+          if (over_sel == 0) { lives = 3; start_level(lvl); update_camera(1); }
+          else { state = ST_TITLE; state_t = 0; }
+        }
+      }
       break;
     case ST_WIN:
       if ((jp || sp) && state_t > 60) { state = ST_MAP; state_t = 0; map_t = 99; }
@@ -1415,7 +1434,9 @@ static void draw_world(void) {
     if (walling) flip = wall_dir > 0;   // back to the wall
     int X = (int)floorf((px + PW * 0.5f) * 2) - CX, Y = (int)floorf((py + PH) * 2) - CY;
     int show = !(inv_t && (inv_t / 4) % 2);
-    if (on_ground && !dead_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
+    if (on_ground && !dead_t && !intro_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
+    dino_sx = X; dino_sy = Y;
+    if (intro_t) show = 0;
     if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
     if (power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
@@ -1461,16 +1482,18 @@ static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
   hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), 0);
 }
 
+static int hud_cx, hud_cy, hud_lx, hud_ly;   // how far the coin and lives counters are from their usual places
 static void draw_hud(void) {
   char buf[64];
-  hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 6, 3, 0);
+  hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 6 + hud_cx * 2, 3 + hud_cy * 2, 0);
   snprintf(buf, sizeof buf, "%02d", bananas);
-  text(buf, 21, 6, 2, 0xFFFFF4C2);
+  text(buf, 21 + hud_cx, 6 + hud_cy, 2, 0xFFFFF4C2);
   static Bmp hud_dino;   // the little Dino by the lives count is drawn once and kept
   if (!hud_dino.px) { DinoPose p; dino_idle_pose(&p, 50); dino3d(&hud_dino, &p, 0.5f, 0.72f); }
-  hblit(&hud_dino, FB_W - 94 - (int)(36 * 0.72f), 34 - (int)(64 * 0.72f), 0);
+  hblit(&hud_dino, FB_W - 94 - (int)(36 * 0.72f) + hud_lx * 2, 34 - (int)(64 * 0.72f) + hud_ly * 2, 0);
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
-  text(buf, SCR_W - 34, 6, 2, 0xFFFFFFFF);
+  text(buf, SCR_W - 34 + hud_lx, 6 + hud_ly, 2, 0xFFFFFFFF);
+  if (intro_t) return;
   if (boss_awake && boss_i >= 0) {
     const char* nm = BOSS_NAME[ents[boss_i].k];
     text(nm, (SCR_W - text_w(nm, 1)) / 2, 4, 1, 0xFFFFFFFF);
@@ -1757,6 +1780,53 @@ void game_draw(uint32_t* fb) {
     return;
   }
   if (state == ST_MAP) { draw_map(); return; }
+  if (state == ST_PLAY && intro_t) {
+    // the level intro: Dino on black with his coins and lives above him, then everything flies into place
+    float k = clampf((intro_t - INTRO_HOLD) / (float)INTRO_FLY, 0, 1), e = k * k * (3 - 2 * k);
+    if (k <= 0) memset(FB, 0, FB_W * FB_H * 4);
+    else { hd_background(); draw_world(); darken(0, 0, SCR_W, SCR_H, 1 - e); }
+    if (k <= 0) { for (int i = 0; i < FB_W * FB_H; i++) FB[i] = 0xFF000000; text_c(L->name, 14, 3, 0xFFFFFFFF); dino_sx = 320; dino_sy = 250; }
+    else if (k < 0.5f) text_c(L->name, 14 - (int)(e * 80), 3, 0xFFFFFFFF);
+    hud_cx = (int)(100 * (1 - e)); hud_lx = (int)(-96 * (1 - e)); hud_cy = hud_ly = (int)(38 * (1 - e));
+    draw_hud();
+    hud_cx = hud_cy = hud_lx = hud_ly = 0;
+    DinoPose p; dino_idle_pose(&p, intro_t);
+    float hop = fabsf(sinf(intro_t * 0.09f)) * (1 - e);
+    p.bob = hop * 5; p.mouth = hop > 0.5f ? (hop - 0.5f) * 2 : 0; p.mood = k <= 0 ? 4 : 0; p.spk = sinf(intro_t * 0.15f) * 0.15f * (1 - e);
+    if (k > 0) { p.tilt = 0.25f * sinf(k * 3.14159f); p.air = k < 0.9f; }
+    float S = 2.6f + (1 - 2.6f) * e, X = 320 + (dino_sx - 320) * e, Y = 262 + (dino_sy - 262) * e - sinf(k * 3.14159f) * 40;
+    draw_dino_at((int)X, (int)Y, S, &p, 0.35f + 0.45f * e);
+    return;
+  }
+  if (state == ST_OVER && state_t >= 40) {
+    // game over: Dino drops in from the top, bumps down onto his bottom and sits there looking sad
+    for (int i = 0; i < FB_W * FB_H; i++) FB[i] = 0xFF000000;
+    int t = state_t - 46; float y, sq = 1; int sat = 0;
+    if (t < 36) y = -90 + 0.27f * t * t;                                   // falling
+    else if (t < 56) { y = 260 - 34 * sinf((t - 36) * 3.14159f / 20); sq = 1 - 0.22f * expf(-(t - 36) / 5.0f); }   // one bounce
+    else { y = 260; sq = 1 - 0.2f * expf(-(t - 56) / 7.0f); sat = 1; }
+    if (t >= 0) {
+      DinoPose p; dino_idle_pose(&p, state_t);
+      p.sq = sq; p.mood = sat ? 5 : 2; p.mouth = 0; p.air = !sat;
+      if (!sat) { p.tilt = 0.5f; for (int i = 0; i < 2; i++) { p.lx[i] = sinf(state_t * 0.6f + i * 3.14159f) * 5; p.ly[i] = 3; } }
+      else { p.tilt = -0.12f; p.bob = -4; p.spk = -0.3f; p.eye = 0.6f; for (int i = 0; i < 2; i++) { p.lx[i] = 12 + i * 4; p.ly[i] = 2.5f; } }   // legs out in front
+      if (t >= 36) fb_shadow(320, 262, 40, 6, 0.0f);
+      draw_dino_at(320, (int)y, 2.6f, &p, 0.3f);
+    }
+    if (state_t > 105) text_c("GAME OVER", 22 - (state_t < 117 ? (117 - state_t) * 4 : 0), 4, 0xFFD8463C);
+    if (state_t > 125) {
+      static const char* const BT[2] = { "CONTINUE?", "BACK TO TITLE" };
+      static const int BX[2] = { 34, 150 }, BW[2] = { 96, 136 };
+      for (int b = 0; b < 2; b++) {
+        int on = over_sel == b, by = 142 - (on ? (frame / 12) % 2 : 0);
+        fill(BX[b] - 2, by - 2, BW[b] + 4, 26, on ? 0xFFF7D038 : 0xFF4A4458);
+        fill(BX[b], by, BW[b], 22, on ? 0xFF3B2F6B : 0xFF1B1020);
+        text(BT[b], BX[b] + (BW[b] - text_w(BT[b], 2)) / 2, by + 6, 2, on ? 0xFFFFFFFF : 0xFF9A94A8);
+      }
+      text_c("LEFT / RIGHT TO CHOOSE, A TO PICK", 171, 1, 0xFFFFF4C2);
+    }
+    return;
+  }
   hd_background();
   draw_world();
   if (L->theme == 5 || L->theme == 7) {
@@ -1769,9 +1839,6 @@ void game_draw(uint32_t* fb) {
     }
   }
   if (!g_no_hud) draw_hud();
-  if (state == ST_PLAY && state_t < 120) {
-    text_c(L->name, 60, 3, 0xFFFFFFFF);
-  }
   if (state == ST_PAUSE) {
     darken(0, 0, SCR_W, SCR_H, 0.5f);
     text_c("PAUSED", 60, 4, 0xFFFFFFFF);
@@ -1784,9 +1851,7 @@ void game_draw(uint32_t* fb) {
     text_c(buf, 82, 2, 0xFFFFFFFF);
   }
   if (state == ST_OVER) {
-    darken(0, 0, SCR_W, SCR_H, 0.6f);
-    text_c("GAME OVER", 60, 4, 0xFFD8463C);
-    if (state_t > 60) text_c("PRESS A", 100, 2, 0xFFFFFFFF);
+    darken(0, 0, SCR_W, SCR_H, state_t / 40.0f);   // the level fades to black
   }
   if (state == ST_WIN) {
     darken(0, 0, SCR_W, SCR_H, 0.55f);

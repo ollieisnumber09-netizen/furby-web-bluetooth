@@ -93,9 +93,11 @@ static uint32_t mat_colour(uint32_t col, int mat, const float* o, float* gloss) 
         float top = FACE.mood == 3 ? eyc - eh * 0.4f : eyc - eh;
         de = minf(sd_seg(bx, by, e1, top, e1, eyc + eh), sd_seg(bx, by, e2, top, e2, eyc + eh)) - 1.15f;
         if (FACE.mood == 3) de = minf(de, minf(sd_seg(bx, by, e1 - 2.4f, eyc - 5.6f, e1 + 1.6f, eyc - 3.4f), sd_seg(bx, by, e2 - 1.6f, eyc - 3.4f, e2 + 2.4f, eyc - 5.6f)) - 0.8f);
+        if (FACE.mood == 5) de = minf(de, minf(sd_seg(bx, by, e1 - 2.8f, eyc - 3.6f, e1 + 1.2f, eyc - 6.0f), sd_seg(bx, by, e2 - 1.2f, eyc - 6.0f, e2 + 2.8f, eyc - 3.6f)) - 0.8f);   // sad eyebrows
       }
       float mx = bx, my = by - 3.4f, dm;
       if (FACE.mood == 2) dm = sd_seg(mx, my, 1, 1.5f, 7.4f, 1.5f) - 0.8f;
+      else if (FACE.mood == 5) dm = minf(minf(sd_seg(mx, my, 0.6f, 2.8f, 2.6f, 0.8f), sd_seg(mx, my, 2.6f, 0.8f, 5.8f, 0.8f)), sd_seg(mx, my, 5.8f, 0.8f, 7.8f, 2.8f)) - 0.8f;   // a frown
       else {
         dm = minf(minf(sd_seg(mx, my, 0, 0, 2.1f, 2.1f), sd_seg(mx, my, 2.1f, 2.1f, 4.2f, 0)),
                   minf(sd_seg(mx, my, 4.2f, 0, 6.3f, 2.1f), sd_seg(mx, my, 6.3f, 2.1f, 8.4f, 0))) - 0.75f;
