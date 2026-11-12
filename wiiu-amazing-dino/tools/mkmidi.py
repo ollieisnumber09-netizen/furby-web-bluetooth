@@ -194,8 +194,22 @@ SONGS = {
     bass="0.0C0.0C", stab="x..x..x.", kick="x.x.x.x.", snare="..x...x.", hat="xxxxxxxx",
     ins=dict(bass=33, keys=48), vol=dict(keys=90),
     sections=[S(lead=61, oct=12, harm=57), S(lead=56, oct=12, lead2=61, harm=57, piano=1)]),
+ 'water': dict(base=62, bpm=138, swing=0.5, spb=6, legato=1, crash=0, arp=2,   # Bubble Drift: floating along under the sea
+    mel="7-9-C-" "E---C-" "9-7-4-" "7-----" "5-7-9-" "C---9-" "7-5-2-" "4-----"
+        "C-E-G-" "J---G-" "E-C-9-" "C---E-" "G-E-C-" "9---7-" "9-C-B-" "C-----",
+    chords="0M9m5M7M0M9m2m7M5M0M9m4m5M7M7M0M",
+    bass="0..7..", hat="...t..",
+    ins=dict(bass=32, arp=46), vol=dict(arp=70, bass=100),
+    sections=[S(lead=11, pad=89), S(lead=73, lead2=11, harm=71, pad=48)]),
+ 'beach': dict(base=65, bpm=132, swing=0.56, fill=1,   # Sunny Shore: steel drums and a strummed guitar
+    mel="C.C.E.G." "H.G.E.C." "E.EG.E.C" "9--.7..." "5.5.9.C." "E.C.9.7." "9.C.E.9." "C--....."
+        "G.GH.J.L" "J.H.G.E." "H.HJ.L.O" "L--.J..." "G.E.C.E." "G.J.L.J." "H.G.E.9." "C--.C.C.",
+    chords="0M5M0M7M5M0M7M0M0M5M5M2m0M9m7M0M",
+    bass="0.07.07.", stab="x.xx.xx.", kick="x..x..x.", snare="....c...", hat="x.x.x.x.", perc="s.ss.s.s" "s.ss.sss",
+    ins=dict(bass=32, keys=24), vol=dict(keys=70),
+    sections=[S(lead=114, harm=12), S(lead=12, lead2=114, harm=73, pizz=1)]),
 }
-ORDER = ['title', 'map', 'grass', 'wild', 'cave', 'falls', 'snow', 'ice', 'night', 'desert', 'castle', 'boss']
+ORDER = ['title', 'map', 'grass', 'wild', 'cave', 'falls', 'snow', 'ice', 'night', 'desert', 'castle', 'boss', 'water', 'beach']
 if __name__ == '__main__':
     os.makedirs('out', exist_ok=True)
     names = sys.argv[1:] or ORDER; parts = []

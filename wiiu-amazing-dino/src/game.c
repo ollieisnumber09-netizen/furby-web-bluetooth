@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 #define T 16                 // tile size in pixels
-#define MAXW 340
+#define MAXW 660
 #define MAXH 40
 
 // ============================================================ sprites
@@ -270,7 +270,7 @@ typedef struct {
   const char* name;
   int w, h;
   uint32_t sky0, sky1, far, nearc;
-  int theme;   // 0 jungle, 1 temple, 2 cave, 3 sky, 4 waterfalls, 5 snow, 6 ice cave, 7 snow at night, 8 desert
+  int theme;   // 0 jungle, 1 temple, 2 cave, 3 sky, 4 waterfalls, 5 snow, 6 ice cave, 7 snow at night, 8 desert, 9 underwater, 10 beach
   const Op* ops;
   const char* signs[4];
 } Level;
@@ -281,373 +281,115 @@ typedef struct {
 // ops: g ground (dirt to the bottom)  G ground (stone to the bottom)  x stone block w*h
 //      = one-way plank  ^ spikes  o bananas  b beetle  z bee  s spring  c checkpoint
 //      F goal flag  P start  i sign (w = which text)
-static const Op L1[] = {
-  {'B', 12, 7, 0}, {'B', 25, 7, 1}, {'B', 44, 5, 0}, {'B', 59, 7, 0}, {'B', 88, 7, 2}, {'B', 113, 7, 0},
-  {'g', 0, 11, 30}, {'P', 3, 10}, {'i', 6, 10, 0}, {'o', 9, 8, 3}, {'b', 20, 10}, {'i', 16, 10, 1},
-  {'o', 29, 8, 5},
-  {'g', 33, 11, 18}, {'=', 36, 8, 4}, {'o', 36, 7, 4}, {'g', 42, 9, 4}, {'o', 42, 7, 4}, {'b', 48, 10},
-  {'g', 51, 12, 3}, {'^', 51, 11, 3},
-  {'g', 54, 11, 26}, {'c', 57, 10}, {'x', 62, 9, 2, 2}, {'b', 67, 10}, {'=', 69, 8, 5}, {'o', 69, 7, 5},
-  {'s', 77, 10}, {'i', 74, 10, 2}, {'o', 80, 4, 4},
-  {'g', 84, 11, 20}, {'b', 89, 10}, {'=', 92, 8, 4}, {'o', 92, 7, 4}, {'z', 97, 6},
-  {'g', 104, 9, 6}, {'o', 105, 7, 4},
-  {'g', 110, 11, 30}, {'b', 116, 10}, {'o', 120, 8, 6}, {'F', 132, 10},
-  {0}
-};
-static const Op L2[] = {
-  {'B', 4, 19, 0}, {'B', 9, 19, 2}, {'B', 33, 6, 0}, {'B', 83, 14, 1},
-  {'g', 0, 23, 22}, {'P', 2, 22}, {'i', 6, 22, 0},
-  {'x', 15, 12, 1, 9}, {'x', 20, 12, 2, 11},
-  {'o', 18, 20, 1}, {'o', 17, 17, 1}, {'o', 18, 14, 1},
-  {'=', 24, 12, 5}, {'b', 26, 11},
-  {'=', 31, 10, 4}, {'o', 31, 9, 4},
-  {'=', 37, 12, 6}, {'z', 40, 9},
-  {'=', 45, 14, 3},
-  {'x', 49, 13, 3, 1}, {'s', 50, 12}, {'o', 49, 5, 3},
-  {'=', 54, 8, 6}, {'b', 57, 7},
-  {'=', 62, 10, 5}, {'c', 64, 9},
-  {'=', 69, 12, 5}, {'z', 71, 9},
-  {'x', 76, 13, 4, 1}, {'o', 76, 12, 4},
-  {'g', 80, 18, 30}, {'b', 85, 17}, {'^', 88, 17, 2},
-  {'x', 92, 6, 1, 10}, {'x', 96, 8, 4, 10}, {'o', 94, 14, 1}, {'o', 94, 11, 1}, {'o', 94, 8, 1},
-  {'i', 90, 17, 1},
-  {'F', 98, 7},
-  {0}
-};
-static const Op L3[] = {
-  {'B', 6, 9, 2}, {'B', 35, 9, 0}, {'B', 62, 9, 1}, {'B', 108, 9, 0},
-  {'G', 0, 13, 16}, {'P', 2, 12}, {'b', 10, 12},
-  {'G', 18, 11, 5}, {'o', 18, 9, 5},
-  {'G', 23, 13, 10}, {'^', 25, 12, 3}, {'z', 28, 9},
-  {'G', 33, 13, 14}, {'x', 38, 10, 2, 3}, {'=', 41, 9, 4}, {'o', 41, 8, 4}, {'b', 44, 12},
-  {'G', 50, 13, 3}, {'s', 51, 12}, {'o', 53, 5, 5},
-  {'G', 58, 13, 20}, {'c', 60, 12}, {'x', 66, 0, 10, 10}, {'b', 71, 12}, {'o', 67, 12, 8},
-  {'G', 80, 12, 3},
-  {'G', 83, 13, 12}, {'^', 85, 12, 2}, {'^', 90, 12, 2}, {'=', 84, 9, 3}, {'=', 89, 8, 3}, {'o', 89, 7, 3}, {'z', 87, 6},
-  {'G', 95, 13, 25}, {'x', 96, 2, 1, 8}, {'x', 100, 4, 2, 9}, {'o', 98, 9, 1}, {'o', 98, 6, 1},
-  {'b', 106, 12}, {'b', 112, 12}, {'z', 109, 8}, {'=', 114, 9, 4}, {'o', 114, 8, 4},
-  {'G', 123, 11, 4}, {'o', 123, 9, 4},
-  {'G', 129, 13, 21}, {'b', 134, 12}, {'F', 142, 12},
-  {0}
-};
-static const Op L4[] = {   // Misty Falls: climb up and up
-  {'B', 5, 29, 1}, {'B', 34, 19, 0},
-  {'g', 0, 33, 40}, {'P', 3, 32}, {'i', 6, 32, 0},
-  {'=', 8, 31, 4}, {'=', 14, 29, 4}, {'o', 14, 28, 4}, {'=', 20, 27, 4},
-  {'=', 26, 25, 4}, {'b', 27, 24}, {'=', 32, 23, 5}, {'o', 32, 22, 5},
-  {'=', 26, 21, 4}, {'z', 23, 18}, {'=', 20, 19, 4}, {'c', 21, 18},
-  {'=', 13, 17, 4}, {'x', 7, 16, 3, 1}, {'s', 8, 15}, {'o', 8, 12, 1}, {'o', 8, 9, 1},
-  {'=', 2, 10, 5}, {'o', 2, 9, 5}, {'=', 9, 8, 4}, {'b', 10, 7}, {'=', 15, 6, 4},
-  {'=', 21, 4, 4}, {'o', 21, 3, 4}, {'x', 27, 4, 13, 1}, {'z', 31, 1}, {'F', 36, 3},
-  {0}
-};
-static const Op L5[] = {   // Beetle Cavern: lots of beetles under a low roof
-  {'B', 5, 9, 2}, {'B', 36, 9, 0}, {'B', 88, 9, 1}, {'B', 115, 9, 0},
-  {'x', 0, 0, 130, 2},
-  {'G', 0, 13, 20}, {'P', 2, 12}, {'b', 8, 12}, {'b', 14, 12},
-  {'x', 20, 2, 4, 6}, {'G', 20, 13, 10}, {'^', 24, 12, 2}, {'b', 27, 12},
-  {'G', 33, 13, 6}, {'z', 35, 9}, {'o', 30, 10, 3},
-  {'G', 39, 11, 4}, {'o', 39, 9, 4},
-  {'G', 43, 13, 15}, {'=', 45, 10, 4}, {'o', 45, 9, 4}, {'b', 50, 12}, {'b', 54, 12}, {'x', 47, 2, 6, 5},
-  {'c', 56, 12},
-  {'G', 61, 13, 4}, {'s', 62, 12}, {'o', 65, 6, 5},
-  {'G', 70, 13, 20}, {'^', 74, 12, 3}, {'^', 80, 12, 3}, {'=', 73, 9, 5}, {'=', 79, 9, 5}, {'b', 75, 8}, {'z', 84, 8}, {'o', 78, 8, 1},
-  {'G', 90, 10, 4}, {'o', 90, 8, 4},
-  {'G', 94, 13, 15}, {'b', 97, 12}, {'b', 101, 12}, {'b', 105, 12}, {'=', 97, 9, 10}, {'o', 98, 8, 8},
-  {'G', 112, 13, 18}, {'b', 116, 12}, {'F', 124, 12},
-  {0}
-};
-static const Op L6[] = {   // Sky Bridge: planks and floating islands high above the clouds
-  {'B', 4, 6, 1}, {'B', 30, 6, 0}, {'B', 52, 6, 2}, {'B', 108, 6, 0}, {'B', 140, 6, 0},
-  {'x', 0, 10, 8, 2}, {'P', 2, 9},
-  {'=', 10, 10, 4}, {'=', 16, 9, 4}, {'z', 18, 6}, {'=', 22, 10, 3},
-  {'x', 27, 10, 5, 2}, {'b', 29, 9}, {'o', 27, 8, 5},
-  {'=', 34, 8, 3}, {'=', 39, 6, 3}, {'o', 39, 5, 3}, {'=', 44, 8, 3}, {'z', 42, 3},
-  {'x', 49, 10, 6, 2}, {'c', 51, 9},
-  {'x', 57, 11, 2, 1}, {'s', 58, 10}, {'=', 64, 4, 5}, {'o', 64, 3, 5},
-  {'=', 71, 6, 4}, {'b', 72, 5}, {'=', 77, 8, 4}, {'z', 80, 5},
-  {'x', 84, 10, 4, 2}, {'=', 90, 9, 3}, {'=', 95, 7, 3}, {'o', 95, 6, 3}, {'=', 100, 9, 3}, {'z', 98, 4},
-  {'x', 105, 10, 8, 2}, {'b', 107, 9}, {'b', 110, 9},
-  {'=', 115, 8, 4}, {'=', 121, 10, 4}, {'z', 123, 7}, {'=', 127, 8, 4}, {'o', 127, 7, 4},
-  {'x', 133, 10, 17, 2}, {'b', 137, 9}, {'F', 144, 9},
-  {0}
-};
-static const Op L7[] = {   // Snowy Trail: first ice
-  {'g', 0, 11, 24}, {'P', 3, 10}, {'i', 6, 10, 0}, {'B', 10, 7, 0}, {'b', 16, 10},
-  {'I', 24, 11, 10, 3}, {'o', 26, 9, 6},
-  {'g', 34, 11, 10}, {'b', 38, 10}, {'B', 40, 7, 1},
-  {'g', 47, 11, 8}, {'x', 50, 9, 2, 2}, {'o', 50, 7, 2},
-  {'I', 55, 11, 8, 3}, {'g', 63, 11, 12}, {'^', 65, 10, 2}, {'c', 69, 10},
-  {'=', 78, 9, 4}, {'o', 78, 8, 4},
-  {'g', 84, 11, 14}, {'b', 88, 10}, {'b', 93, 10}, {'z', 90, 6}, {'B', 95, 7, 2},
-  {'I', 98, 11, 12, 3}, {'o', 100, 9, 8},
-  {'g', 110, 9, 5}, {'o', 110, 7, 5},
-  {'g', 115, 11, 25}, {'b', 120, 10}, {'F', 132, 10},
-  {0}
-};
-static const Op L8[] = {   // Frozen Lake: long slides and ice floes
-  {'g', 0, 11, 12}, {'P', 2, 10}, {'B', 6, 7, 0},
-  {'I', 12, 11, 20, 3}, {'b', 18, 10}, {'b', 26, 10}, {'o', 14, 9, 4},
-  {'I', 35, 11, 5, 3}, {'I', 43, 11, 5, 3}, {'z', 41, 7}, {'o', 36, 9, 3}, {'o', 44, 9, 3},
-  {'g', 51, 11, 10}, {'c', 54, 10}, {'B', 57, 7, 1}, {'s', 59, 10}, {'o', 62, 4, 4},
-  {'I', 67, 11, 14, 3}, {'b', 71, 10}, {'x', 76, 9, 2, 2},
-  {'=', 84, 9, 3}, {'=', 89, 7, 3}, {'o', 89, 6, 3}, {'=', 94, 9, 3}, {'z', 92, 4},
-  {'I', 99, 11, 16, 3}, {'b', 104, 10}, {'b', 110, 10}, {'B', 107, 7, 2},
-  {'g', 118, 9, 4}, {'o', 118, 7, 4},
-  {'g', 125, 11, 25}, {'b', 130, 10}, {'F', 142, 10},
-  {0}
-};
-static const Op L9[] = {   // Icicle Cave: icicles drop from the roof
-  {'x', 0, 0, 130, 5},
-  {'G', 0, 13, 18}, {'P', 2, 12}, {'i', 5, 12, 0}, {'v', 10, 5}, {'v', 13, 5}, {'b', 15, 12},
-  {'G', 21, 13, 12}, {'v', 23, 5}, {'v', 26, 5}, {'v', 29, 5}, {'o', 22, 11, 8}, {'B', 31, 9, 0},
-  {'I', 33, 13, 10, 3}, {'x', 36, 5, 3, 5}, {'b', 40, 12},
-  {'G', 46, 11, 4}, {'o', 46, 9, 4},
-  {'G', 53, 13, 16}, {'c', 55, 12}, {'v', 58, 5}, {'v', 61, 5}, {'v', 65, 5}, {'b', 60, 12}, {'b', 66, 12}, {'B', 63, 9, 1},
-  {'s', 67, 12}, {'o', 70, 6, 4},
-  {'G', 75, 13, 6}, {'v', 77, 5},
-  {'G', 81, 13, 14}, {'^', 83, 12, 2}, {'^', 88, 12, 2}, {'=', 82, 9, 4}, {'=', 87, 9, 4}, {'z', 91, 8},
-  {'I', 95, 13, 14, 3}, {'v', 98, 5}, {'v', 102, 5}, {'v', 106, 5}, {'b', 100, 12},
-  {'G', 112, 13, 18}, {'b', 118, 12}, {'B', 115, 9, 2}, {'F', 124, 12},
-  {0}
-};
-static const Op L10[] = {   // Northern Lights
-  {'g', 0, 13, 14}, {'P', 2, 12}, {'B', 7, 9, 1}, {'b', 10, 12},
-  {'g', 14, 11, 5}, {'o', 14, 9, 5},
-  {'I', 22, 13, 10, 3}, {'z', 26, 9},
-  {'g', 32, 13, 20}, {'B', 34, 9, 0}, {'x', 36, 4, 1, 7}, {'x', 40, 6, 2, 7}, {'o', 38, 10, 1}, {'o', 38, 7, 1},
-  {'b', 45, 12}, {'b', 49, 12},
-  {'=', 55, 10, 3}, {'=', 60, 8, 3}, {'o', 60, 7, 3}, {'=', 65, 10, 3}, {'z', 63, 5},
-  {'g', 70, 13, 12}, {'c', 72, 12},
-  {'I', 82, 13, 10, 3}, {'g', 92, 13, 10}, {'^', 92, 12, 2}, {'b', 97, 12}, {'B', 98, 9, 2},
-  {'s', 100, 12}, {'o', 103, 5, 4},
-  {'g', 108, 11, 5}, {'o', 108, 9, 5},
-  {'g', 116, 13, 34}, {'x', 120, 10, 2, 3}, {'b', 126, 12}, {'b', 132, 12}, {'z', 129, 8}, {'F', 142, 12},
-  {0}
-};
-static const Op L11[] = {   // Glacier Gap: ice floes high in the air
-  {'I', 0, 10, 8, 2}, {'P', 2, 9}, {'B', 4, 6, 1},
-  {'I', 11, 10, 4, 1}, {'I', 18, 9, 4, 1}, {'z', 20, 6}, {'I', 25, 10, 3, 1},
-  {'x', 30, 10, 6, 2}, {'b', 32, 9}, {'o', 30, 8, 6},
-  {'=', 38, 8, 3}, {'=', 43, 6, 3}, {'o', 43, 5, 3}, {'I', 48, 8, 4, 1}, {'z', 46, 3},
-  {'x', 54, 10, 6, 2}, {'c', 56, 9}, {'B', 58, 6, 2},
-  {'x', 62, 11, 2, 1}, {'s', 63, 10}, {'I', 69, 4, 5, 1}, {'o', 69, 3, 5},
-  {'I', 76, 6, 4, 1}, {'b', 77, 5}, {'I', 82, 8, 4, 1}, {'z', 85, 5},
-  {'x', 88, 10, 4, 2}, {'I', 94, 9, 3, 1}, {'I', 99, 7, 3, 1}, {'o', 99, 6, 3}, {'I', 104, 9, 3, 1}, {'z', 102, 4},
-  {'x', 109, 10, 8, 2}, {'b', 111, 9}, {'b', 114, 9}, {'B', 112, 6, 0},
-  {'I', 119, 8, 4, 1}, {'I', 125, 10, 4, 1}, {'z', 127, 7}, {'I', 131, 8, 4, 1}, {'o', 131, 7, 4},
-  {'x', 137, 10, 13, 2}, {'b', 141, 9}, {'F', 145, 9},
-  {0}
-};
-static const Op L12[] = {   // The Summit: the last climb
-  {'g', 0, 37, 40}, {'P', 3, 36}, {'B', 6, 33, 1},
-  {'=', 8, 35, 4}, {'I', 14, 33, 4, 1}, {'o', 14, 32, 4}, {'=', 20, 31, 4}, {'I', 26, 29, 4, 1}, {'b', 27, 28},
-  {'=', 32, 27, 5}, {'o', 32, 26, 5}, {'I', 26, 25, 4, 1}, {'z', 23, 22}, {'=', 20, 23, 4}, {'c', 21, 22},
-  {'=', 16, 22, 3}, {'x', 11, 22, 4, 1}, {'x', 10, 9, 1, 14}, {'x', 14, 12, 1, 8},
-  {'o', 12, 19, 1}, {'o', 12, 16, 1}, {'o', 12, 13, 1},
-  {'=', 17, 11, 4}, {'o', 17, 10, 4}, {'I', 23, 9, 4, 1}, {'=', 29, 7, 4}, {'b', 30, 6},
-  {'I', 23, 5, 4, 1}, {'z', 27, 2}, {'x', 8, 3, 13, 1}, {'F', 11, 2},
-  {0}
-};
-static const Op L13[] = {   // Vine Valley
-  {'g', 0, 11, 22}, {'P', 3, 10}, {'B', 8, 7, 0}, {'o', 12, 8, 4}, {'b', 17, 10},
-  {'=', 23, 9, 3}, {'=', 27, 7, 3}, {'o', 27, 6, 3}, {'=', 31, 9, 3},
-  {'g', 35, 11, 16}, {'b', 39, 10}, {'b', 45, 10}, {'B', 42, 7, 1}, {'x', 47, 9, 2, 2}, {'o', 47, 7, 2},
-  {'g', 51, 12, 3}, {'^', 51, 11, 3},
-  {'g', 54, 11, 14}, {'c', 56, 10}, {'z', 61, 6}, {'o', 59, 8, 5},
-  {'=', 69, 9, 4}, {'=', 74, 7, 4}, {'o', 74, 6, 4}, {'z', 76, 3}, {'=', 79, 9, 4},
-  {'g', 84, 11, 12}, {'s', 86, 10}, {'=', 90, 6, 4}, {'o', 90, 5, 4}, {'b', 93, 10},
-  {'g', 96, 9, 6}, {'o', 97, 7, 4},
-  {'g', 102, 11, 28}, {'b', 107, 10}, {'b', 112, 10}, {'B', 110, 7, 2}, {'z', 116, 6}, {'o', 118, 8, 5}, {'F', 124, 10},
-  {0}
-};
-static const Op L14[] = {   // Bamboo Bridges
-  {'g', 0, 13, 12}, {'P', 2, 12}, {'B', 6, 9, 0}, {'b', 9, 12},
-  {'=', 13, 12, 5}, {'=', 19, 11, 5}, {'o', 19, 10, 5}, {'z', 22, 7}, {'=', 25, 10, 5}, {'=', 31, 11, 4},
-  {'g', 36, 13, 8}, {'c', 38, 12}, {'b', 41, 12}, {'B', 40, 9, 1},
-  {'=', 45, 11, 3}, {'=', 49, 9, 3}, {'=', 53, 7, 3}, {'o', 53, 6, 3}, {'=', 57, 9, 3}, {'=', 61, 11, 3}, {'z', 55, 3},
-  {'g', 65, 13, 10}, {'x', 68, 11, 2, 2}, {'b', 72, 12}, {'o', 68, 9, 2},
-  {'g', 75, 13, 3}, {'s', 76, 12}, {'=', 80, 6, 6}, {'o', 80, 5, 6}, {'=', 87, 8, 4}, {'b', 88, 7},
-  {'g', 92, 13, 12}, {'^', 95, 12, 2}, {'^', 99, 12, 2}, {'o', 95, 9, 2}, {'o', 99, 9, 2},
-  {'=', 105, 11, 4}, {'=', 110, 10, 4}, {'z', 112, 6}, {'=', 115, 11, 4},
-  {'g', 120, 13, 20}, {'b', 125, 12}, {'B', 127, 9, 0}, {'o', 129, 10, 4}, {'F', 134, 12},
-  {0}
-};
-static const Op L15[] = {   // Thunder Grove: the Jungle King waits at the end
-  {'g', 0, 11, 18}, {'P', 2, 10}, {'B', 6, 7, 1}, {'b', 10, 10}, {'b', 14, 10},
-  {'g', 18, 9, 5}, {'o', 18, 7, 5},
-  {'g', 23, 11, 12}, {'^', 27, 10, 2}, {'z', 30, 5}, {'x', 32, 9, 2, 2},
-  {'g', 35, 11, 4},
-  {'=', 41, 9, 3}, {'=', 46, 7, 3}, {'o', 46, 6, 3}, {'=', 51, 9, 3},
-  {'g', 56, 11, 16}, {'c', 58, 10}, {'b', 62, 10}, {'b', 66, 10}, {'b', 70, 10}, {'=', 61, 8, 8}, {'o', 62, 7, 6},
-  {'g', 72, 12, 3}, {'^', 72, 11, 3},
-  {'g', 75, 11, 10}, {'s', 77, 10}, {'o', 80, 4, 4}, {'z', 82, 7},
-  {'g', 87, 9, 5}, {'o', 87, 7, 5},
-  {'g', 94, 11, 26}, {'x', 98, 9, 2, 2}, {'b', 103, 10}, {'b', 108, 10}, {'z', 106, 6}, {'B', 111, 7, 0}, {'F', 114, 10},
-  {0}
-};
-static const Op L16[] = {   // Snowball Hills
-  {'g', 0, 11, 16}, {'P', 3, 10}, {'B', 8, 7, 0}, {'b', 12, 10},
-  {'g', 16, 10, 5}, {'g', 21, 9, 5}, {'o', 21, 7, 5}, {'g', 26, 10, 5},
-  {'I', 31, 11, 12, 3}, {'b', 36, 10}, {'o', 33, 9, 6},
-  {'g', 46, 11, 10}, {'x', 49, 9, 2, 2}, {'B', 52, 7, 1}, {'b', 54, 10},
-  {'I', 59, 11, 5, 3}, {'I', 67, 11, 5, 3}, {'z', 65, 7}, {'o', 60, 9, 3}, {'o', 68, 9, 3},
-  {'g', 75, 11, 12}, {'c', 77, 10}, {'^', 81, 10, 2}, {'b', 85, 10},
-  {'g', 87, 9, 5}, {'o', 87, 7, 5}, {'g', 92, 7, 5}, {'o', 92, 5, 5}, {'g', 97, 9, 5},
-  {'I', 102, 11, 14, 3}, {'b', 106, 10}, {'b', 112, 10}, {'z', 109, 6},
-  {'g', 116, 11, 24}, {'B', 121, 7, 2}, {'b', 126, 10}, {'o', 128, 8, 5}, {'F', 134, 10},
-  {0}
-};
-static const Op L17[] = {   // Crystal Cavern
-  {'x', 0, 0, 140, 5},
-  {'G', 0, 13, 16}, {'P', 2, 12}, {'v', 8, 5}, {'v', 12, 5}, {'b', 13, 12}, {'B', 5, 9, 0},
-  {'I', 16, 13, 12, 3}, {'v', 19, 5}, {'v', 23, 5}, {'o', 18, 11, 8},
-  {'G', 31, 11, 5}, {'o', 31, 9, 5},
-  {'G', 39, 13, 14}, {'b', 43, 12}, {'b', 49, 12}, {'v', 45, 5}, {'v', 50, 5}, {'B', 41, 9, 1},
-  {'=', 55, 11, 4}, {'=', 61, 10, 4}, {'o', 61, 9, 4}, {'v', 62, 5}, {'=', 67, 11, 4},
-  {'G', 72, 13, 14}, {'c', 74, 12}, {'^', 78, 12, 2}, {'^', 83, 12, 2}, {'z', 81, 8}, {'v', 80, 5},
-  {'I', 86, 13, 14, 3}, {'v', 89, 5}, {'v', 93, 5}, {'v', 97, 5}, {'b', 95, 12},
-  {'G', 103, 13, 4}, {'s', 104, 12}, {'o', 107, 7, 4}, {'=', 107, 13, 3},
-  {'G', 110, 11, 6}, {'o', 111, 9, 5},
-  {'G', 118, 13, 22}, {'b', 123, 12}, {'b', 128, 12}, {'B', 125, 9, 2}, {'v', 127, 5}, {'F', 134, 12},
-  {0}
-};
-static const Op L18[] = {   // Blizzard Pass: the Snow Queen waits at the end
-  {'g', 0, 13, 14}, {'P', 2, 12}, {'B', 6, 9, 1}, {'b', 10, 12},
-  {'I', 16, 12, 4, 1}, {'I', 22, 11, 4, 1}, {'o', 22, 10, 4}, {'I', 28, 12, 4, 1}, {'z', 25, 7},
-  {'g', 34, 13, 12}, {'x', 38, 11, 2, 2}, {'b', 43, 12}, {'o', 38, 9, 2},
-  {'I', 46, 13, 10, 3}, {'o', 48, 11, 6},
-  {'=', 58, 11, 3}, {'=', 63, 9, 3}, {'o', 63, 8, 3}, {'=', 68, 11, 3}, {'z', 66, 5},
-  {'g', 73, 13, 12}, {'c', 75, 12}, {'b', 79, 12}, {'b', 83, 12}, {'B', 81, 9, 0},
-  {'g', 85, 11, 5}, {'g', 90, 9, 5}, {'o', 90, 7, 5},
-  {'I', 97, 9, 4, 1}, {'I', 103, 10, 4, 1}, {'I', 109, 12, 4, 1}, {'z', 105, 6},
-  {'g', 115, 13, 25}, {'^', 119, 12, 2}, {'b', 125, 12}, {'b', 131, 12}, {'B', 128, 9, 2}, {'F', 134, 12},
-  {0}
-};
-static const Op L19[] = {   // Cactus Trail: frogs, flowers, a pretend wall and the helmet
-  {'g', 0, 11, 20}, {'P', 3, 10}, {'i', 6, 10, 0}, {'B', 9, 7, 4}, {'f', 15, 10},
-  {'g', 20, 9, 6}, {'o', 21, 7, 4}, {'p', 24, 8},
-  {'g', 26, 11, 14}, {'y', 31, 10}, {'o', 29, 8, 5}, {'B', 35, 7, 0}, {'i', 34, 10, 1}, {'x', 38, 9, 2, 2},
-  {'g', 40, 7, 10}, {'_', 42, 8, 6, 3}, {'h', 40, 8, 2, 3}, {'o', 43, 9, 4}, {'o', 43, 10, 4}, {'o', 43, 5, 5},
-  {'g', 50, 11, 12}, {'c', 52, 10}, {'f', 56, 10},
-  {'m', 63, 11, 6, 0}, {'o', 66, 8, 4},
-  {'g', 75, 11, 30}, {'p', 84, 10}, {'B', 87, 7, 3}, {'i', 89, 10, 2}, {'k', 92, 9, 1, 2}, {'x', 92, 2, 1, 7}, {'o', 94, 9, 4}, {'f', 99, 10},
-  {'g', 105, 12, 7}, {'m', 107, 10, 4, 1},
-  {'g', 112, 6, 10}, {'o', 114, 4, 5}, {'p', 118, 5},
-  {'g', 122, 11, 18}, {'b', 127, 10}, {'F', 134, 10},
-  {0}
-};
-static const Op L20[] = {   // Sandstone Steps: riding the moving platforms
-  {'g', 0, 13, 12}, {'P', 2, 12}, {'B', 6, 9, 1}, {'f', 9, 12},
-  {'m', 13, 12, 5, 0}, {'o', 15, 9, 4},
-  {'x', 23, 12, 5, 2}, {'y', 25, 11},
-  {'m', 29, 12, 4, 1}, {'x', 34, 8, 6, 2}, {'o', 35, 6, 4}, {'p', 38, 7},
-  {'m', 41, 8, 6, 0}, {'x', 51, 9, 5, 2}, {'c', 52, 8}, {'B', 54, 5, 4},
-  {'=', 57, 10, 3}, {'=', 61, 11, 3},
-  {'g', 65, 13, 14}, {'y', 69, 12}, {'y', 74, 12}, {'o', 68, 10, 8},
-  {'m', 80, 13, 5, 0}, {'m', 89, 12, 4, 1}, {'x', 94, 8, 5, 2}, {'a', 96, 4},
-  {'m', 100, 8, 5, 0}, {'o', 102, 5, 4},
-  {'g', 108, 13, 32}, {'f', 113, 12}, {'B', 116, 9, 0}, {'B', 121, 9, 3}, {'k', 124, 11, 2, 2}, {'x', 124, 3, 2, 8}, {'o', 127, 11, 5}, {'F', 134, 12},
-  {0}
-};
-static const Op L21[] = {   // Pyramid Path: King Croak waits at the end
-  {'g', 0, 11, 30}, {'P', 2, 10}, {'B', 6, 7, 4}, {'y', 11, 10},
-  {'x', 16, 9, 12, 2}, {'x', 18, 7, 8, 2}, {'x', 20, 5, 4, 2}, {'o', 20, 3, 4},
-  {'_', 20, 9, 4, 2}, {'H', 16, 9, 4, 2}, {'o', 20, 10, 4}, {'o', 20, 9, 4},
-  {'g', 30, 11, 10}, {'f', 33, 10}, {'f', 37, 10},
-  {'m', 41, 11, 5, 0},
-  {'g', 50, 11, 14}, {'c', 52, 10}, {'x', 54, 3, 10, 1}, {'a', 56, 4}, {'a', 60, 4}, {'o', 55, 8, 6},
-  {'=', 66, 9, 3}, {'=', 71, 7, 3}, {'o', 71, 6, 3}, {'=', 76, 9, 3},
-  {'g', 81, 11, 12}, {'y', 85, 10}, {'p', 90, 10},
-  {'g', 93, 12, 6}, {'m', 94, 10, 3, 1}, {'g', 99, 7, 6}, {'o', 100, 5, 4},
-  {'g', 105, 11, 15}, {'B', 109, 7, 0}, {'F', 114, 10},
-  {0}
-};
-static const Op L22[] = {   // Cloud Hop
-  {'x', 0, 10, 8, 2}, {'P', 2, 9}, {'B', 4, 6, 1},
-  {'m', 9, 10, 5, 0}, {'x', 18, 10, 5, 2}, {'f', 20, 9},
-  {'m', 24, 10, 4, 1}, {'x', 29, 6, 6, 2}, {'o', 30, 4, 4}, {'p', 33, 5},
-  {'m', 36, 6, 6, 0}, {'x', 46, 7, 5, 2}, {'c', 47, 6}, {'a', 50, 2},
-  {'=', 52, 9, 3}, {'=', 56, 11, 3}, {'x', 60, 11, 6, 2}, {'y', 62, 10}, {'B', 63, 7, 4},
-  {'m', 67, 11, 5, 0}, {'m', 76, 11, 5, 1}, {'x', 81, 6, 5, 2}, {'o', 82, 4, 3},
-  {'m', 87, 6, 5, 0}, {'a', 92, 1}, {'x', 96, 8, 6, 2}, {'f', 98, 7},
-  {'=', 103, 10, 3}, {'m', 107, 10, 5, 0},
-  {'x', 116, 10, 8, 2}, {'c', 117, 9}, {'p', 121, 9},
-  {'m', 125, 10, 5, 0}, {'x', 134, 10, 16, 2}, {'b', 138, 9}, {'F', 144, 9},
-  {0}
-};
-static const Op L23[] = {   // Bat Belfry: bats, a hidden room under the floor and cracked walls
-  {'x', 0, 0, 140, 3},
-  {'G', 0, 13, 18}, {'P', 2, 12}, {'i', 5, 12, 0}, {'a', 10, 3}, {'a', 14, 3}, {'B', 7, 9, 4},
-  {'G', 18, 11, 5}, {'o', 18, 9, 5},
-  {'G', 23, 13, 26}, {'B', 25, 9, 3}, {'y', 28, 12}, {'k', 33, 11, 1, 2}, {'x', 33, 3, 1, 8},
-  {'H', 40, 13, 6, 1}, {'_', 40, 14, 6, 1}, {'o', 40, 14, 6}, {'i', 37, 12, 1}, {'p', 47, 12},
-  {'m', 50, 13, 5, 0},
-  {'G', 59, 13, 14}, {'c', 61, 12}, {'a', 64, 3}, {'a', 68, 3}, {'y', 67, 12}, {'=', 63, 9, 4}, {'o', 63, 8, 4},
-  {'G', 73, 14, 6}, {'m', 74, 12, 4, 1}, {'G', 79, 8, 8}, {'o', 80, 6, 5}, {'p', 84, 7},
-  {'G', 87, 13, 12}, {'f', 90, 12}, {'f', 95, 12}, {'B', 92, 9, 0},
-  {'=', 100, 11, 3}, {'m', 104, 11, 5, 0},
-  {'G', 113, 13, 27}, {'a', 117, 3}, {'y', 120, 12}, {'B', 123, 9, 3}, {'k', 127, 11, 2, 2}, {'x', 127, 3, 2, 8}, {'o', 130, 11, 3}, {'F', 134, 12},
-  {0}
-};
-static const Op L24[] = {   // Storm Tower: the Bat Baron waits at the end
-  {'x', 0, 10, 10, 2}, {'P', 2, 9}, {'B', 5, 6, 4}, {'y', 7, 9},
-  {'m', 11, 10, 5, 0}, {'x', 20, 10, 6, 2}, {'a', 22, 4}, {'f', 23, 9},
-  {'=', 27, 8, 3}, {'=', 31, 6, 3}, {'o', 31, 5, 3}, {'=', 35, 8, 3},
-  {'x', 39, 10, 8, 2}, {'c', 41, 9}, {'p', 45, 9},
-  {'m', 48, 10, 4, 1}, {'x', 53, 6, 6, 2}, {'o', 54, 4, 4}, {'a', 57, 1},
-  {'m', 60, 6, 6, 0}, {'x', 70, 8, 6, 2}, {'y', 72, 7}, {'B', 74, 4, 1},
-  {'m', 77, 8, 5, 0}, {'m', 86, 9, 4, 1}, {'x', 91, 5, 5, 2}, {'o', 92, 3, 3},
-  {'=', 97, 7, 3}, {'=', 101, 9, 3},
-  {'x', 105, 10, 15, 2}, {'f', 109, 9}, {'B', 112, 6, 2}, {'F', 115, 9},
-  {0}
-};
+// ---- the levels: 7 worlds of 8. Every level is built by build_level() from set pieces, the same
+// way every time. The last level of each world ends with a boss.
+#define C_JUNGLE 0xFF7EC8F0, 0xFFD4F1F9, 0xFF6FB07E, 0xFF3F8452
+#define C_EVENING 0xFFF7A35C, 0xFFFDE2B0, 0xFFC97B5A, 0xFF7A4B3A
+#define C_FALLS 0xFF5FB4C9, 0xFFC8EEF0, 0xFF5E9C8C, 0xFF2F6B5E
+#define C_TEMPLE 0xFF3B2F6B, 0xFF9C6FA8, 0xFF5A4A86, 0xFF3A2F5C
+#define C_CAVE 0xFF1E1A24, 0xFF4A3B3A, 0xFF3A302E, 0xFF2A2220
+#define C_SKY 0xFF4A90E2, 0xFFBFE3FF, 0xFFFFFFFF, 0xFFE3F1FF
+#define C_SNOW 0xFF8FC4EC, 0xFFEAF6FF, 0xFFD5E6F2, 0xFF7FA6BE
+#define C_ICECAVE 0xFF0E2238, 0xFF1F4A6E, 0xFF18395A, 0xFF12304C
+#define C_NIGHT 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94
+#define C_VINE 0xFFF08A4A, 0xFFFFE0A8, 0xFF7FA85E, 0xFF3F7A46
+#define C_BAMBOO 0xFF4FC2B8, 0xFFD8F7E4, 0xFF63B08A, 0xFF2F7A5A
+#define C_THUNDER 0xFF4A4A78, 0xFFB8A8C8, 0xFF4F7A6A, 0xFF2A5244
+#define C_PINKSNOW 0xFFF0A8C0, 0xFFFFF0E0, 0xFFE8DCEC, 0xFF9A9CC4
+#define C_CRYSTAL 0xFF141038, 0xFF3A2F7A, 0xFF2A2460, 0xFF1C1848
+#define C_BLIZZARD 0xFF10183C, 0xFF3F5490, 0xFF8FA3D0, 0xFF55689C
+#define C_DESERT 0xFF58B8F0, 0xFFFFF0C8, 0xFFE8C888, 0xFF5FA05A
+#define C_SUNSET 0xFFF0A050, 0xFFFFE8B0, 0xFFE0B070, 0xFF5A9456
+#define C_CLOUD 0xFF5AA0F0, 0xFFD0ECFF, 0xFFFFFFFF, 0xFFE3F1FF
+#define C_BELFRY 0xFF2A2050, 0xFF7A5A98, 0xFF4A3E78, 0xFF30284E
+#define C_STORM 0xFF3A4670, 0xFF9AA8C8, 0xFFC8D0E4, 0xFFA8B4D0
+// water levels: sky0 is the water near the top, sky1 the deep water, far the rocks behind, nearc the weed
+#define C_LAGOON 0xFF4FC8E0, 0xFF0E4A7A, 0xFF2A7A9A, 0xFF1E8A6A
+#define C_REEF 0xFF58D0E8, 0xFF124A8A, 0xFF3A6AA8, 0xFFE0607A
+#define C_WRECK 0xFF2A6A9A, 0xFF061A30, 0xFF1A3A5A, 0xFF2A5A4A
+#define C_ICEWATER 0xFF9AD8F0, 0xFF1A3A6A, 0xFF6A9AC8, 0xFF5A8AB8
+#define C_OASIS 0xFF5ADCD0, 0xFF1A6A7A, 0xFF4A9A8A, 0xFF3AAA5A
+#define C_RIVER 0xFF6AC8A8, 0xFF0F4A3A, 0xFF2A6A5A, 0xFF3A8A3A
+#define C_SKYPOOL 0xFF9AD0FF, 0xFF3A5AB0, 0xFF7A9AE0, 0xFFC8D8FF
+// beach levels: far is the sea, nearc the palm trees
+#define C_BEACH 0xFF5AB8F0, 0xFFE0F4FF, 0xFF2A9AD0, 0xFF3A9A4A
+#define C_BEACHSET 0xFFF08A6A, 0xFFFFE0B0, 0xFF3A7AB0, 0xFF2A7A3A
+#define LV(nm, th, col, ...) { nm, 0, 0, col, th, NULL, { __VA_ARGS__ } }
 static const Level LEVELS[] = {
-  { "1  JUNGLE FLOOR", 140, 14, 0xFF7EC8F0, 0xFFD4F1F9, 0xFF6FB07E, 0xFF3F8452, 0, L1,
-    { "A: JUMP. HOLD IT TO JUMP HIGHER", "X OR Y: HEADBUTT. JUMP UNDER BOXES TO OPEN THEM", "SPRINGS BOUNCE YOU UP HIGH" } },
-  { "2  CANOPY CLIMB", 110, 26, 0xFFF7A35C, 0xFFFDE2B0, 0xFFC97B5A, 0xFF7A4B3A, 0, L2,
-    { "JUMP AT A WALL, THEN JUMP AGAIN TO WALL-JUMP", "CLIMB THE TOWER TO REACH THE FLAG" } },
-  { "3  MISTY FALLS", 40, 36, 0xFF5FB4C9, 0xFFC8EEF0, 0xFF5E9C8C, 0xFF2F6B5E, 4, L4,
-    { "THE FLAG IS AT THE VERY TOP. KEEP CLIMBING!" } },
-  { "4  OLD TEMPLE", 150, 16, 0xFF3B2F6B, 0xFF9C6FA8, 0xFF5A4A86, 0xFF3A2F5C, 1, L3, { 0 } },
-  { "5  BEETLE CAVERN", 130, 16, 0xFF1E1A24, 0xFF4A3B3A, 0xFF3A302E, 0xFF2A2220, 2, L5, { 0 } },
-  { "6  SKY BRIDGE", 150, 16, 0xFF4A90E2, 0xFFBFE3FF, 0xFFFFFFFF, 0xFFE3F1FF, 3, L6, { 0 } },
-  // world 2: Frosty Forest
-  { "7  SNOWY TRAIL", 140, 14, 0xFF8FC4EC, 0xFFEAF6FF, 0xFFD5E6F2, 0xFF7FA6BE, 5, L7,
-    { "ICE IS SLIPPERY. YOU KEEP SLIDING WHEN YOU STOP!" } },
-  { "8  FROZEN LAKE", 150, 14, 0xFF8FC4EC, 0xFFEAF6FF, 0xFFD5E6F2, 0xFF7FA6BE, 5, L8, { 0 } },
-  { "9  ICICLE CAVE", 130, 16, 0xFF0E2238, 0xFF1F4A6E, 0xFF18395A, 0xFF12304C, 6, L9,
-    { "LOOK UP! ICICLES FALL WHEN YOU WALK UNDER THEM" } },
-  // world 3: Ice Mountain
-  { "10 NORTHERN LIGHTS", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L10, { 0 } },
-  { "11 GLACIER GAP", 150, 16, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L11, { 0 } },
-  { "12 THE SUMMIT", 40, 40, 0xFF0B1030, 0xFF2B3F7A, 0xFF7F93C4, 0xFF4A5C94, 7, L12, { 0 } },
-  // world 4: Wild Jungle
-  { "13 VINE VALLEY", 130, 14, 0xFFF08A4A, 0xFFFFE0A8, 0xFF7FA85E, 0xFF3F7A46, 0, L13, { 0 } },
-  { "14 BAMBOO BRIDGES", 140, 16, 0xFF4FC2B8, 0xFFD8F7E4, 0xFF63B08A, 0xFF2F7A5A, 4, L14, { 0 } },
-  { "15 THUNDER GROVE", 120, 14, 0xFF4A4A78, 0xFFB8A8C8, 0xFF4F7A6A, 0xFF2A5244, 0, L15, { 0 } },
-  // world 5: Snowflake Peaks
-  { "16 SNOWBALL HILLS", 140, 14, 0xFFF0A8C0, 0xFFFFF0E0, 0xFFE8DCEC, 0xFF9A9CC4, 5, L16, { 0 } },
-  { "17 CRYSTAL CAVERN", 140, 16, 0xFF141038, 0xFF3A2F7A, 0xFF2A2460, 0xFF1C1848, 6, L17, { 0 } },
-  { "18 BLIZZARD PASS", 140, 16, 0xFF10183C, 0xFF3F5490, 0xFF8FA3D0, 0xFF55689C, 7, L18, { 0 } },
-  // world 6: Sunny Dunes
-  { "19 CACTUS TRAIL", 140, 14, 0xFF58B8F0, 0xFFFFF0C8, 0xFFE8C888, 0xFF5FA05A, 8, L19,
-    { "FROGS HOP AT YOU AND FLOWERS SPIT SEEDS. THE STAR THROWS BACK!", "SOME WALLS ARE NOT REAL. TRY WALKING INTO THEM", "THE HELMET SMASHES CRACKED BLOCKS: HEADBUTT THEM" } },
-  { "20 SANDSTONE STEPS", 140, 16, 0xFFF0A050, 0xFFFFE8B0, 0xFFE0B070, 0xFF5A9456, 8, L20, { 0 } },
-  { "21 PYRAMID PATH", 120, 14, 0xFF58B8F0, 0xFFFFF0C8, 0xFFE8C888, 0xFF5FA05A, 8, L21, { 0 } },
+  // world 1: Jungle Island
+  LV("1  JUNGLE FLOOR", 0, C_JUNGLE, "A: JUMP. HOLD IT TO JUMP HIGHER", "X OR Y: HEADBUTT. JUMP UNDER BOXES TO OPEN THEM", "FIND THE 3 KEY PIECES. THEY OPEN THE DOOR AT THE END"),
+  LV("2  TREETOP TRAIL", 0, C_EVENING, "JUMP AT A WALL, THEN JUMP AGAIN TO WALL-JUMP", "CRUMBLY PLATFORMS DROP AWAY SOON AFTER YOU LAND"),
+  LV("3  MISTY FALLS", 4, C_FALLS, "JUMP INTO A POOL TO SWIM. PRESS A TO SWIM UP"),
+  LV("4  LAGOON DIVE", 9, C_LAGOON, "UNDERWATER: PRESS A AGAIN AND AGAIN TO SWIM UP", "HOLD DOWN TO SINK FASTER"),
+  LV("5  OLD TEMPLE", 1, C_TEMPLE, "SOME WALLS ARE NOT REAL. TRY WALKING INTO THEM"),
+  LV("6  BEETLE BURROWS", 2, C_CAVE, 0),
+  LV("7  SKY BRIDGE", 3, C_SKY, 0),
+  LV("8  KING BEETLE'S DEN", 2, C_CAVE, 0),
+  // world 2: Coral Coast
+  LV("9  SANDY SHORE", 10, C_BEACH, "CRABS SCUTTLE FAST, THEN STOP TO SNAP. JUMP ON THEM!"),
+  LV("10 TIDE POOLS", 10, C_BEACH, "FISH DART AT YOU WHEN YOU SWIM IN FRONT OF THEM"),
+  LV("11 CORAL REEF", 9, C_REEF, "JELLYFISH STING IF YOU LAND ON THEM. HEADBUTT THEM!"),
+  LV("12 PALM GROVE", 10, C_BEACHSET, "BIRDS SWOOP DOWN WHEN YOU WALK UNDER THEM"),
+  LV("13 SHIPWRECK", 9, C_WRECK, 0),
+  LV("14 LIGHTHOUSE CLIFFS", 3, C_SKY, 0),
+  LV("15 SEA CAVE", 9, C_LAGOON, 0),
+  LV("16 CROAK'S LAGOON", 10, C_BEACHSET, 0),
+  // world 3: Frosty Forest
+  LV("17 SNOWY TRAIL", 5, C_SNOW, "ICE IS SLIPPERY. YOU KEEP SLIDING WHEN YOU STOP!", "PENGUINS FLOP DOWN AND SLIDE AT YOU. JUMP OVER THEM"),
+  LV("18 PINE HILLS", 5, C_PINKSNOW, "SNOWMEN THROW SNOWBALLS. HEADBUTT THEM OR JUMP ON THEM"),
+  LV("19 FROZEN LAKE", 9, C_ICEWATER, 0),
+  LV("20 ICICLE CAVE", 6, C_ICECAVE, "LOOK UP! ICICLES FALL WHEN YOU WALK UNDER THEM"),
+  LV("21 PENGUIN SLOPES", 5, C_SNOW, 0),
+  LV("22 SNOWMAN VALLEY", 7, C_NIGHT, 0),
+  LV("23 CRYSTAL CAVERN", 6, C_CRYSTAL, 0),
+  LV("24 FROST KING'S HALL", 6, C_ICECAVE, 0),
+  // world 4: Sunny Dunes
+  LV("25 CACTUS TRAIL", 8, C_DESERT, "MOLES POP UP AND THROW EARTH. HIT THEM WHILE THEY ARE UP", "THE STAR POWER THROWS BOUNCING STARS: PRESS X"),
+  LV("26 DUNE HOPPERS", 8, C_SUNSET, "ARMADILLOS ROLL UP INTO A BALL. ONLY STOMP THEM UNROLLED"),
+  LV("27 OASIS SPRINGS", 9, C_OASIS, 0),
+  LV("28 MOLE TUNNELS", 1, C_TEMPLE, "THE HELMET SMASHES CRACKED BLOCKS: HEADBUTT THEM"),
+  LV("29 SANDSTONE STEPS", 8, C_SUNSET, 0),
+  LV("30 PYRAMID PATH", 1, C_TEMPLE, 0),
+  LV("31 SUNSET RIDGE", 8, C_SUNSET, 0),
+  LV("32 QUEEN BEE'S HIVE", 8, C_DESERT, 0),
+  // world 5: Wild Jungle
+  LV("33 VINE VALLEY", 0, C_VINE, 0),
+  LV("34 BAMBOO BRIDGES", 4, C_BAMBOO, 0),
+  LV("35 RIVER RAPIDS", 9, C_RIVER, 0),
+  LV("36 THUNDER GROVE", 0, C_THUNDER, 0),
+  LV("37 ARMADILLO RUN", 0, C_VINE, 0),
+  LV("38 HIDDEN RUINS", 1, C_TEMPLE, 0),
+  LV("39 MOSSY DEPTHS", 9, C_RIVER, 0),
+  LV("40 JUNGLE KING'S THRONE", 0, C_THUNDER, 0),
+  // world 6: Snowflake Peaks
+  LV("41 SNOWBALL HILLS", 5, C_PINKSNOW, 0),
+  LV("42 NORTHERN LIGHTS", 7, C_NIGHT, 0),
+  LV("43 GLACIER GAP", 7, C_BLIZZARD, 0),
+  LV("44 ICY DEPTHS", 9, C_ICEWATER, 0),
+  LV("45 CRYSTAL MINES", 6, C_CRYSTAL, "BATS SLEEP UNTIL YOU COME CLOSE"),
+  LV("46 BLIZZARD PASS", 7, C_BLIZZARD, 0),
+  LV("47 THE SUMMIT", 7, C_NIGHT, 0),
+  LV("48 SNOW QUEEN'S PEAK", 7, C_BLIZZARD, 0),
   // world 7: Cloud Castle
-  { "22 CLOUD HOP", 150, 16, 0xFF5AA0F0, 0xFFD0ECFF, 0xFFFFFFFF, 0xFFE3F1FF, 3, L22, { 0 } },
-  { "23 BAT BELFRY", 140, 16, 0xFF2A2050, 0xFF7A5A98, 0xFF4A3E78, 0xFF30284E, 1, L23,
-    { "BATS SLEEP UNTIL YOU COME CLOSE", "THAT FLOOR LOOKS A LITTLE ODD..." } },
-  { "24 STORM TOWER", 120, 16, 0xFF3A4670, 0xFF9AA8C8, 0xFFC8D0E4, 0xFFA8B4D0, 3, L24, { 0 } },
+  LV("49 CLOUD HOP", 3, C_CLOUD, 0),
+  LV("50 WINDY HEIGHTS", 3, C_SKY, 0),
+  LV("51 RAINBOW BRIDGE", 3, C_CLOUD, 0),
+  LV("52 SKY POOL", 9, C_SKYPOOL, 0),
+  LV("53 BAT BELFRY", 1, C_BELFRY, 0),
+  LV("54 STORM TOWER", 3, C_STORM, 0),
+  LV("55 CASTLE GATES", 1, C_BELFRY, 0),
+  LV("56 BAT BARON'S KEEP", 1, C_BELFRY, 0),
 };
 #define NLEVELS (int)(sizeof LEVELS / sizeof LEVELS[0])
 
 // ============================================================ state
 enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP };
-enum { E_BEETLE, E_BEE, E_POW, E_ICE, E_BOSS, E_PLAT, E_FROG, E_SPINY, E_PLANT, E_BAT, E_SHOT };
-// E_PLAT: a moving platform (k: 0 side to side, 1 up and down; vx: how far).  E_SHOT: k 0 a seed spat at Dino, 1 Dino's bouncing star
-#define IS_FOE(t) ((t) == E_BEETLE || (t) == E_BEE || ((t) >= E_FROG && (t) <= E_BAT))   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
+enum { E_BEETLE, E_BEE, E_POW, E_ICE, E_BOSS, E_PLAT, E_SHOT, E_FROG, E_SPINY, E_PLANT, E_BAT,
+       E_CRAB, E_FISH, E_JELLY, E_ROLL, E_PENGUIN, E_MOLE, E_BIRD, E_SNOWMAN };
+#define NCRIT (E_SNOWMAN - E_FROG + 1)
+// E_PLAT: a moving platform (k: 0 side to side, 1 up and down, 2 drops when stood on; vx: how far).
+// E_SHOT: k 0 a seed spat at Dino, 1 Dino's bouncing star, 2 a clod of earth, 3 a snowball (2 and 3 fly in an arc)
+#define IS_FOE(t) ((t) == E_BEETLE || (t) == E_BEE || ((t) >= E_FROG && (t) <= E_SNOWMAN))   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
 enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL, SFX_DASH, SFX_SWORD, SFX_JUMP2 };
 
 typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz, x0; } Ent;
@@ -656,11 +398,11 @@ typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 static char G[MAXH][MAXW];
 static unsigned char FAKE[MAXH][MAXW];   // a pretend wall: looks like ground, but you can walk through it
 static int tile_raw, ride_i = -1;        // tile_raw: show pretend walls as ground (for painting). ride_i: the platform Dino stands on
-static Bmp CRIT_C[4][2][8], HD_PLAT, HD_CRACK, HD_HELMI, HD_STARI, HD_HELM;
+static Bmp CRIT_C[NCRIT][2][8], HD_FPLAT, HD_DOOR, HD_KEYP, HD_PLAT, HD_CRACK, HD_HELMI, HD_STARI, HD_HELM;
 static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
 static int LW, LH, lvl;
 static const Level* L;
-#define MAXENT 170
+#define MAXENT 420
 static Bmp FLAKE[3];
 int g_lowq;   // set by the platform when frames are taking too long: draw Dino the quick way
 static Bmp BEETLE_C[2][2][20], BEE_C[2][8], BOSS_C[2][20], QBEE_C[2][8];
@@ -681,27 +423,35 @@ static int ncheck;
 #define PH 13
 
 static int lvl_frames; int g_no_hud;
+// in_water: Dino is swimming. keyp: which of the three key pieces he holds (bits). door_msg_t: shows
+// "find the key" for a while after bumping the locked door.
+static int in_water, keyp, door_msg_t, key_msg_t, level_keys;
+static struct { float x, y; int life; } bubbles[32];
+static void add_bubble(float x, float y) {
+  for (int i = 0; i < 32; i++) if (bubbles[i].life <= 0) { bubbles[i].x = x; bubbles[i].y = y; bubbles[i].life = 70 + (frame * 7 + i * 13) % 50; return; }
+}
 // intro_t: counts up while a level is being introduced (Dino and the counters on black, then they
 // fly to their places). over_sel: which button is picked on the game over screen.
 static int intro_t, over_sel, dino_sx, dino_sy;
 #define INTRO_HOLD 85
 #define INTRO_FLY 60
 // world map: node 0 is Dino's house, node n is level n
-static int cleared[32], map_node, map_from, map_t, world;
+static int cleared[64], map_node, map_from, map_t, world;
 // Each world is its own map. A stop is a level (kind >= 0, the level's index), Dino's house (-1),
 // the way back to the world before (-2) or the way on to the next world (-3).
-typedef struct { const char* name; int n; short xy[8][2]; signed char kind[8]; } World;
+typedef struct { const char* name; int n; short xy[10][2]; signed char kind[10]; } World;
+#define W8(a) { a, a + 1, a + 2, a + 3, a + 4, a + 5, a + 6, a + 7 }
 static const World WORLDS[7] = {
-  { "JUNGLE ISLAND", 8, { {38, 146}, {84, 134}, {130, 108}, {96, 62}, {166, 50}, {226, 92}, {282, 44}, {306, 112} }, { -1, 0, 1, 2, 3, 4, 5, -3 } },
-  { "FROSTY FOREST", 5, { {22, 150}, {80, 128}, {140, 100}, {204, 74}, {276, 46} }, { -2, 6, 7, 8, -3 } },
-  { "ICE MOUNTAIN", 5, { {26, 150}, {92, 128}, {164, 98}, {238, 54}, {298, 104} }, { -2, 9, 10, 11, -3 } },
-  { "WILD JUNGLE", 5, { {24, 150}, {84, 120}, {150, 138}, {214, 98}, {290, 62} }, { -2, 12, 13, 14, -3 } },
-  { "SNOWFLAKE PEAKS", 5, { {24, 62}, {92, 98}, {168, 72}, {252, 120}, {300, 152} }, { -2, 15, 16, 17, -3 } },
-  { "SUNNY DUNES", 5, { {24, 150}, {86, 124}, {150, 140}, {216, 100}, {292, 64} }, { -2, 18, 19, 20, -3 } },
-  { "CLOUD CASTLE", 4, { {24, 150}, {96, 120}, {170, 90}, {250, 56} }, { -2, 21, 22, 23 } },
+  { "JUNGLE ISLAND", 10, { {26, 146}, {62, 128}, {98, 146}, {132, 120}, {112, 86}, {148, 62}, {192, 78}, {222, 112}, {262, 92}, {300, 60} }, { -1, 0, 1, 2, 3, 4, 5, 6, 7, -3 } },
+  { "CORAL COAST", 10, { {22, 62}, {56, 86}, {92, 66}, {128, 90}, {158, 122}, {198, 140}, {236, 118}, {222, 82}, {262, 54}, {300, 98} }, { -2, 8, 9, 10, 11, 12, 13, 14, 15, -3 } },
+  { "FROSTY FOREST", 10, { {22, 100}, {54, 132}, {92, 148}, {126, 120}, {150, 86}, {120, 54}, {168, 40}, {212, 62}, {250, 98}, {296, 130} }, { -2, 16, 17, 18, 19, 20, 21, 22, 23, -3 } },
+  { "SUNNY DUNES", 10, { {24, 146}, {58, 122}, {94, 140}, {130, 116}, {166, 136}, {200, 108}, {172, 72}, {210, 48}, {252, 70}, {296, 104} }, { -2, 24, 25, 26, 27, 28, 29, 30, 31, -3 } },
+  { "WILD JUNGLE", 10, { {22, 56}, {58, 78}, {46, 116}, {84, 140}, {120, 116}, {156, 140}, {192, 116}, {226, 140}, {262, 112}, {300, 76} }, { -2, 32, 33, 34, 35, 36, 37, 38, 39, -3 } },
+  { "SNOWFLAKE PEAKS", 10, { {24, 140}, {60, 118}, {96, 136}, {124, 104}, {100, 70}, {140, 48}, {184, 64}, {218, 94}, {256, 72}, {296, 44} }, { -2, 40, 41, 42, 43, 44, 45, 46, 47, -3 } },
+  { "CLOUD CASTLE", 9, { {24, 146}, {64, 128}, {104, 144}, {140, 118}, {120, 84}, {156, 60}, {198, 78}, {236, 104}, {280, 70} }, { -2, 48, 49, 50, 51, 52, 53, 54, 55 } },
 };
 #define NWORLDS 7
-#define SNOW_WORLD (world == 1 || world == 2 || world == 4)
+#define SNOW_WORLD (world == 2 || world == 5)
 #define MAP_XY (WORLDS[world].xy)
 #ifndef SAVE_PATH
 #define SAVE_PATH "amazingdino-save.txt"
@@ -725,8 +475,10 @@ static void load_progress(void) {
   if (!f) f = fopen("fs:/vol/external01/wiiu/apps/CanopyDino/save.txt", "r");   // progress from before the game was renamed
 #endif
   if (!f) return;
-  char b[64] = { 0 };
-  if (fgets(b, sizeof b, f)) for (int i = 1; i <= NLEVELS && b[i - 1]; i++) cleared[i] = b[i - 1] == '1';
+  char b[128] = { 0 };
+  // a save from before the worlds were rebuilt has fewer levels in it: start afresh then
+  if (fgets(b, sizeof b, f) && (int)strcspn(b, "\r\n") >= NLEVELS) for (int i = 1; i <= NLEVELS && b[i - 1]; i++) cleared[i] = b[i - 1] == '1';
+  else { fclose(f); return; }
   if (fscanf(f, "%d", &total_bananas) != 1) total_bananas = 0;
   fclose(f);
 }
@@ -743,7 +495,7 @@ static char tile(int tx, int ty) {
   if (FAKE[ty][tx] && !tile_raw) return ' ';
   return G[ty][tx];
 }
-static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u' || c == 'I' || c == 'k'; }
+static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u' || c == 'I' || c == 'k' || c == 'D'; }
 #include "hd.h"
 #include "anim.h"
 static int box_solid(float x, float y, float w, float h) {
@@ -764,8 +516,10 @@ static void spawn_parts(float x, float y, int n, uint32_t c, float spd, float up
   }
 }
 
-// ---- every side-scrolling level gets a long extra stretch built from set pieces (always the same
-// for the same level), and the last level of each world ends in a boss arena.
+// ============================================================ level builder
+// A level is built from a long run of set pieces picked (the same way every time) to suit its
+// world and how far into the game it is. Three key pieces are hidden along the way and a locked
+// door stands before the flag. The last level of each world has a boss arena instead of a door.
 static uint32_t gen_seed;
 static int grnd(int n) { gen_seed = gen_seed * 1664525u + 1013904223u; return (int)((gen_seed >> 10) % (uint32_t)n); }
 static Ent* add_ent(int type, int tx, int ty) {
@@ -773,233 +527,505 @@ static Ent* add_ent(int type, int tx, int ty) {
   Ent* e = &ents[nents++];
   memset(e, 0, sizeof *e);
   e->type = type; e->alive = 1;
-  e->x = e->x0 = tx * T + 2; e->y = (type == E_BEETLE || type == E_FROG || type == E_SPINY) ? ty * T + 6 : type == E_PLANT ? ty * T + 2 : ty * T; e->by = e->y;
+  e->x = e->x0 = tx * T + 2; e->y = (type == E_BEETLE || type == E_FROG || type == E_SPINY || type == E_CRAB || type == E_ROLL || type == E_PENGUIN || type == E_MOLE) ? ty * T + 6 : (type == E_PLANT || type == E_SNOWMAN) ? ty * T + 2 : ty * T; e->by = e->y;
   e->vx = type == E_SPINY ? -0.4f : -0.5f; e->t = tx * 13;
   return e;
 }
 static const char* const BOSS_NAME[7] = { "KING BEETLE", "FROST KING", "QUEEN BEE", "JUNGLE KING", "SNOW QUEEN", "KING CROAK", "BAT BARON" };
 #define BOSS_BEE(k) ((k) == 2 || (k) == 4 || (k) == 6)
 #define BOSS_COL(k) ((k) == 0 ? 2 : (k) == 1 ? 1 : 0)   // beetle3d colour: red, icy, green
-static int boss_kind(int n) { return n == 5 ? 0 : n == 8 ? 1 : n == 10 ? 2 : n == 14 ? 3 : n == 17 ? 4 : n == 20 ? 5 : n == 23 ? 6 : -1; }
-static void extend_level(int n) {
+static int boss_kind(int n) { static const signed char K[7] = { 0, 5, 1, 2, 3, 4, 6 }; return n % 8 == 7 ? K[n / 8] : -1; }
+
+static int GX, GY, g_world, g_n, g_top, g_bot;   // GX: next free column. GY: the top row of the ground there
+static char GC;                                   // what the ground is made of
+static float g_diff;                              // 0 at the start of the game .. 1 at the end
+static void SET(int x, int y, char c) { if (x >= 0 && x < MAXW && y >= 0 && y < LH) G[y][x] = c; }
+static char GET(int x, int y) { return (x >= 0 && x < MAXW && y >= 0 && y < LH) ? G[y][x] : 'X'; }
+static void colm(int x, int top) { for (int y = top < 0 ? 0 : top; y < LH; y++) SET(x, y, GC); }
+static void flat(int w) { for (int i = 0; i < w; i++) colm(GX + i, GY); GX += w; }
+static void coin(int x, int y) { if (GET(x, y) == ' ' || GET(x, y) == 'w') SET(x, y, 'o'); }
+static void coin_row(int x, int y, int n) { for (int i = 0; i < n; i++) coin(x + i, y); }
+static void coin_arc(int x, int y, int n) { for (int i = 0; i < n; i++) coin(x + i, y - (int)lroundf(sinf(3.14159f * (i + 0.5f) / n) * 2)); }
+static void box(int x, int y, int kind) { SET(x, y, '?'); if (x >= 0 && x < MAXW && y >= 0 && y < MAXH) BOXK[y][x] = (char)kind; }
+static void key_at(int x, int y, int piece) { SET(x, y, 'K'); if (x >= 0 && x < MAXW && y >= 0 && y < MAXH) BOXK[y][x] = (char)piece; }
+static Ent* plat_at(int x, int y, int kind, int travel) {
+  Ent* e = add_ent(E_PLAT, x, y);
+  if (e) { e->x = e->x0 = x * T; e->y = e->by = y * T; e->vx = travel * T; e->k = kind; e->t = 0; }
+  return e;
+}
+static int cave_theme(void) { int th = L->theme; return th == 1 || th == 2 || th == 6; }
+static int snow_theme(void) { int th = L->theme; return th >= 5 && th <= 7; }
+// the creatures each world uses, on the ground and in the air
+static const signed char POOL_G[7][6] = {
+  { E_BEETLE, E_FROG, E_BEETLE, E_PLANT, E_BEETLE, E_FROG },          // Jungle Island
+  { E_CRAB, E_CRAB, E_FROG, E_CRAB, E_PLANT, E_BEETLE },              // Coral Coast
+  { E_PENGUIN, E_SNOWMAN, E_BEETLE, E_PENGUIN, E_SNOWMAN, E_BEETLE }, // Frosty Forest
+  { E_MOLE, E_ROLL, E_MOLE, E_SPINY, E_PLANT, E_ROLL },               // Sunny Dunes
+  { E_ROLL, E_FROG, E_PLANT, E_BEETLE, E_ROLL, E_SPINY },             // Wild Jungle
+  { E_PENGUIN, E_SNOWMAN, E_SPINY, E_ROLL, E_SNOWMAN, E_PENGUIN },    // Snowflake Peaks
+  { E_SPINY, E_ROLL, E_BEETLE, E_SPINY, E_ROLL, E_FROG },             // Cloud Castle
+};
+static const signed char POOL_A[7][3] = {
+  { E_BEE, E_BEE, E_BIRD }, { E_BIRD, E_BIRD, E_BEE }, { E_BEE, E_BIRD, E_BIRD }, { E_BEE, E_BIRD, E_BEE },
+  { E_BEE, E_BIRD, E_BIRD }, { E_BIRD, E_BAT, E_BIRD }, { E_BIRD, E_BAT, E_BEE } };
+static void foe_g(int x) {   // a creature standing on the ground at column x
+  int t = POOL_G[g_world][grnd(6)];
+  if (g_n < 2 && t != E_BEETLE) t = grnd(3) ? E_BEETLE : E_FROG;   // the first levels keep it gentle
+  add_ent(t, x, GY - 1);
+}
+static void foe_a(int x) {   // a creature in the air above column x
+  int t = cave_theme() ? E_BAT : POOL_A[g_world][grnd(3)];
+  if (g_n < 2) t = E_BEE;
+  add_ent(t, x, t == E_BIRD || t == E_BAT ? GY - 7 : GY - 4);
+}
+static int power_kind(void) {   // which power-up a box holds: wings, sword, helmet or star
+  static const char P[7][4] = { { 1, 2, 1, 2 }, { 1, 2, 3, 1 }, { 2, 3, 1, 2 }, { 3, 4, 2, 1 }, { 4, 2, 3, 1 }, { 4, 3, 2, 1 }, { 4, 1, 3, 2 } };
+  return P[g_world][grnd(4)];
+}
+static void ground_step(int d) { GY += d; if (GY < g_top) GY = g_top; if (GY > g_bot) GY = g_bot; }
+
+// ---- a key piece, hidden one of a few ways
+static void key_piece(int piece) {
+  int v = grnd(L->theme == 9 ? 2 : 6);
+  if (L->theme == 9) {
+    if (v == 0) {   // a rock with a hollow in it, open at the top
+      flat(3);
+      int x = GX;
+      for (int i = 0; i < 5; i++) colm(x + i, GY);
+      for (int y = GY - 5; y < GY; y++) for (int i = 0; i < 5; i++) SET(x + i, y, 'X');
+      for (int y = GY - 4; y < GY; y++) for (int i = 1; i < 4; i++) SET(x + i, y, ' ');
+      SET(x + 2, GY - 5, ' ');
+      key_at(x + 2, GY - 1, piece); coin(x + 1, GY - 1); coin(x + 3, GY - 1);
+      add_ent(E_JELLY, x + 2, GY - 9);
+      GX += 5; flat(3);
+    } else {        // high up between two pillars of rock, past a fish
+      flat(3);
+      int x = GX;
+      for (int i = 0; i < 9; i++) colm(x + i, GY);
+      for (int y = GY - 9; y < GY; y++) { SET(x + 1, y, 'X'); SET(x + 7, y, 'X'); }
+      key_at(x + 4, GY - 10, piece); coin_row(x + 3, GY - 8, 3);
+      add_ent(E_FISH, x + 4, GY - 4);
+      GX += 9; flat(2);
+    }
+    return;
+  }
+  if (v == 0 && GY - 9 >= 1) {   // up high: bounce up off a spring to a plank
+    flat(9);
+    SET(GX - 7, GY - 1, 's');
+    for (int i = -6; i <= -3; i++) SET(GX + i, GY - 7, '=');
+    key_at(GX - 4, GY - 8, piece); coin(GX - 6, GY - 8); coin(GX - 3, GY - 8);
+  } else if (v == 1) {           // inside a hill, through a pretend wall (coins lead the way in)
+    flat(3);
+    coin(GX - 2, GY - 1); coin(GX - 1, GY - 1);
+    int x = GX;
+    for (int i = 0; i < 9; i++) colm(x + i, GY - 2);
+    for (int i = 1; i < 8; i++) SET(x + i, GY - 1, ' ');
+    SET(x, GY - 1, GC); FAKE[GY - 1][x] = 1;
+    coin_row(x + 1, GY - 1, 5); key_at(x + 7, GY - 1, piece);
+    GX += 9; flat(3);
+  } else if (v == 2) {           // in mid-air over a pit: grab it on the way across
+    flat(3);
+    key_at(GX + 2, GY - 2, piece); coin(GX + 1, GY - 2); coin(GX + 3, GY - 2);
+    GX += 4; flat(3);
+  } else if (v == 3) {           // on top of a stone tower
+    flat(2);
+    int x = GX;
+    static const int H[7] = { 1, 2, 3, 4, 3, 2, 1 };
+    for (int i = 0; i < 7; i++) { colm(x + i, GY); for (int j = 1; j <= H[i]; j++) SET(x + i, GY - j, 'X'); }
+    key_at(x + 3, GY - 5, piece);
+    foe_g(x + 9);
+    GX += 7; flat(4);
+  } else if (v == 4 && GY + 4 < LH) {   // at the bottom of a pool
+    flat(3);
+    int x = GX, w = 7;
+    for (int i = 0; i < w; i++) { colm(x + i, GY + 3); for (int y = GY; y < GY + 3; y++) SET(x + i, y, 'w'); }
+    key_at(x + 3, GY + 2, piece); coin(x + 1, GY + 2); coin(x + 5, GY + 2);
+    add_ent(E_FISH, x + 3, GY + 1);
+    GX += w; flat(3);
+  } else {                       // in a hut of cracked blocks, with a helmet box just before it
+    flat(4);
+    box(GX - 2, GY - 4, 3);
+    flat(8);
+    int x = GX - 5;
+    SET(x, GY - 1, 'k'); SET(x + 2, GY - 1, 'k'); SET(x, GY - 2, 'k'); SET(x + 1, GY - 2, 'k'); SET(x + 2, GY - 2, 'k');
+    key_at(x + 1, GY - 1, piece);
+  }
+}
+
+// ---- the set pieces of a land level
+enum { P_RUN, P_GAP, P_STEP, P_BRIDGE, P_SPIKES, P_BOXES, P_STONE, P_HIGH, P_ICE, P_ZIGZAG, P_MOVE, P_LIFT, P_FALL, P_PILLARS,
+       P_CHIMNEY, P_TUNNEL, P_POOL, P_SECRET, P_HELMET, P_WAVE, P_BIRDS, P_PYRAMID, P_ICICLES, P_CHAIN, P_STAR, NPIECE };
+static int piece_weight(int k) {
+  int th = L->theme, sky = th == 3, cave = cave_theme(), sn = snow_theme(), sand = th == 8 || th == 10, wet = th == 0 || th == 4 || th == 10 || g_world == 1 || g_world == 4;
+  switch (k) {
+    case P_RUN: return sky ? 1 : 4;
+    case P_GAP: return 4;
+    case P_STEP: return 3;
+    case P_BRIDGE: return sky ? 4 : 2;
+    case P_SPIKES: return 2;
+    case P_BOXES: return 3;
+    case P_STONE: return cave ? 3 : 1;
+    case P_HIGH: return 2;
+    case P_ICE: return sn ? 4 : 0;
+    case P_ZIGZAG: return g_n >= 1 ? (sky ? 3 : 1) : 0;
+    case P_MOVE: return g_n >= 1 ? (sky ? 3 : 2) : 0;
+    case P_LIFT: return g_n >= 2 ? (sky ? 2 : 1) : 0;
+    case P_FALL: return g_n >= 1 ? (sky ? 3 : 2) : 0;
+    case P_PILLARS: return g_n >= 2 ? (sky ? 4 : 2) : 0;
+    case P_CHIMNEY: return g_n >= 1 ? 1 : 0;
+    case P_TUNNEL: return cave ? 4 : sky ? 0 : 1;
+    case P_POOL: return wet ? 3 : (sn ? 1 : 0);
+    case P_SECRET: return 2;
+    case P_HELMET: return g_n >= 24 ? 1 : 0;
+    case P_WAVE: return 1 + (int)(g_diff * 3);
+    case P_BIRDS: return g_world >= 1 && !cave ? 2 : 0;
+    case P_PYRAMID: return sand || th == 1 ? 3 : 0;
+    case P_ICICLES: return sn ? 3 : 0;
+    case P_CHAIN: return g_n >= 8 ? (sky ? 3 : 1) : 0;
+    case P_STAR: return g_n >= 16 ? 1 : 0;
+  }
+  return 0;
+}
+static void land_piece(int k) {
+  int x;
+  switch (k) {
+    case P_RUN: {   // a stretch of ground with coins and a creature or two
+      int w = 10 + grnd(6); x = GX; flat(w);
+      coin_arc(x + 3, GY - 3, 5);
+      foe_g(x + w - 3);
+      if (grnd(100) < 30 + (int)(g_diff * 50)) foe_g(x + 5);
+      break;
+    }
+    case P_GAP: {   // a gap to jump, maybe up or down a step
+      int gw = 2 + grnd(2) + (g_diff > 0.35f && grnd(2));
+      flat(3); coin_arc(GX - 1, GY - 3, gw + 2); GX += gw;
+      if (grnd(3) == 0) ground_step(grnd(2) ? 1 : -1);
+      flat(3); break;
+    }
+    case P_STEP: {
+      flat(4);
+      int d = (1 + grnd(2)) * (GY > (g_top + g_bot) / 2 ? -1 : 1);
+      if (grnd(4) == 0) d = -d;
+      ground_step(d); x = GX; flat(5);
+      coin(x + 2, GY - 2); coin(x + 3, GY - 2);
+      break;
+    }
+    case P_BRIDGE: {   // a log bridge over a pit, with something flying over it
+      flat(2);
+      int w = 8 + grnd(5);
+      for (int i = 0; i < w; i++) { SET(GX + i, GY, '='); if (i % 2) coin(GX + i, GY - 2); }
+      foe_a(GX + w / 2);
+      GX += w; flat(2); break;
+    }
+    case P_SPIKES: {
+      flat(4);
+      int sw = 2;   // three wide is only just jumpable: keep it fair
+      for (int i = 0; i < sw; i++) { colm(GX + i, GY); SET(GX + i, GY - 1, '^'); coin(GX + i, GY - 4); }
+      GX += sw; flat(4); break;
+    }
+    case P_BOXES: {   // a row of ? boxes; one might hold a power-up
+      x = GX; flat(10);
+      for (int i = 3; i < 6; i++) box(x + i, GY - 4, 0);
+      if (grnd(3) == 0) BOXK[GY - 4][x + 4] = (char)power_kind();
+      foe_g(x + 8);
+      break;
+    }
+    case P_STONE: {   // stone steps up and over
+      flat(3); x = GX;
+      for (int i = 0; i < 6; i++) { int h = i < 2 ? 1 : (i < 4 ? 2 : 1); colm(x + i, GY); for (int j = 1; j <= h; j++) SET(x + i, GY - j, 'X'); if (i == 2 || i == 3) coin(x + i, GY - 4); }
+      GX += 6; flat(3); break;
+    }
+    case P_HIGH: {   // a spring up to a high road of planks, with creatures down below
+      if (GY - 8 < 1) { flat(6); break; }
+      x = GX; flat(20);
+      SET(x + 2, GY - 1, 's');
+      for (int i = 4; i < 17; i++) { SET(x + i, GY - 6, '='); coin(x + i, GY - 7); }
+      foe_g(x + 9); foe_g(x + 14);
+      if (grnd(2)) box(x + 10, GY - 10, power_kind());
+      break;
+    }
+    case P_ICE: {   // a slippery stretch of ice
+      int w = 10 + grnd(5); x = GX;
+      for (int i = 0; i < w; i++) { colm(GX + i, GY); SET(GX + i, GY, 'I'); }
+      GX += w; coin_row(x + 3, GY - 2, 4);
+      foe_g(x + w - 2);
+      break;
+    }
+    case P_ZIGZAG: {   // zigzag planks over a pit
+      flat(2);
+      for (int j = 0; j < 4; j++) { int yy = GY - 1 - (j % 2) * 2; for (int i = 0; i < 4; i++) SET(GX + j * 4 + i, yy, '='); coin(GX + j * 4 + 1, yy - 2); }
+      foe_a(GX + 8);
+      GX += 16; flat(2); break;
+    }
+    case P_MOVE: {   // a moving platform across a wide pit
+      flat(2);
+      plat_at(GX, GY, 0, 6);
+      coin_row(GX + 2, GY - 3, 5);
+      GX += 9; flat(2); break;
+    }
+    case P_LIFT: {   // a lift up to higher ground
+      if (GY - 5 < g_top) { ground_step(3); flat(4); break; }
+      flat(3);
+      plat_at(GX, GY, 1, 5);
+      coin(GX + 1, GY - 7); coin(GX + 1, GY - 9);
+      GX += 3; GY -= 5; x = GX; flat(6);
+      coin_row(x + 1, GY - 2, 3);
+      break;
+    }
+    case P_FALL: {   // crumbly platforms over a pit: keep moving!
+      flat(2);
+      int n = 3 + grnd(2);
+      for (int k2 = 0; k2 < n; k2++) { plat_at(GX + k2 * 4, GY, 2, 0); coin(GX + k2 * 4 + 1, GY - 2); }
+      GX += n * 4 - 1; flat(3); break;
+    }
+    case P_PILLARS: {   // hop from pillar to pillar
+      flat(2);
+      int n = 3 + grnd(2);
+      for (int k2 = 0; k2 < n; k2++) {
+        GX += 2 + grnd(2);
+        int top = GY - grnd(3); if (top < g_top) top = g_top;
+        colm(GX, top); colm(GX + 1, top); coin(GX, top - 1); coin(GX + 1, top - 1);
+        GX += 2;
+      }
+      GX += 2; flat(3); break;
+    }
+    case P_CHIMNEY: {   // a narrow shaft to wall-jump up
+      if (GY - 6 < g_top) { flat(5); break; }
+      flat(4);
+      x = GX;
+      colm(x, GY); colm(x + 1, GY); colm(x + 2, GY);
+      for (int y = GY - 7; y <= GY - 3; y++) SET(x, y, 'X');   // a stone block hanging over the way in
+      coin(x + 1, GY - 4); coin(x + 2, GY - 6);
+      GX = x + 3; GY -= 6; x = GX; flat(6);
+      coin_row(x + 1, GY - 2, 3);
+      break;
+    }
+    case P_TUNNEL: {   // a low tunnel with boxes in its roof
+      int w = 14 + grnd(4); x = GX; flat(w);
+      for (int i = 2; i < w - 2; i++) SET(x + i, GY - 4, 'X');
+      box(x + 5, GY - 4, 0); box(x + 9, GY - 4, grnd(3) ? 0 : power_kind());
+      coin_row(x + 3, GY - 2, w - 6);
+      foe_g(x + 7); if (g_diff > 0.3f) foe_g(x + 11);
+      break;
+    }
+    case P_POOL: {   // a pool to swim across
+      if (GY + 4 >= LH) { flat(4); break; }
+      flat(3); x = GX;
+      int w = 6 + grnd(5);
+      for (int i = 0; i < w; i++) { colm(x + i, GY + 3); for (int y = GY; y < GY + 3; y++) SET(x + i, y, 'w'); }
+      coin_row(x + 1, GY + 2, w - 2);
+      if (w >= 7) add_ent(E_FISH, x + w / 2, GY + 1);
+      GX += w; flat(3); break;
+    }
+    case P_SECRET: {   // a hill with a room hidden behind a pretend wall
+      flat(3); x = GX;
+      for (int i = 0; i < 10; i++) colm(x + i, GY - 2);
+      for (int i = 1; i < 9; i++) SET(x + i, GY - 1, ' ');
+      SET(x, GY - 1, GC); FAKE[GY - 1][x] = 1;
+      coin_row(x + 1, GY - 1, 8);
+      GX += 10; flat(3);
+      if (grnd(2)) box(x + 4, GY - 6, power_kind());
+      break;
+    }
+    case P_HELMET: {   // a wall of cracked blocks: only the helmet gets through. The box refills.
+      flat(4); box(GX - 2, GY - 4, 3);
+      flat(2); x = GX;
+      for (int y = GY - 5; y < GY; y++) { SET(x, y, 'k'); SET(x + 1, y, 'k'); }
+      for (int y = 0; y < GY - 5; y++) { SET(x, y, 'X'); SET(x + 1, y, 'X'); }
+      colm(x, GY); colm(x + 1, GY);
+      GX += 2; x = GX; flat(6); coin_row(x + 1, GY - 2, 4);
+      break;
+    }
+    case P_WAVE: {   // lots of creatures at once, with boxes overhead
+      x = GX; flat(17);
+      for (int i = 0; i < 3 + (g_diff > 0.5f); i++) foe_g(x + 5 + i * 3);
+      foe_a(x + 9);
+      box(x + 3, GY - 4, 0); box(x + 12, GY - 4, 0);
+      break;
+    }
+    case P_BIRDS: {   // a long bridge with birds swooping
+      flat(2);
+      int w = 14;
+      for (int i = 0; i < w; i++) { SET(GX + i, GY, '='); if (i % 3 == 1) coin(GX + i, GY - 2); }
+      add_ent(E_BIRD, GX + 4, GY - 8); add_ent(E_BIRD, GX + 11, GY - 8);
+      GX += w; flat(2); break;
+    }
+    case P_PYRAMID: {   // stone steps up and down
+      flat(2); x = GX;
+      static const int H[9] = { 1, 2, 3, 4, 4, 3, 2, 1, 0 };
+      for (int i = 0; i < 9; i++) { colm(x + i, GY); for (int j = 1; j <= H[i]; j++) SET(x + i, GY - j, 'X'); }
+      coin_row(x + 3, GY - 6, 2);
+      if (grnd(2)) box(x + 4, GY - 8, 0);
+      GX += 9; flat(3);
+      foe_g(GX - 2);
+      break;
+    }
+    case P_ICICLES: {   // icicles hanging under an ice ledge
+      x = GX; flat(12);
+      for (int i = 3; i < 9; i++) SET(x + i, GY - 5, 'I');
+      for (int i = 4; i < 9; i += 2) { Ent* e = add_ent(E_ICE, x + i, GY - 4); if (e) { e->y = e->by = (GY - 4) * T; e->vx = 0; e->t = 0; } }
+      coin_row(x + 5, GY - 2, 3);
+      break;
+    }
+    case P_CHAIN: {   // two moving platforms over a very wide pit
+      flat(2); x = GX;
+      plat_at(x, GY, 0, 5);
+      Ent* e = plat_at(x + 8, GY - 2, 0, 4); if (e) e->t = 126;
+      coin_row(x + 5, GY - 4, 4);
+      GX = x + 15; flat(3); break;
+    }
+    case P_STAR: {   // a star box, then a crowd to throw stars at
+      x = GX; flat(16);
+      box(x + 2, GY - 4, 4);
+      foe_g(x + 8); foe_g(x + 11); foe_g(x + 14);
+      break;
+    }
+  }
+}
+
+// ---- the set pieces of a water level
+static void water_piece(int k) {
+  int x = GX;
+  switch (k) {
+    case 0: {   // open water with a ring of coins and fish
+      int w = 14 + grnd(6);
+      for (int i = 0; i < w; i++) colm(GX + i, GY + (i % 7 == 3));
+      GX += w;
+      int cx = x + w / 2, cy = GY - 7;
+      for (int a = 0; a < 8; a++) coin(cx + (int)lroundf(cosf(a * 0.785f) * 2.2f), cy + (int)lroundf(sinf(a * 0.785f) * 2.2f));
+      add_ent(E_FISH, x + 3, GY - 4); add_ent(E_FISH, x + w - 3, GY - 10);
+      break;
+    }
+    case 1: {   // rock columns from the floor and from the top: swim over, then under
+      flat(3);
+      for (int k2 = 0; k2 < 3; k2++) {
+        int a = GX;
+        if (k2 % 2 == 0) { colm(a, GY - 8); colm(a + 1, GY - 8); for (int y = GY - 8; y < GY; y++) { SET(a, y, 'X'); SET(a + 1, y, 'X'); } }
+        else { colm(a, GY); colm(a + 1, GY); for (int y = 0; y < GY - 8; y++) { SET(a, y, 'X'); SET(a + 1, y, 'X'); } }
+        GX += 2; flat(4);
+        coin_row(GX - 3, k2 % 2 ? GY - 4 : GY - 10, 2);
+      }
+      break;
+    }
+    case 2: {   // a narrow passage with jellyfish
+      int w = 16;
+      for (int i = 0; i < w; i++) { colm(GX + i, GY - 2); for (int y = 0; y < GY - 9; y++) SET(GX + i, y, 'X'); }
+      GX += w;
+      add_ent(E_JELLY, x + 5, GY - 6); add_ent(E_JELLY, x + 11, GY - 5);
+      coin_row(x + 2, GY - 4, 12);
+      break;
+    }
+    case 3: {   // a trench with spikes on the bottom
+      if (GY + 3 >= LH) { flat(6); break; }
+      flat(3); x = GX;
+      for (int i = 0; i < 6; i++) { colm(x + i, GY + 2); SET(x + i, GY + 1, '^'); }
+      coin_row(x, GY - 3, 6);
+      GX += 6; flat(3);
+      break;
+    }
+    case 4: {   // crabs on the sea floor and a shelf with boxes over it
+      flat(14);
+      add_ent(E_CRAB, x + 3, GY - 1); add_ent(E_CRAB, x + 11, GY - 1);
+      for (int i = 4; i < 9; i++) SET(x + i, GY - 5, 'X');
+      box(x + 5, GY - 9, 0); box(x + 7, GY - 9, grnd(2) ? 0 : 2);
+      break;
+    }
+    case 5: {   // a school of fish
+      int w = 16;
+      for (int i = 0; i < w; i++) colm(GX + i, GY);
+      GX += w;
+      for (int f = 0; f < 3; f++) add_ent(E_FISH, x + 3 + f * 5, GY - 3 - f * 3);
+      for (int i = 0; i < 5; i++) coin(x + 2 + i * 3, GY - 2 - (i % 3) * 3);
+      break;
+    }
+    case 6: {   // the sea floor rises or drops
+      flat(4);
+      int d = (2 + grnd(2)) * (GY > (g_top + g_bot) / 2 ? -1 : 1);
+      ground_step(d); x = GX; flat(6); coin_row(x + 1, GY - 2, 4);
+      if (grnd(2)) add_ent(E_JELLY, x + 3, GY - 7);
+      break;
+    }
+    default: {  // a rock arch with coins underneath
+      int w = 12;
+      for (int i = 0; i < w; i++) colm(GX + i, GY);
+      for (int i = 2; i < w - 2; i++) SET(GX + i, GY - 6, 'X');
+      GX += w;
+      coin_row(x + 3, GY - 3, 6);
+      add_ent(E_CRAB, x + 6, GY - 1);
+      break;
+    }
+  }
+}
+
+static void boss_arena(int bk) {
+  int x = GX;
+  for (int i = 0; i < 38; i++) colm(x + i, GY);
+  SET(x + 2, GY - 1, 'c'); box(x + 5, GY - 4, 2);
+  arena_x0 = (x + 9) * T; arena_x1 = (x + 34) * T;
+  Ent* e = add_ent(E_BOSS, x + 26, GY - 1);
+  if (e) {
+    boss_i = (int)(e - ents); e->k = bk;
+    e->x = e->x0 = (x + 26) * T; e->y = e->by = BOSS_BEE(bk) ? GY * T - 84 : GY * T - 26;
+    boss_max = boss_hp = bk >= 5 ? 6 : bk >= 3 ? bk + 2 : 3 + bk;
+  }
+  GX += 38;
+}
+
+static void build_level(int n) {
   boss_i = -1; boss_awake = boss_dead = 0; g_boss_music = 0;
-  if (LH > 20) return;   // the tall climbing levels stay as they are
-  int th = L->theme, stone = th == 1 || th == 2 || th == 6, snow = th >= 5 && th <= 7;
-  char gc = stone ? 'X' : '#';
-  int x = LW, gy = goal_y + 1, bk = boss_kind(n);
-  if (gy < 7) gy = 7;
-  if (gy > LH - 2) gy = LH - 2;
-#define COL(cx, top) do { for (int yy = (top); yy < LH; yy++) G[yy][cx] = gc; } while (0)
-  for (int c = goal_x - 1; c < LW; c++) if (c >= 0 && !solid_c(G[goal_y + 1][c])) COL(c, goal_y + 1);
-  G[goal_y][goal_x] = 'c';   // the old flag spot becomes a checkpoint
-  gy = goal_y + 1;
-  gen_seed = 1234567u + n * 7919u;
-  int end = LW + (bk >= 0 ? 90 : 130), cnt = 0, last = -1;
-  while (x < end) {
-    int k = grnd(n >= 18 ? 14 : n >= 12 ? 11 : (snow ? 9 : 8));   // the two newest worlds have extra set pieces
-    if (!snow && k == 8) k = 10;
-    if (k == last) k = (k + 1) % 8;
-    last = k; cnt++;
-    if (cnt % 5 == 0) { for (int i = 0; i < 6; i++) COL(x + i, gy); G[gy - 1][x + 2] = 'c'; x += 6; continue; }
-    switch (k) {
-      case 0: {   // a run with coins and beetles
-        int w = 10 + grnd(5);
-        for (int i = 0; i < w; i++) COL(x + i, gy);
-        for (int i = 3; i < 8; i++) G[gy - 3 - (i > 3 && i < 7)][x + i] = 'o';
-        add_ent(E_BEETLE, x + w - 3, gy - 1);
-        if (grnd(2)) add_ent(E_BEETLE, x + 5, gy - 1);
-        x += w; break;
-      }
-      case 1: {   // a gap to jump
-        int w = 3 + grnd(2);
-        for (int i = 0; i < 3; i++) COL(x + i, gy);
-        x += 3;
-        for (int i = 0; i < w; i++) G[gy - 3][x + i] = 'o';
-        x += w;
-        for (int i = 0; i < 3; i++) COL(x + i, gy);
-        x += 3; break;
-      }
-      case 2: {   // a step up or down
-        int ny = gy + (grnd(2) ? 1 : -1) * (1 + grnd(2));
-        if (ny < 7) ny = gy + 1;
-        if (ny > LH - 2) ny = gy - 1;
-        for (int i = 0; i < 4; i++) COL(x + i, gy);
-        x += 4; gy = ny;
-        for (int i = 0; i < 5; i++) COL(x + i, gy);
-        G[gy - 2][x + 2] = 'o'; G[gy - 2][x + 3] = 'o';
-        x += 5; break;
-      }
-      case 3: {   // a log bridge over a pit, with a bee
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2;
-        int w = 8 + grnd(4);
-        for (int i = 0; i < w; i++) { G[gy][x + i] = '='; if (i % 2) G[gy - 2][x + i] = 'o'; }
-        add_ent(E_BEE, x + w / 2, gy - 4);
-        x += w;
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2; break;
-      }
-      case 4: {   // spikes to hop over
-        for (int i = 0; i < 4; i++) COL(x + i, gy);
-        x += 4;
-        for (int i = 0; i < 2; i++) { COL(x + i, gy); G[gy - 1][x + i] = '^'; G[gy - 4][x + i] = 'o'; }
-        x += 2;
-        for (int i = 0; i < 4; i++) COL(x + i, gy);
-        x += 4; break;
-      }
-      case 5: {   // a row of ? boxes
-        for (int i = 0; i < 9; i++) COL(x + i, gy);
-        for (int i = 3; i < 6; i++) { G[gy - 4][x + i] = '?'; BOXK[gy - 4][x + i] = 0; }
-        if (grnd(3) == 0) BOXK[gy - 4][x + 4] = (char)(1 + grnd(2));
-        add_ent(E_BEETLE, x + 7, gy - 1);
-        x += 9; break;
-      }
-      case 6: {   // stone steps up and over
-        for (int i = 0; i < 3; i++) COL(x + i, gy);
-        x += 3;
-        for (int i = 0; i < 6; i++) {
-          int hgt = i < 2 ? 1 : (i < 4 ? 2 : 1);
-          COL(x + i, gy);
-          for (int j = 1; j <= hgt; j++) G[gy - j][x + i] = 'X';
-          if (i == 2 || i == 3) G[gy - 4][x + i] = 'o';
-        }
-        x += 6;
-        for (int i = 0; i < 3; i++) COL(x + i, gy);
-        x += 3; break;
-      }
-      case 7: {   // a spring up to a high bridge of coins
-        for (int i = 0; i < 15; i++) COL(x + i, gy);
-        G[gy - 1][x + 2] = 's';
-        for (int i = 4; i < 9; i++) { G[gy - 6][x + i] = '='; G[gy - 7][x + i] = 'o'; }
-        add_ent(E_BEETLE, x + 10, gy - 1);
-        x += 15; break;
-      }
-      case 8: {   // a slippery stretch of ice
-        int w = 9 + grnd(4);
-        for (int i = 0; i < w; i++) { COL(x + i, gy); G[gy][x + i] = 'I'; if (i > 2 && i < 7) G[gy - 2][x + i] = 'o'; }
-        add_ent(E_BEETLE, x + w - 2, gy - 1);
-        x += w; break;
-      }
-      case 9: {   // zigzag planks over a pit, with a bee
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2;
-        for (int j = 0; j < 4; j++) {
-          int yy = gy - 1 - (j % 2) * 2;
-          for (int i = 0; i < 4; i++) G[yy][x + j * 4 + i] = '=';
-          G[yy - 2][x + j * 4 + 1] = 'o';
-        }
-        add_ent(E_BEE, x + 8, gy - 7);
-        x += 16;
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2; break;
-      }
-      case 11: {   // a moving platform across a wide pit
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2;
-        Ent* e = add_ent(E_PLAT, x, gy);
-        if (e) { e->x = e->x0 = x * T; e->y = e->by = gy * T; e->vx = 6 * T; e->k = 0; e->t = 0; }
-        for (int i = 2; i < 7; i++) G[gy - 3][x + i] = 'o';
-        x += 9;
-        for (int i = 0; i < 2; i++) COL(x + i, gy);
-        x += 2; break;
-      }
-      case 12: {   // a frog and a seed-spitting flower
-        for (int i = 0; i < 13; i++) COL(x + i, gy);
-        add_ent(E_FROG, x + 4, gy - 1); add_ent(E_PLANT, x + 10, gy - 1);
-        for (int i = 5; i < 9; i++) G[gy - 3][x + i] = 'o';
-        x += 13; break;
-      }
-      case 13: {   // a star box, then spiky balls and a sleeping bat
-        for (int i = 0; i < 15; i++) COL(x + i, gy);
-        G[gy - 4][x + 2] = '?'; BOXK[gy - 4][x + 2] = 4;
-        add_ent(E_SPINY, x + 8, gy - 1); add_ent(E_SPINY, x + 12, gy - 1); add_ent(E_BAT, x + 10, gy - 7);
-        x += 15; break;
-      }
-      case 10: {
-        for (int i = 0; i < 12; i++) COL(x + i, gy);
-        if (snow) {   // icicles hanging under an ice ledge
-          for (int i = 3; i < 9; i++) G[gy - 5][x + i] = 'I';
-          for (int i = 4; i < 9; i += 2) { Ent* e = add_ent(E_ICE, x + i, gy - 4); if (e) { e->y = e->by = (gy - 4) * T; e->vx = 0; e->t = 0; } }
-          for (int i = 5; i < 8; i++) G[gy - 2][x + i] = 'o';
-        } else {      // a beetle parade under a plank roof
-          for (int i = 2; i < 10; i++) { G[gy - 3][x + i] = '='; G[gy - 4][x + i] = 'o'; }
-          add_ent(E_BEETLE, x + 4, gy - 1); add_ent(E_BEETLE, x + 7, gy - 1); add_ent(E_BEETLE, x + 10, gy - 1);
-        }
-        x += 12; break;
-      }
+  int water = L->theme == 9, bk = boss_kind(n);
+  g_world = n / 8; g_n = n; g_diff = n / 55.0f;
+  LH = water ? 20 : 20;
+  g_top = water ? 9 : 7; g_bot = water ? 17 : 16;
+  GC = cave_theme() ? 'X' : '#';
+  gen_seed = 2654435761u ^ (uint32_t)(n * 7919 + 17);
+  GX = 0; GY = water ? 16 : 14;
+  // the start, with any signs
+  int start_w = 10 + (L->signs[0] ? 6 : 0) + (L->signs[1] ? 5 : 0) + (L->signs[2] ? 5 : 0);
+  flat(start_w);
+  start_x = 3 * T + 3; start_y = (GY - 1) * T + T - PH;
+  for (int i = 0; i < 3 && L->signs[i]; i++) { sign_x[i] = 7 + i * 5; sign_y[i] = GY - 1; nsigns = i + 1; }
+  int len = bk >= 0 ? 300 : water ? 380 + (int)(g_diff * 50) : 470 + (int)(g_diff * 70);
+  level_keys = bk < 0;
+  int last_cp = GX, keys_done = 0, last = -1, last2 = -1;
+  while (GX < len) {
+    if (GX - last_cp > 80) {   // a checkpoint every so often
+      int x = GX; flat(6); SET(x + 2, GY - 1, 'c'); last_cp = GX;
+      continue;
     }
+    if (level_keys && keys_done < 3 && GX > len * (keys_done * 0.27f + 0.2f)) { key_piece(keys_done++); continue; }
+    if (water) { int k = grnd(8); if (k == last) k = (k + 3) % 8; last = k; water_piece(k); continue; }
+    int tot = 0, k = 0;
+    for (int i = 0; i < NPIECE; i++) if (i != last && i != last2) tot += piece_weight(i);
+    int r = grnd(tot > 0 ? tot : 1);
+    for (k = 0; k < NPIECE; k++) { if (k == last || k == last2) continue; r -= piece_weight(k); if (r < 0) break; }
+    if (k >= NPIECE) k = P_RUN;
+    last2 = last; last = k;
+    land_piece(k);
   }
-  if (bk >= 0) {
-    // the boss arena: a checkpoint and a sword box, then a wide flat floor
-    for (int i = 0; i < 38; i++) COL(x + i, gy);
-    G[gy - 1][x + 2] = 'c'; G[gy - 4][x + 5] = '?'; BOXK[gy - 4][x + 5] = 2;
-    arena_x0 = (x + 9) * T; arena_x1 = (x + 34) * T;
-    Ent* e = add_ent(E_BOSS, x + 26, gy - 1);
-    if (e) {
-      boss_i = (int)(e - ents); e->k = bk;
-      e->x = e->x0 = (x + 26) * T; e->y = e->by = BOSS_BEE(bk) ? gy * T - 84 : gy * T - 26;
-      boss_max = boss_hp = bk >= 5 ? 6 : bk >= 3 ? bk + 2 : 3 + bk;
-    }
-    x += 38;
+  // the end: bring the ground back to a comfortable height
+  while (GY < (water ? 15 : 13)) { flat(3); ground_step(1); }
+  while (GY > (water ? 17 : 15)) { flat(3); ground_step(-1); }
+  flat(4);
+  if (bk >= 0) boss_arena(bk);
+  else {   // the locked door in a wall that goes all the way up
+    int x = GX;
+    for (int y = 0; y < GY - 3; y++) SET(x, y, 'X');
+    for (int y = GY - 3; y < GY; y++) SET(x, y, 'D');
+    colm(x, GY); GX++;
   }
-  for (int i = 0; i < 9; i++) COL(x + i, gy);
-  goal_x = x + 4; goal_y = gy - 1;
-  LW = x + 9;
-#undef COL
+  int x = GX; flat(12);
+  goal_x = x + 6; goal_y = GY - 1;
+  LW = GX;
 }
 
 static void load_level(int n) {
-  lvl = n; L = &LEVELS[n]; LW = L->w; LH = L->h;
+  lvl = n; L = &LEVELS[n];
   memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK); memset(FAKE, 0, sizeof FAKE); ride_i = -1;
   nents = 0; nsigns = 0; ncheck = 0;
-  memset(parts, 0, sizeof parts);
-  for (const Op* o = L->ops; o->op; o++) {
-    int w = o->w ? o->w : 1, h = o->h ? o->h : 1;
-    switch (o->op) {
-      case 'g': case 'G':
-        for (int x = o->x; x < o->x + w; x++) for (int y = o->y; y < LH; y++) G[y][x] = o->op == 'g' ? '#' : 'X';
-        break;
-      case 'x': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = 'X'; break;
-      case '=': case '^': case 'o':
-        for (int x = o->x; x < o->x + w; x++) G[o->y][x] = o->op;
-        break;
-      case 's': G[o->y][o->x] = 's'; break;
-      case 'B': G[o->y][o->x] = '?'; BOXK[o->y][o->x] = (char)o->w; break;
-      case 'I': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = 'I'; break;
-      case 'v':
-        if (nents < MAXENT) {
-          Ent* e = &ents[nents++];
-          memset(e, 0, sizeof *e);
-          e->type = E_ICE; e->alive = 1; e->x = o->x * T + 2; e->y = e->by = o->y * T;
-        }
-        break;
-      case 'c': G[o->y][o->x] = 'c'; break;
-      case '_': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = ' '; break;
-      case 'k': for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) G[y][x] = 'k'; break;   // cracked blocks
-      case 'h': case 'H':   // a pretend wall hiding a secret
-        for (int y = o->y; y < o->y + h; y++) for (int x = o->x; x < o->x + w; x++) { G[y][x] = o->op == 'H' ? 'X' : '#'; FAKE[y][x] = 1; }
-        break;
-      case 'm': { Ent* e = add_ent(E_PLAT, o->x, o->y); if (e) { e->x = e->x0 = o->x * T; e->y = e->by = o->y * T; e->vx = o->w * T; e->k = o->h; e->t = 0; } break; }
-      case 'f': add_ent(E_FROG, o->x, o->y); break;
-      case 'y': add_ent(E_SPINY, o->x, o->y); break;
-      case 'p': add_ent(E_PLANT, o->x, o->y); break;
-      case 'a': add_ent(E_BAT, o->x, o->y); break;
-      case 'F': goal_x = o->x; goal_y = o->y; break;
-      case 'P': start_x = o->x * T + 3; start_y = o->y * T + T - PH; break;
-      case 'i': if (nsigns < 4) { sign_x[o->w] = o->x; sign_y[o->w] = o->y; nsigns++; } break;
-      case 'b': case 'z':
-        if (nents < MAXENT) {
-          Ent* e = &ents[nents++];
-          memset(e, 0, sizeof *e);
-          e->type = o->op == 'b' ? E_BEETLE : E_BEE; e->alive = 1;
-          e->x = o->x * T + 2; e->y = o->op == 'b' ? o->y * T + 6 : o->y * T; e->by = e->y;
-          e->vx = -0.5f; e->t = o->x * 13;
-          break;
-        }
-    }
-  }
-  for (int i = 0; i < nsigns; i++) if (!L->signs[i]) nsigns = i;
-  extend_level(n);
+  memset(parts, 0, sizeof parts); memset(bubbles, 0, sizeof bubbles);
+  keyp = 0; door_msg_t = key_msg_t = 0;
+  build_level(n);
   check_x = start_x; check_y = start_y;
   lvl_frames = 0;
   tile_raw = 1; hd_render_level(); tile_raw = 0;
@@ -1016,7 +1042,7 @@ static void respawn(void) {
     if (e->type == E_BOSS) { if (!boss_dead) { e->alive = 1; e->dying = 0; e->x = e->x0; e->y = e->by; e->vy = 0; e->vx = -0.5f; boss_hp = boss_max; boss_inv = 0; boss_awake = 0; g_boss_music = 0; } continue; }
     if (e->type == E_ICE) { e->alive = 1; e->k = 0; e->y = e->by; e->vy = 0; continue; }
     if (e->type == E_SHOT) { e->alive = 0; continue; }
-    if (e->type == E_PLAT) continue;
+    if (e->type == E_PLAT) { if (e->k == 2) { e->alive = 1; e->y = e->by; e->vy = 0; e->fz = 0; } continue; }
     if (e->type >= E_FROG) { e->alive = 1; e->dying = 0; e->x = e->x0; e->y = e->by; e->vy = 0; e->k = 0; continue; }
     if (!e->alive || e->dying) { e->alive = 1; e->dying = 0; e->y = e->by; }
   }
@@ -1121,6 +1147,11 @@ static void collect(int tx, int ty) {
   else plat_sfx(SFX_BANANA);
 }
 
+static void open_door(int tx) {
+  for (int ty = 0; ty < LH; ty++) if (G[ty][tx] == 'D') { G[ty][tx] = 'd'; spawn_parts(tx * T + 8, ty * T + 8, 8, 0xFFFFD84A, 1.8f, 0.4f); }
+  plat_sfx(SFX_LIFE); plat_sfx(SFX_CHECK);
+}
+
 // ============================================================ player
 static void update_player(const Input* in) {
   int jp = in->jump && !prev_jump;
@@ -1163,22 +1194,35 @@ static void update_player(const Input* in) {
     int ty = (int)floorf((py + PH + 1) / T);
     on_ice = tile((int)floorf((px + 1) / T), ty) == 'I' || tile((int)floorf((px + PW - 1) / T), ty) == 'I';
   }
+  {   // is Dino in water? (water levels are water all through)
+    int cx = (int)floorf((px + PW / 2) / T), cy = (int)floorf((py + PH / 2) / T);
+    in_water = L->theme == 9 || tile(cx, cy) == 'w';
+  }
   float acc = on_ice ? 0.07f : on_ground ? 0.32f : 0.22f, maxv = 2.1f;
+  if (in_water) { acc = on_ground ? 0.2f : 0.13f; maxv = 1.5f; }
   if (atk_t > 6 && power != 2) maxv = 4.2f;
   if (dir) { pvx += dir * acc; face = dir; if (pvx > maxv) pvx = maxv; if (pvx < -maxv) pvx = -maxv; }
-  else if (wall_lock <= 0) { float f = on_ice ? 0.02f : on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
+  else if (wall_lock <= 0) { float f = in_water ? 0.05f : on_ice ? 0.02f : on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
 
   if (jp) jbuf = 7; else if (jbuf > 0) jbuf--;
   if (on_ground) { coyote = 6; air_jumps = 1; } else if (coyote > 0) coyote--;
 
   // walls next to the player
   wall_dir = 0;
-  if (!on_ground) {
+  if (!on_ground && !in_water) {
     if (box_solid(px + PW, py + 2, 1, PH - 4)) wall_dir = 1;
     else if (box_solid(px - 1, py + 2, 1, PH - 4)) wall_dir = -1;
   }
 
-  if (jbuf && coyote) {
+  if (in_water) {
+    // swimming: each press of jump is a stroke up; at the top of a pool it leaps out
+    if (jp) {
+      int surf = L->theme != 9 && tile((int)floorf((px + PW / 2) / T), (int)floorf((py - 4) / T)) != 'w';
+      pvy = surf ? -5.2f : -2.5f; jbuf = 0; coyote = 0; on_ground = 0;
+      plat_sfx(SFX_JUMP2);
+      add_bubble(px + PW / 2 + face * 4, py + 2); add_bubble(px + PW / 2, py + 6);
+    }
+  } else if (jbuf && coyote) {
     pvy = -5.3f; jbuf = 0; coyote = 0; on_ground = 0;
     plat_sfx(SFX_JUMP);
     spawn_parts(px + PW / 2, py + PH, 4, 0xFFE8E0C8, 0.8f, 0.3f);
@@ -1194,8 +1238,10 @@ static void update_player(const Input* in) {
 
   if (pvy >= 0) spring_up = 0;
   float g = ((in->jump || spring_up) && pvy < 0) ? 0.28f : 0.55f;
+  if (in_water) { g = in->down ? 0.16f : 0.085f; if (pvy < -2.6f && !(pvy < -4)) pvy += 0.06f; }
   pvy += g;
-  float maxfall = 5.5f;
+  float maxfall = in_water ? (in->down ? 2.4f : 1.25f) : 5.5f;
+  if (in_water && frame % 47 == 0) add_bubble(px + PW / 2 + face * 3, py + 3);
   if (wall_dir && dir == wall_dir && pvy > 0) { maxfall = 1.1f; if (frame % 6 == 0) spawn_parts(px + (wall_dir > 0 ? PW : 0), py + 4, 1, 0xFFE8E0C8, 0.4f, 0); }
   if (pvy > maxfall) pvy = maxfall;
 
@@ -1210,6 +1256,7 @@ static void update_player(const Input* in) {
   // move y
   int was_ground = on_ground;
   on_ground = 0;
+  ride_i = -1;   // let go of the platform every tick, so a jump really leaves it
   float ny = py + pvy;
   if (pvy > 0) {
     float bot0 = py + PH, bot1 = ny + PH;
@@ -1220,7 +1267,6 @@ static void update_player(const Input* in) {
       char c = tile(tx, ty);
       if (solid_c(c) || (c == '=' && bot0 <= ty * T + 0.01f)) hit = 1;
     }
-    ride_i = -1;
     if (hit) { ny = ty * T - PH; pvy = 0; on_ground = 1; }
     else for (int i = 0; i < nents; i++) {   // moving platforms: land on them from above
       Ent* e = &ents[i];
@@ -1235,6 +1281,7 @@ static void update_player(const Input* in) {
     }
   }
   py = ny;
+  if (L->theme == 9 && py < 3) { py = 3; if (pvy < 0) pvy = 0; }   // the top of a water level
   if (on_ground && !was_ground) { land_t = 6; spawn_parts(px + PW / 2, py + PH, 3, 0xFFE8E0C8, 0.6f, 0.2f); }
   if (land_t) land_t--;
 
@@ -1244,6 +1291,11 @@ static void update_player(const Input* in) {
   for (int ty = y0; ty <= y1; ty++) for (int tx = x0; tx <= x1; tx++) {
     char c = tile(tx, ty);
     if (c == 'o') collect(tx, ty);
+    else if (c == 'K') {
+      G[ty][tx] = ' '; keyp |= 1 << BOXK[ty][tx];
+      plat_sfx(SFX_LIFE); spawn_parts(tx * T + 8, ty * T + 8, 16, 0xFFFFD84A, 2.2f, 0.6f);
+      if (keyp == 7) key_msg_t = 150;
+    }
     else if (c == '^' && py + PH > ty * T + 9) hurt();
     else if (c == 's' && pvy >= 0 && py + PH > ty * T + 8) {
       pvy = -8.6f; on_ground = 0; coyote = 0; spring_up = 1; plat_sfx(SFX_SPRING);
@@ -1254,6 +1306,19 @@ static void update_player(const Input* in) {
       spawn_parts(tx * T + 8, ty * T, 10, 0xFF9BE37A, 1.5f, 0.6f);
     }
   }
+  // the locked door: it opens when Dino walks up to it holding the whole key
+  {
+    int ty0 = (int)floorf((py + 1) / T), ty1 = (int)floorf((py + PH - 1) / T);
+    for (int side = -1; side <= 1; side += 2) {
+      int tx = (int)floorf((side > 0 ? px + PW + 1.5f : px - 1.5f) / T);
+      for (int ty = ty0; ty <= ty1; ty++) if (tile(tx, ty) == 'D') {
+        if (keyp == 7) open_door(tx);
+        else if (!door_msg_t) { door_msg_t = 150; plat_sfx(SFX_WALL); }
+      }
+    }
+  }
+  if (door_msg_t) door_msg_t--;
+  if (key_msg_t) key_msg_t--;
   // goal: a flag on a pole, touch anywhere on the pole
   if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5) {
     state = ST_CLEAR; state_t = 0; plat_sfx(SFX_CLEAR);
@@ -1312,6 +1377,14 @@ static void update_boss(Ent* e) {
   }
 }
 
+// walk along the ground at spd, turning round at walls and at the edge of a drop
+static void walker_step(Ent* e, float spd, float ew, float eh) {
+  float v = e->vx > 0 ? spd : -spd, nx = e->x + v;
+  int ahead = v < 0 ? (int)floorf(nx / T) : (int)floorf((nx + ew) / T);
+  int below = (int)floorf((e->y + eh + 1) / T);
+  char fl = tile(ahead, below);
+  if (box_solid(nx, e->y, ew, eh) || !(solid_c(fl) || fl == '=')) e->vx = -e->vx; else e->x = nx;
+}
 static void update_ents(void) {
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
@@ -1364,7 +1437,11 @@ static void update_ents(void) {
     }
     if (e->type == E_PLAT) {
       float ox = e->x, s2 = 0.5f - 0.5f * cosf(e->t * 0.025f);
-      if (e->k) e->y = e->by - e->vx * s2; else e->x = e->x0 + e->vx * s2;
+      if (e->k == 2) {   // a crumbly platform: shakes once Dino stands on it, then drops
+        if (e->fz == 0 && ride_i == i) e->fz = 1;
+        if (e->fz > 0) { e->fz++; if (e->fz > 34) { e->vy += 0.2f; if (e->vy > 4.5f) e->vy = 4.5f; e->y += e->vy; } }
+        if (e->y > LH * T + 60) { e->alive = 0; if (ride_i == i) ride_i = -1; continue; }
+      } else if (e->k) e->y = e->by - e->vx * s2; else e->x = e->x0 + e->vx * s2;
       if (ride_i == i && !dead_t && state == ST_PLAY) {   // carry Dino along
         if (!box_solid(px + e->x - ox, py, PW, PH)) px += e->x - ox;
         if (!box_solid(px, e->y - PH, PW, PH)) py = e->y - PH;
@@ -1373,6 +1450,7 @@ static void update_ents(void) {
     }
     if (e->type == E_SHOT) {
       e->x += e->vx; if (e->k == 0) e->y += e->vy;
+      if (e->k >= 2) { e->vy += 0.14f; if (e->vy > 4) e->vy = 4; e->y += e->vy; }
       int gone = e->t > 120 || box_solid(e->x, e->y + 1, 6, 4) || e->y > LH * T + 20;
       if (e->k == 1 && !gone) {   // Dino's star bounces along the ground
         e->vy += 0.25f; e->y += e->vy;
@@ -1381,18 +1459,18 @@ static void update_ents(void) {
         for (int j = 0; j < nents && !gone; j++) {
           Ent* o = &ents[j];
           if (!o->alive || o->dying) continue;
-          if (IS_FOE(o->type) && e->x + 6 > o->x && e->x < o->x + 12 && e->y + 6 > o->y && e->y < o->y + 14) { o->dying = 1; gone = 1; plat_sfx(SFX_STOMP); spawn_parts(o->x + 6, o->y + 4, 10, 0xFFFFE27A, 2.0f, 0.5f); }
+          if (IS_FOE(o->type) && !(o->type == E_MOLE && o->k == 0) && e->x + 6 > o->x && e->x < o->x + 12 && e->y + 6 > o->y && e->y < o->y + 14) { o->dying = 1; gone = 1; plat_sfx(SFX_STOMP); spawn_parts(o->x + 6, o->y + 4, 10, 0xFFFFE27A, 2.0f, 0.5f); }
           else if (o->type == E_BOSS && boss_awake && e->x + 6 > o->x && e->x < o->x + 30 && e->y + 6 > o->y && e->y < o->y + 24) { if (!boss_inv) boss_damage(o); gone = 1; }
         }
-      } else if (e->k == 0 && !gone && !dead_t && state == ST_PLAY) {
+      } else if (e->k != 1 && !gone && !dead_t && state == ST_PLAY) {
         float ax, ay, aw, ah;
         if (attack_box(&ax, &ay, &aw, &ah) && ax + aw > e->x && ax < e->x + 6 && ay + ah > e->y && ay < e->y + 6) gone = 1;
         else if (px + PW > e->x + 1 && px < e->x + 5 && py + PH > e->y + 1 && py < e->y + 5) { hurt(); gone = 1; }
       }
-      if (gone) { e->alive = 0; spawn_parts(e->x + 3, e->y + 3, 5, e->k ? 0xFFFFF2A0 : 0xFF6A4A2A, 1.2f, 0.2f); }
+      if (gone) { e->alive = 0; spawn_parts(e->x + 3, e->y + 3, 5, e->k == 1 ? 0xFFFFF2A0 : e->k == 3 ? 0xFFFFFFFF : 0xFF6A4A2A, 1.2f, 0.2f); }
       continue;
     }
-    if (e->type == E_PLANT) eh = 14;
+    if (e->type == E_PLANT || e->type == E_SNOWMAN) eh = 14;
     if (e->type == E_FROG) {
       // sits still, then hops at Dino
       int grounded = 0;
@@ -1422,6 +1500,74 @@ static void update_ents(void) {
         if (!box_solid(e->x, e->y + my, ew, eh)) e->y += my;
         e->vx = dx > 0 ? 0.5f : -0.5f;
       }
+    } else if (e->type == E_CRAB) {
+      // scuttles in quick bursts, then stops to snap its claws and turns to face Dino
+      int ph = e->t % 110;
+      if (ph < 64) walker_step(e, 1.15f, ew, eh);
+      else if (ph == 64 && fabsf(px - e->x) < 160) e->vx = px > e->x ? 0.5f : -0.5f;
+    } else if (e->type == E_FISH) {
+      // swims to and fro in a gentle wave; darts at Dino when he comes close in front of it
+      float dx = px - e->x, dy = py - e->y;
+      if (e->k == 0) {
+        float nx = e->x + (e->vx > 0 ? 0.7f : -0.7f);
+        if (box_solid(nx, e->y, ew, eh) || fabsf(nx - e->x0) > 72) e->vx = -e->vx; else e->x = nx;
+        float ny = e->by + sinf(e->t * 0.05f) * 7;
+        if (!box_solid(e->x, ny, ew, eh)) e->y = ny;
+        if (!dead_t && fabsf(dx) < 96 && fabsf(dy) < 28 && (dx > 0) == (e->vx > 0) && e->t > 40) { e->k = 1; e->vy = 46; }
+      } else {
+        float nx = e->x + (e->vx > 0 ? 2.1f : -2.1f);
+        if (box_solid(nx, e->y, ew, eh) || --e->vy <= 0) { e->k = 0; e->t = 0; e->x0 = e->x; } else e->x = nx;
+      }
+    } else if (e->type == E_JELLY) {
+      // pulses upward, then sinks slowly, drifting towards Dino
+      int c = e->t % 110;
+      float vy = c < 22 ? -0.85f : 0.3f, vx = px > e->x ? 0.22f : -0.22f;
+      if (!box_solid(e->x + vx, e->y, ew, eh) && fabsf(e->x + vx - e->x0) < 90) e->x += vx;
+      if (!box_solid(e->x, e->y + vy, ew, eh) && e->y + vy > 4 && e->y + vy < e->by + 40 && e->y + vy > e->by - 60) e->y += vy;
+      e->vx = vx;
+    } else if (e->type == E_ROLL) {
+      // ambles along; when it spots Dino it curls into a ball and comes rolling at him
+      if (e->k == 0) {
+        walker_step(e, 0.35f, ew, eh);
+        if (!dead_t && e->t > 70 && fabsf(px - e->x) < 130 && fabsf(py - e->y) < 30) { e->k = 1; e->t = 0; e->vx = px > e->x ? 0.5f : -0.5f; }
+      } else if (e->k == 1) { if (e->t > 26) { e->k = 2; e->t = 0; } }
+      else { walker_step(e, 2.5f, ew, eh); if (e->t > 170) { e->k = 0; e->t = 0; } }
+    } else if (e->type == E_PENGUIN) {
+      // waddles about, then flops on its belly and slides at Dino
+      if (e->k == 0) {
+        walker_step(e, 0.4f, ew, eh);
+        if (!dead_t && e->t > 100 && fabsf(px - e->x) < 150 && fabsf(py - e->y) < 30) { e->k = 1; e->t = 0; e->vx = px > e->x ? 0.5f : -0.5f; }
+      } else { if (e->t < 85) walker_step(e, 2.3f, ew, eh); if (e->t > 110) { e->k = 0; e->t = 0; } }
+    } else if (e->type == E_MOLE) {
+      // waits down its hole; pops up near Dino, throws a clod of earth at him and ducks back down
+      float dx = px - e->x;
+      e->vx = dx > 0 ? 0.5f : -0.5f;
+      if (e->k == 0) { if (!dead_t && e->t > 80 && fabsf(dx) < 140 && fabsf(dx) > 18 && fabsf(py - e->y) < 80) { e->k = 1; e->t = 0; } }
+      else {
+        if (e->t == 32 && !dead_t) { float vx = clampf(dx / 46, -2.4f, 2.4f); add_shot(e->x + 3, e->y - 6, vx, -3.3f, 2); plat_sfx(SFX_WALL); }
+        if (e->t > 76) { e->k = 0; e->t = 0; }
+      }
+    } else if (e->type == E_BIRD) {
+      // glides to and fro up high; dives at Dino when he passes underneath, then flies back up
+      if (e->k == 0) {
+        e->x += e->vx > 0 ? 0.8f : -0.8f;
+        if (fabsf(e->x - e->x0) > 70) { e->x -= e->vx > 0 ? 0.8f : -0.8f; e->vx = -e->vx; }
+        e->y = e->by + sinf(e->t * 0.06f) * 5;
+        float dx = px - e->x, dy = py - e->y;
+        if (!dead_t && e->t > 80 && fabsf(dx) < 56 && dy > 16 && dy < 150) { float d = sqrtf(dx * dx + dy * dy); e->k = 1; e->t = 0; e->vx = dx / d * 2.6f; e->vy = dy / d * 2.6f; if (fabsf(e->vx) < 0.1f) e->vx = 0.1f; }
+      } else if (e->k == 1) {
+        e->x += e->vx; e->y += e->vy;
+        if (box_solid(e->x, e->y, ew, eh) || e->t > 70) { e->k = 2; e->t = 0; }
+      } else {
+        e->y -= 1.1f; e->x += e->vx > 0 ? 0.4f : -0.4f;
+        if (e->y <= e->by) { e->y = e->by; e->k = 0; e->t = 0; e->x0 = e->x; e->vx = e->vx > 0 ? 0.5f : -0.5f; }
+      }
+    } else if (e->type == E_SNOWMAN) {
+      // stands its ground and lobs snowballs at Dino
+      e->vx = px > e->x ? 0.5f : -0.5f;
+      float dx = px - e->x;
+      if (e->t % 130 == 100 && !dead_t && fabsf(dx) < 175 && fabsf(py - e->y) < 90) { e->k = 14; add_shot(e->x + 3, e->y - 10, clampf(dx / 50, -2.6f, 2.6f), -3.2f, 3); plat_sfx(SFX_WALL); }
+      if (e->k > 0) e->k--;
     } else if (e->type == E_BEETLE || e->type == E_SPINY) {
       // walk, turn at walls and ledges
       float nx = e->x + e->vx;
@@ -1438,11 +1584,13 @@ static void update_ents(void) {
       e->y = e->by + sinf(e->t * 0.07f) * 14;
     }
     // touch the player
+    if (e->type == E_MOLE && e->k == 0) continue;   // safe down its hole
     if (!dead_t && state == ST_PLAY) {
       float ex = e->x + 1, ey = e->y + (e->type == E_BEETLE ? 0 : 2);
+      int hard = e->type == E_SPINY || (e->type == E_ROLL && e->k > 0);   // spikes, or a rolled-up shell
       float ax, ay, aw, ah;
       if (attack_box(&ax, &ay, &aw, &ah) && ax + aw > ex && ax < ex + ew - 2 && ay + ah > ey && ay < ey + eh) {
-        if (e->type == E_SPINY && power != 2 && power != 3) {   // a bare head bounces off the spikes
+        if (hard && power != 2 && power != 3) {   // a bare head bounces off spikes and shells
           pvx = -face * 2.6f; pvy = -2.0f; atk_t = 0; wall_lock = 10; plat_sfx(SFX_WALL);
           continue;
         }
@@ -1451,7 +1599,8 @@ static void update_ents(void) {
         continue;
       }
       if (px + PW > ex && px < ex + ew - 2 && py + PH > ey && py < ey + eh) {
-        if (pvy > 0.5f && py + PH - ey < 9 && e->type != E_SPINY) {
+        if (pvy > 0.5f && py + PH - ey < 9 && e->type == E_ROLL && e->k > 0) { pvy = -4.6f; plat_sfx(SFX_WALL); }   // bounce off the shell
+        else if (pvy > 0.5f && py + PH - ey < 9 && e->type != E_SPINY && e->type != E_JELLY) {
           e->dying = 1; pvy = -4.6f; plat_sfx(SFX_STOMP);
           spawn_parts(e->x + 6, e->y + 4, 8, e->type == E_BEETLE ? 0xFF3FA34D : 0xFFF7D038, 1.5f, 0.3f);
         } else hurt();
@@ -1461,6 +1610,12 @@ static void update_ents(void) {
 }
 
 static void update_parts(void) {
+  for (int i = 0; i < 32; i++) if (bubbles[i].life > 0) {
+    bubbles[i].life--; bubbles[i].y -= 0.55f; bubbles[i].x += sinf((bubbles[i].life + i * 7) * 0.15f) * 0.25f;
+    int tx = (int)floorf(bubbles[i].x / T), ty = (int)floorf(bubbles[i].y / T);
+    if (L->theme != 9 && tile(tx, ty) != 'w') bubbles[i].life = 0;
+    if (bubbles[i].y < 2 || solid_c(tile(tx, ty))) bubbles[i].life = 0;
+  }
   for (int i = 0; i < 160; i++) if (parts[i].life > 0) {
     Part* p = &parts[i];
     p->x += p->vx; p->y += p->vy; p->vy += 0.12f; p->vx *= 0.96f; p->life--;
@@ -1577,10 +1732,72 @@ static void critter3d(Bmp* b, int type, int fr, float yaw, int dying, float S, i
   if (type == E_FROG) frog3d(b, dying ? sq : fr == 7 ? 1.28f : 1 + 0.04f * sinf(fr * 1.5708f), yaw, dying, S, crown);
   else if (type == E_SPINY) spiny3d(b, fr * 0.7854f, sq, yaw, dying, S);
   else if (type == E_PLANT) plant3d(b, fr == 3 ? 1 : fr * 0.25f, sq, yaw, dying, S);
-  else bat3d(b, fr == 7 ? -1.5f : sinf(fr * 1.0472f), yaw + dying * 0.3f, dying, S, crown);
+  else if (type == E_BAT) bat3d(b, fr == 7 ? -1.5f : sinf(fr * 1.0472f), yaw + dying * 0.3f, dying, S, crown);
+  else if (type == E_CRAB) crab3d(b, fr * 1.0472f, fr >= 6 ? (float)(fr - 6) : 0.15f, yaw, dying, S);
+  else if (type == E_FISH) fish3d(b, fr * 0.7854f, yaw + dying * 0.4f, dying, S);
+  else if (type == E_JELLY) { static const float P[4] = { 0.35f, 0.8f, 1, 0.6f }; jelly3d(b, fr < 4 ? P[fr] : 0, fr * 0.9f, yaw, dying, S); }
+  else if (type == E_ROLL) roller3d(b, fr, yaw, dying, S);
+  else if (type == E_PENGUIN) penguin3d(b, fr * 1.5708f, fr >= 4, yaw, dying, S);
+  else if (type == E_MOLE) mole3d(b, fr == 7 ? 0 : fr == 6 ? 1 : fr / 5.0f, fr == 6, yaw, dying, S);
+  else if (type == E_BIRD) bird3d(b, fr == 7 ? 0.3f : sinf(fr * 1.0472f), fr == 6, yaw + dying * 0.3f, dying, S, crown);
+  else snowman3d(b, fr == 4 ? 0 : sinf(fr * 1.5708f) * 0.5f, fr == 4, yaw, dying, S);
+}
+// the frame of a newer creature's model to show this tick
+static int critter_frame(const Ent* e) {
+  switch (e->type) {
+    case E_FROG: return e->vy != 0 ? 7 : (e->t / 10) % 4;
+    case E_SPINY: return e->t % 8;
+    case E_PLANT: { int c = e->t % 130; return c > 45 && c < 75 ? 3 : (e->t / 12) % 2; }
+    case E_BAT: return e->k == 0 ? 7 : (e->t / 2) % 6;
+    case E_CRAB: return (e->t % 110) < 64 ? (e->t / 4) % 6 : 6 + (e->t / 8) % 2;
+    case E_FISH: return (e->t / (e->k ? 2 : 4)) % 8;
+    case E_JELLY: { int c = e->t % 110; return c < 22 ? c * 4 / 22 : 4 + (e->t / 10) % 4; }
+    case E_ROLL: return e->k == 0 ? (e->t / 8) % 4 : e->k == 1 ? 4 : 5 + (e->t / 3) % 3;
+    case E_PENGUIN: return e->k ? 4 : (e->t / 8) % 4;
+    case E_MOLE: {
+      if (e->k == 0) return 7;
+      if (e->t < 12) return e->t / 2;
+      if (e->t > 64) { int f = (76 - e->t) / 2; return f < 0 ? 7 : f > 5 ? 5 : f; }
+      return e->t >= 26 && e->t < 42 ? 6 : 5;
+    }
+    case E_BIRD: return e->k == 1 ? 6 : (e->t / (e->k ? 2 : 3)) % 6;
+    default: return e->k > 0 ? 4 : (e->t / 15) % 4;   // the snowman
+  }
+}
+static void key_part(float x, float y, int part, uint32_t col, float sc) {   // one of the three pieces of the key
+  if (part == 0) { fb_dot(x, y, 7.5f * sc, OUTLINE, 1); fb_dot(x, y, 6 * sc, col, 1); fb_dot(x, y, 2.6f * sc, OUTLINE, 1); }
+  else if (part == 1) { fb_capsule(x - 7 * sc, y, x + 7 * sc, y, 3.4f * sc, OUTLINE); fb_capsule(x - 7 * sc, y, x + 7 * sc, y, 2 * sc, col); }
+  else { fb_capsule(x - 5 * sc, y, x + 4 * sc, y, 3.4f * sc, OUTLINE); fb_capsule(x + 1 * sc, y, x + 1 * sc, y + 7 * sc, 3 * sc, OUTLINE); fb_capsule(x - 4 * sc, y, x - 4 * sc, y + 5 * sc, 3 * sc, OUTLINE);
+         fb_capsule(x - 5 * sc, y, x + 4 * sc, y, 2 * sc, col); fb_capsule(x + 1 * sc, y, x + 1 * sc, y + 7 * sc, 1.6f * sc, col); fb_capsule(x - 4 * sc, y, x - 4 * sc, y + 5 * sc, 1.6f * sc, col); }
 }
 static void make_extra_art(void) {
-  if (HD_PLAT.px) return;
+  if (HD_FPLAT.px) return;
+  HD_FPLAT = bmp_new(96, 22); HD_DOOR = bmp_new(40, 98);
+  for (int y = 0; y < 22; y++) for (int x = 0; x < 96; x++) {   // a crumbly stone platform
+    float fx = x + 0.5f, fy = y + 0.5f, dd = sd_rrect(fx, fy, 48, 10, 47, 9, 4);
+    if (dd > 1) continue;
+    uint32_t* d = &HD_FPLAT.px[y * 96 + x];
+    uint32_t c = fy < 6 ? mixc(0xFFFFE2C8, 0xFFE0A07A, fy / 6) : mixc(0xFFC07A5A, 0xFF8A4A3A, (fy - 6) / 13);
+    float cr = minf(sd_seg(fx, fy, 30, 6, 36, 20), minf(sd_seg(fx, fy, 62, 4, 58, 13), sd_seg(fx, fy, 58, 13, 66, 20)));
+    if (cr < 0.8f && fy > 5) c = 0xFF5A2A22;
+    over(d, OUTLINE, cov(dd)); over(d, c, cov(dd + 2));
+  }
+  for (int y = 0; y < 98; y++) for (int x = 0; x < 40; x++) {   // a big wooden door with iron bands and a keyhole
+    float fx = x + 0.5f, fy = y + 0.5f, dd = sd_rrect(fx, fy, 20, 52, 19, 45, 3);
+    float arch = maxf(sd_circle(fx, fy, 20, 22, 19.5f), fy - 22);
+    dd = minf(dd, arch);
+    if (dd > 1) continue;
+    uint32_t* d = &HD_DOOR.px[y * 40 + x];
+    int plank = (int)(fx / 8.5f);
+    uint32_t c = mixc(0xFFB8743A, 0xFF7A4422, clampf(fy / 98 + (plank & 1) * 0.12f, 0, 1));
+    if (fmodf(fx, 8.5f) < 1.2f) c = 0xFF4A2A14;
+    if (fabsf(fy - 34) < 3.5f || fabsf(fy - 76) < 3.5f) c = mixc(0xFF8A90A0, 0xFF4A5060, fabsf(fy - 34) < 3.5f ? (fy - 30.5f) / 7 : (fy - 72.5f) / 7);
+    float kh = minf(sd_circle(fx, fy, 20, 52, 3.4f), sd_rrect(fx, fy, 20, 58, 1.6f, 5, 1));
+    float plate = sd_rrect(fx, fy, 20, 55, 6.5f, 10, 3);
+    if (plate < 0) c = mixc(0xFFFFE27A, 0xFFE0A21C, (fy - 45) / 20);
+    if (kh < 0) c = 0xFF1E1A22;
+    over(d, OUTLINE, cov(dd)); over(d, c, cov(dd + 2.2f));
+  }
   HD_PLAT = bmp_new(96, 22); HD_CRACK = bmp_new(32, 32); HD_HELMI = bmp_new(32, 32); HD_STARI = bmp_new(32, 32); HD_HELM = bmp_new(36, 22);
   for (int y = 0; y < 22; y++) for (int x = 0; x < 96; x++) {   // a wooden platform with a bright top
     float fx = x + 0.5f, fy = y + 0.5f, dd = sd_rrect(fx, fy, 48, 10, 47, 9, 5);
@@ -1644,6 +1861,14 @@ static void draw_world(void) {
       else if (c == '?') hblit(&HD_QBOX[0], X - 4, Y - 6, 0);
       else if (c == 'u') hblit(&HD_QBOX[1], X - 4, Y - 6, 0);
       else if (c == 'k') hblit(&HD_CRACK, X, Y, 0);
+      else if (c == 'K') {   // a glowing piece of the key
+        float bob = sinf((frame + tx * 11) * 0.09f) * 3;
+        fb_dot(X + 16, Y + 16 + bob, 14 + sinf(frame * 0.15f) * 2, 0xFFFFF2A0, 0.3f);
+        key_part(X + 16, Y + 15 + bob, BOXK[ty][tx], 0xFFFFD84A, 1.4f);
+        if ((frame / 6 + tx) % 9 == 0) fb_dot(X + 6 + (frame * 7 + tx) % 20, Y + 4 + (frame * 3) % 22, 2, 0xFFFFFFFF, 0.9f);
+      }
+      else if (c == 'D' && tile(tx, ty - 1) != 'D') hblit(&HD_DOOR, X - 4, Y - 2, 0);
+      else if (c == 'd' && tile(tx, ty - 1) != 'd') { for (int v = 0; v < 96; v++) for (int u = 4; u < 28; u++) fb_over(X + u, Y + v, 0xFF1E1A22, v < 20 ? cov(sd_circle(u + 0.5f, v + 0.5f, 16, 20, 12)) : 0.9f); }
       else if (c == 's') hblit(&HD_SPRING, X, Y, 0);
       else if (c == 'c') {
         int on = check_x == tx * T + 3 && check_y == ty * T + T - PH;
@@ -1667,9 +1892,15 @@ static void draw_world(void) {
       hblit(e->k == 2 ? &HD_SWORDI : e->k == 3 ? &HD_HELMI : e->k == 4 ? &HD_STARI : &HD_WINGI, (int)ex - 4, (int)(ey - 4 + bob), 0);
       continue;
     }
-    if (e->type == E_PLAT) { hblit(&HD_PLAT, (int)ex, (int)ey, 0); continue; }
+    if (e->type == E_PLAT) {
+      if (e->k == 2) hblit(&HD_FPLAT, (int)ex + (e->fz > 0 && e->fz < 34 ? ((frame / 2) % 2 ? 2 : -2) : 0), (int)ey, 0);
+      else hblit(&HD_PLAT, (int)ex, (int)ey, 0);
+      continue;
+    }
     if (e->type == E_SHOT) {
-      if (e->k) { fb_dot(ex + 6, ey + 6, 8, OUTLINE, 1); fb_dot(ex + 6, ey + 6, 6.4f, 0xFFF7D038, 1); fb_dot(ex + 4.5f, ey + 4.5f, 2.6f, 0xFFFFFBE0, 1); }
+      if (e->k == 2) { fb_dot(ex + 6, ey + 6, 7, OUTLINE, 1); fb_dot(ex + 6, ey + 6, 5.4f, 0xFF8A5A30, 1); fb_dot(ex + 4.5f, ey + 4.5f, 2, 0xFFB8885A, 1); }
+      else if (e->k == 3) { fb_dot(ex + 6, ey + 6, 7.5f, 0xFF8FAACB, 1); fb_dot(ex + 6, ey + 6, 6, 0xFFFFFFFF, 1); fb_dot(ex + 4.5f, ey + 4.5f, 2, 0xFFFFFFFF, 1); }
+      else if (e->k) { fb_dot(ex + 6, ey + 6, 8, OUTLINE, 1); fb_dot(ex + 6, ey + 6, 6.4f, 0xFFF7D038, 1); fb_dot(ex + 4.5f, ey + 4.5f, 2.6f, 0xFFFFFBE0, 1); }
       else { fb_dot(ex + 6, ey + 6, 6.5f, OUTLINE, 1); fb_dot(ex + 6, ey + 6, 5, 0xFF7A5230, 1); fb_dot(ex + 4.5f, ey + 4.5f, 1.8f, 0xFFC89A6A, 1); }
       continue;
     }
@@ -1706,17 +1937,14 @@ static void draw_world(void) {
       }
       continue;
     }
-    if (e->type >= E_FROG && e->type <= E_BAT) {
+    if (e->type >= E_FROG && e->type <= E_SNOWMAN) {
       const Bmp* pic = &ESCR;
-      int ti = e->type - E_FROG, fr = 0, eh2 = e->type == E_PLANT ? 28 : 20;
-      if (e->type == E_FROG) fr = e->vy != 0 ? 7 : (e->t / 10) % 4;
-      else if (e->type == E_SPINY) fr = e->t % 8;
-      else if (e->type == E_PLANT) { int c = e->t % 130; fr = c > 45 && c < 75 ? 3 : (e->t / 12) % 2; }
-      else fr = e->k == 0 ? 7 : (e->t / 2) % 6;
+      int ti = e->type - E_FROG, fr = critter_frame(e), eh2 = (e->type == E_PLANT || e->type == E_SNOWMAN) ? 28 : 20;
+      int flyer = e->type == E_BAT || e->type == E_FISH || e->type == E_JELLY || e->type == E_BIRD;
       if (steady) { Bmp* c = &CRIT_C[ti][dir][fr]; if (!c->px) critter3d(c, e->type, fr, dir ? 1.15f : -1.15f, 0, 1, 0); pic = c; }
       else { RT_SS = 1; critter3d(&ESCR, e->type, fr, e->fz * 1.15f, e->dying, 1, 0); RT_SS = 2; }
-      if (e->type == E_BAT) hblit(pic, (int)ex + 12 - 26, (int)ey + 10 - 28 + e->dying * e->dying / 3, 0);
-      else { if (!e->dying) fb_shadow(ex + 12, ey + eh2 + 1, 12, 2.5f, 0.18f); hblit(pic, (int)ex + 12 - 26, (int)ey + eh2 - 38, 0); }
+      if (flyer) hblit(pic, (int)ex + 12 - 26, (int)ey + 10 - 28 + e->dying * e->dying / 3, 0);
+      else { if (!e->dying && e->type != E_MOLE) fb_shadow(ex + 12, ey + eh2 + 1, 12, 2.5f, 0.18f); hblit(pic, (int)ex + 12 - 26, (int)ey + eh2 - 38, 0); }
     } else if (e->type == E_BEETLE) {
       const Bmp* pic = &ESCR;
       int sn = L->theme >= 5 && L->theme <= 7;
@@ -1744,6 +1972,12 @@ static void draw_world(void) {
     if (intro_t) show = 0;
     if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
     if (power == 3 && show) hblit(&HD_HELM, X - 18 + (flip ? -2 : 2), Y - 62, 0);
+    if (power == 4 && show && !dead_t) {   // the star power: a little star that floats over his head
+      float sx = X - 16 + (flip ? -4 : 4), sy = Y - 82 + sinf(frame * 0.12f) * 3;
+      fb_dot(sx + 16, sy + 16, 15, 0xFFFFF2A0, 0.25f + 0.1f * sinf(frame * 0.2f));
+      hblit(&HD_STARI, (int)sx, (int)sy, 0);
+      if (frame % 9 == 0) spawn_parts(px + PW / 2 + (frame % 5 - 2) * 2, py - 12, 1, 0xFFFFF2A0, 0.4f, 0.2f);
+    }
     if (power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
       float hx = X + (flip ? -7 : 7), hy = Y - 22, ang;
@@ -1765,6 +1999,21 @@ static void draw_world(void) {
   }
   for (int i = 0; i < 160; i++) if (parts[i].life > 0)
     fb_dot(parts[i].x * 2 - CX, parts[i].y * 2 - CY, parts[i].life > 10 ? 2.8f : 1.2f + parts[i].life * 0.15f, parts[i].c, parts[i].life > 8 ? 1 : parts[i].life / 8.0f);
+  // water in pools: see-through blue in front, with a bright wavy top
+  if (L->theme != 9) for (int ty = ty0; ty <= ty0 + FB_H / HT + 1; ty++) for (int tx = tx0; tx <= tx0 + FB_W / HT + 1; tx++) {
+    if (tile(tx, ty) != 'w') continue;
+    int X = tx * HT - CX, Y = ty * HT - CY, top = tile(tx, ty - 1) != 'w';
+    for (int v = 0; v < HT; v++) for (int u = 0; u < HT; u++) {
+      float wave = top ? 3 + sinf((tx * HT + u) * 0.12f + frame * 0.08f) * 2 : -1;
+      if (v < wave) continue;
+      uint32_t c = v < wave + 2.2f ? 0xFFE8FBFF : mixc(0xFF4FC2E8, 0xFF1E6AAA, clampf((ty * HT + v - (ty * HT)) / 64.0f + 0.2f, 0, 1));
+      fb_over(X + u, Y + v, c, v < wave + 2.2f ? 0.75f : 0.42f);
+    }
+  }
+  for (int i = 0; i < 32; i++) if (bubbles[i].life > 0) {
+    float bx = bubbles[i].x * 2 - CX, by = bubbles[i].y * 2 - CY, r = 2.2f + (i % 3) * 0.8f;
+    fb_dot(bx, by, r + 1, 0xFFFFFFFF, 0.55f); fb_dot(bx, by, r, 0xFF9ADCF5, 0.35f); fb_dot(bx - r * 0.35f, by - r * 0.35f, r * 0.35f, 0xFFFFFFFF, 0.9f);
+  }
   // sign text when you stand near a sign
   for (int i = 0; i < nsigns; i++) {
     float dx = px + PW / 2 - (sign_x[i] * T + 8), dy = py - sign_y[i] * T;
@@ -1800,6 +2049,15 @@ static void draw_hud(void) {
   snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives);
   text(buf, SCR_W - 34 + hud_lx, 6 + hud_ly, 2, 0xFFFFFFFF);
   if (intro_t) return;
+  if (level_keys) {   // the three pieces of the key; together they make one key
+    for (int k = 0; k < 3; k++) {
+      static const float KX[3] = { 18, 34, 49 };
+      key_part(KX[k], 50, k, (keyp >> k) & 1 ? 0xFFFFD84A : 0xFF5A5468, 1.0f);
+    }
+    if (keyp == 7 && (frame / 20) % 2) fb_dot(34, 50, 26, 0xFFFFF2A0, 0.15f);
+  }
+  if (door_msg_t) text_c("FIND ALL 3 KEY PIECES TO OPEN THE DOOR", 32, 1, 0xFFFFF4C2);
+  else if (key_msg_t) text_c("YOU MADE THE KEY! NOW OPEN THE DOOR", 32, 1, 0xFFFFD84A);
   if (boss_awake && boss_i >= 0) {
     const char* nm = BOSS_NAME[ents[boss_i].k];
     text(nm, (SCR_W - text_w(nm, 1)) / 2, 4, 1, 0xFFFFFFFF);
@@ -1838,101 +2096,15 @@ static void boat(int x, int y) {
   fill(x, y - 14, 1, 14, 0xFF3B2414);
   for (int j = 0; j < 11; j++) fill(x + 1, y - 13 + j, 1 + j * 7 / 11, 1, 0xFFFFFFFF);
 }
-static void map_jungle(void) {
-  // the island: a blob of circles, sand round the edge
-  static const short BLOB[][3] = { {40, 140, 30}, {84, 130, 34}, {130, 110, 34}, {100, 66, 34}, {166, 56, 34},
-    {226, 92, 38}, {280, 52, 32}, {150, 90, 30}, {190, 130, 28}, {60, 100, 24}, {250, 140, 22} };
-  int nb = sizeof BLOB / sizeof BLOB[0];
-  for (int b = 0; b < nb; b++) disc(BLOB[b][0], BLOB[b][1], BLOB[b][2] + 5, 0xFFF0D9A0);
-  for (int b = 0; b < nb; b++) disc(BLOB[b][0], BLOB[b][1], BLOB[b][2], 0xFF5DB85A);
-  for (int y = 0; y < SCR_H; y++) for (int x = 0; x < SCR_W; x++)
-    if (FB[y * SCR_W + x] == 0xFF5DB85A && hash2(x, y) % 9 == 0) put(x, y, 0xFF4FA64C);
-  // mountain with the beetle cave (level 5)
-  for (int j = 0; j < 46; j++) for (int i = -j; i <= j; i++) put(226 + i, 50 + j, j < 10 ? 0xFFF4F4F4 : ((i + j) % 9 ? 0xFF8C8F9C : 0xFF757884));
-  disc(226, 92, 9, 0xFF2A2220); fill(217, 92, 19, 9, 0xFF2A2220);
-  // cliff and cloud for the sky bridge (level 6)
-  fill(270, 30, 24, 26, 0xFF8A5A2B); fill(270, 30, 24, 3, 0xFF5DB85A);
-  for (int k = 0; k < 3; k++) disc(270 + k * 12, 24 - (k % 2) * 4, 9, 0xFFFFFFFF);
-  // waterfall (level 3)
-  for (int y = 10; y < 66; y++) for (int i = -5; i <= 5; i++) {
-    int streak = ((y - frame + i * 5) % 9 + 9) % 9 < 2;
-    put(96 + i, y, streak ? 0xFFEAF8FF : 0xFF8ED0EA);
-  }
-  fill(84, 4, 24, 8, 0xFF757884);
-  // temple (level 4)
-  for (int k = 0; k < 4; k++) fill(150 + k * 4, 20 + k * 6, 32 - k * 8, 7, k % 2 ? 0xFF8A7BA8 : 0xFF7A6B98);
-  fill(163, 38, 6, 6, 0xFF3A2F5C);
-  // trees
-  static const short TREES[][2] = { {20, 120}, {60, 116}, {110, 128}, {150, 120}, {180, 138}, {200, 118}, {70, 80}, {128, 78}, {256, 130}, {62, 152}, {196, 72} };
-  for (unsigned t = 0; t < sizeof TREES / sizeof TREES[0]; t++) {
-    fill(TREES[t][0] - 1, TREES[t][1], 3, 6, 0xFF6B3F1D);
-    disc(TREES[t][0], TREES[t][1] - 3, 6, 0xFF2E7D32); disc(TREES[t][0] - 2, TREES[t][1] - 5, 2, 0xFF4CAF50);
-  }
-  // Dino's house
-  fill(26, 136, 24, 14, 0xFFE8D5B0); fill(35, 142, 6, 8, 0xFF6B3F1D);
-  for (int j = 0; j < 11; j++) fill(38 - j - 3, 126 + j, 2 * j + 7, 1, 0xFF4C8C2B);
-  // pier and boat to the Frosty Forest
-  fill(292, 110, 12, 3, 0xFF8A5A2B); fill(294, 113, 2, 4, 0xFF5A3A1E); fill(300, 113, 2, 4, 0xFF5A3A1E);
-  boat(308, 118 + (frame / 30) % 2);
-}
-static void map_snow(int night) {
-  const World* w = &WORLDS[world];
-  uint32_t rim = night ? 0xFF7F96CC : 0xFFBFE0F5, snow = night ? 0xFFC9D6F0 : 0xFFF4FAFF, shade = night ? 0xFFB3C2E4 : 0xFFDCEBF7;
-  // the land follows the path, with a few extra lumps
-  for (int pass = 0; pass < 2; pass++) {
-    for (int n = 0; n < w->n; n++) {
-      disc(w->xy[n][0], w->xy[n][1], 30 + 5 * !pass, pass ? snow : rim);
-      if (n + 1 < w->n) disc((w->xy[n][0] + w->xy[n + 1][0]) / 2, (w->xy[n][1] + w->xy[n + 1][1]) / 2 + 8, 30 + 5 * !pass, pass ? snow : rim);
-    }
-    disc(120, 140, 26 + 5 * !pass, pass ? snow : rim); disc(250, 110, 30 + 5 * !pass, pass ? snow : rim); disc(190, 130, 24 + 5 * !pass, pass ? snow : rim);
-  }
-  for (int y = 0; y < SCR_H; y++) for (int x = 0; x < SCR_W; x++)
-    if (FB[y * SCR_W + x] == snow && hash2(x, y) % 11 == 0) put(x, y, shade);
-  uint32_t green = night ? 0xFF1F4A4A : 0xFF2E7D5A;
-  if (!night) {
-    // frozen lake by level 8, ice cave by level 9
-    for (int j = -10; j <= 10; j++) for (int i = -22; i <= 22; i++) if (i * i / 484.0f + j * j / 100.0f <= 1)
-      put(150 + i, 128 + j, (i + j * 2 + 60) % 13 < 2 ? 0xFFEAF8FF : 0xFFA9DAF5);
-    for (int j = 0; j < 30; j++) for (int i = -j; i <= j; i++) put(214 + i, 40 + j, j < 8 ? 0xFFFFFFFF : ((i + j) % 9 ? 0xFF8FB4D4 : 0xFF6F98BC));
-    disc(206, 68, 6, 0xFF12304C); fill(200, 68, 13, 6, 0xFF12304C);
-    static const short P[][2] = { {50, 118}, {66, 150}, {104, 112}, {118, 88}, {172, 100}, {176, 62}, {236, 100}, {254, 124}, {246, 66}, {100, 150}, {30, 128} };
-    for (unsigned t = 0; t < sizeof P / sizeof P[0]; t++) pine(P[t][0], P[t][1], green);
-    boat(8, 156 + (frame / 30) % 2);
-    // ski lift up to Ice Mountain
-    fill(282, 20, 2, 26, 0xFF575A66); fill(276, 20, 14, 2, 0xFF575A66);
-    for (int i = 0; i < 40; i++) put(283 + i, 20 - i / 2, 0xFF2B1A12);
-    fill(296 + (frame / 8) % 6, 14, 6, 5, 0xFFD8463C);
-  } else {
-    // the mountain, with the summit at the last stop
-    for (int j = 0; j < 100; j++) for (int i = -j * 3 / 4; i <= j * 3 / 4; i++) {
-      int x = 238 + i, y = 34 + j;
-      if ((unsigned)x < SCR_W && (unsigned)y < SCR_H && FB[y * SCR_W + x] != 0)
-        put(x, y, j < 16 + (i * 7 % 5) ? 0xFFFFFFFF : ((i * 2 + j) % 11 < 2 ? 0xFF4A5C94 : (i < 0 ? 0xFF8FA6D6 : 0xFF6F86BC)));
-    }
-    fill(238, 22, 1, 12, 0xFFE0E0E0);
-    for (int j = 0; j < 6; j++) fill(239, 22 + j, 7 - j / 2 + (frame / 8) % 2, 1, 0xFFD8463C);
-    static const short P[][2] = { {56, 120}, {70, 152}, {118, 108}, {128, 140}, {196, 128}, {150, 70}, {40, 126}, {104, 150} };
-    for (unsigned t = 0; t < sizeof P / sizeof P[0]; t++) pine(P[t][0], P[t][1], green);
-    boat(310, 112 + (frame / 30) % 2);
-    // lift station back down
-    fill(12, 128, 2, 24, 0xFF575A66); fill(6, 128, 14, 2, 0xFF575A66);
-    fill(2 + (frame / 8) % 6, 132, 6, 5, 0xFFD8463C);
-  }
-  // falling snow
-  for (int i = 0; i < 50; i++) {
-    uint32_t h = hash2(i, 77);
-    int x = (int)(h % SCR_W + frame * (0.2f + (i % 3) * 0.1f)) % SCR_W, y = (int)((h >> 9) % SCR_H + frame * (0.4f + (i % 4) * 0.15f)) % SCR_H;
-    put(x, y, 0xFFFFFFFF);
-  }
-}
-// The two newest worlds: the land follows the path, with trees scattered on it and one landmark.
+// Each world's map: the land follows the path, with trees scattered on it and one landmark.
 static uint32_t map_px(int x, int y) { return (unsigned)x < SCR_W && (unsigned)y < SCR_H ? FB[y * 2 * FB_W + x * 2] : 0; }
-static void map_land(int kind) {   // 0 jungle, 1 snow, 2 desert, 3 clouds
+static void map_land(int kind) {   // 0 jungle, 1 snow, 2 desert, 3 clouds, 4 sandy coast
   int snowy = kind == 1;
   const World* w = &WORLDS[world];
   uint32_t rim = snowy ? 0xFFBFE0F5 : 0xFFF0D9A0, land = snowy ? 0xFFF4FAFF : 0xFF4FAE52, shade = snowy ? 0xFFDCEBF7 : 0xFF409A46;
   if (kind == 2) { rim = 0xFFFFF0C0; land = 0xFFEBCB82; shade = 0xFFD9B46A; }
   if (kind == 3) { rim = 0xFFD6EAFB; land = 0xFFFFFFFF; shade = 0xFFEAF2FC; }
+  if (kind == 4) { rim = 0xFFFFF6D8; land = 0xFFF2DA9A; shade = 0xFFE4C680; }
   for (int pass = 0; pass < 2; pass++) {
     for (int n = 0; n < w->n; n++) {
       disc(w->xy[n][0], w->xy[n][1], 28 + 5 * !pass, pass ? land : rim);
@@ -1942,9 +2114,15 @@ static void map_land(int kind) {   // 0 jungle, 1 snow, 2 desert, 3 clouds
   }
   for (int y = 0; y < SCR_H; y++) for (int x = 0; x < SCR_W; x++)
     if (map_px(x, y) == land && hash2(x, y + world * 50) % 10 == 0) put(x, y, shade);
-  // the landmark sits behind the last level of the world
-  int lx = w->xy[snowy ? 3 : 3][0], ly = w->xy[3][1];
-  if (kind == 2) {   // a pyramid
+  // the landmark sits by the boss level of the world
+  int bi = w->kind[w->n - 1] == -3 ? w->n - 2 : w->n - 1;
+  int lx = w->xy[bi][0], ly = w->xy[bi][1];
+  if (kind == 4) {   // a lighthouse
+    lx += 22; ly -= 36;
+    for (int j = 0; j < 30; j++) fill(lx - 4 + j / 10, ly + j, 9 - (j / 10) * 2 + j / 5, 1, (j / 5) % 2 ? 0xFFFFFFFF : 0xFFE0384A);
+    fill(lx - 3, ly - 6, 7, 6, 0xFF2B1A12); fill(lx - 2, ly - 5, 5, 4, (frame / 20) % 2 ? 0xFFFFF27A : 0xFFFFD84A);
+    if ((frame / 20) % 2) for (int i = 0; i < 14; i++) put(lx + 4 + i, ly - 4 + i / 5, 0xFFFFF7C8);
+  } else if (kind == 2) {   // a pyramid
     lx += 4; ly -= 44;
     for (int j = 0; j < 34; j++) for (int i = -j; i <= j; i++) put(lx + i, ly + j, i < -j / 3 ? 0xFFF2D48A : ((j % 6) == 5 ? 0xFFB08A48 : 0xFFD0A860));
   } else if (kind == 1 || kind == 3) {   // a castle (of ice, or up in the clouds)
@@ -1971,11 +2149,16 @@ static void map_land(int kind) {   // 0 jungle, 1 snow, 2 desert, 3 clouds
     }
     if (!ok) continue;
     if (kind == 3) { disc(x - 4, y, 4, 0xFFEAF2FC); disc(x + 3, y - 1, 5, 0xFFEAF2FC); }
+    else if (kind == 4) { for (int j = 0; j < 8; j++) put(x + j / 4, y - j, 0xFF8A5A30); for (int f = -1; f <= 1; f += 2) { fill(x + 2, y - 9, 5 * (f > 0), 2, 0xFF2E9A4A); fill(x - 3 + (f > 0 ? 5 : 0), y - 8, 4, 2, 0xFF2E9A4A); } fill(x - 1, y - 10, 5, 2, 0xFF3FB85A); }
     else if (kind == 2) { fill(x - 1, y - 6, 3, 11, 0xFF4F9A52); fill(x - 5, y - 3, 4, 2, 0xFF4F9A52); fill(x - 5, y - 6, 2, 4, 0xFF4F9A52); fill(x + 2, y - 1, 4, 2, 0xFF4F9A52); fill(x + 4, y - 5, 2, 5, 0xFF4F9A52); }
     else if (snowy) pine(x, y, green);
     else { fill(x - 1, y, 3, 6, 0xFF6B3F1D); disc(x, y - 3, 6, t % 3 ? 0xFF2E7D32 : 0xFF3F9A3A); disc(x - 2, y - 5, 2, 0xFF5FC25A); }
   }
-  boat(w->xy[0][0] - 16, w->xy[0][1] + 8 + (frame / 30) % 2);
+  if (world == 0) {   // Dino's house by the first stop
+    int hx = w->xy[0][0], hy = w->xy[0][1] - 4;
+    fill(hx - 12, hy - 4, 24, 14, 0xFFE8D5B0); fill(hx - 3, hy + 2, 6, 8, 0xFF6B3F1D);
+    for (int j = 0; j < 11; j++) fill(hx - j - 4, hy - 14 + j, 2 * j + 8, 1, 0xFF4C8C2B);
+  } else boat(w->xy[0][0] - 16, w->xy[0][1] + 8 + (frame / 30) % 2);
   if (!snowy && w->kind[w->n - 1] == -3) boat(w->xy[w->n - 1][0] + 16, w->xy[w->n - 1][1] + 6 + (frame / 30) % 2);
   if (snowy) for (int i = 0; i < 50; i++) {
     uint32_t h = hash2(i, 77);
@@ -1993,8 +2176,9 @@ static void draw_map(void) {
   // sea
   uint32_t sea0 = 0xFF2F7FC1, sea1 = 0xFF5BB3E6, wave = 0xFF9ED6F5;
   if (world == 6) { sea0 = 0xFF4A90E2; sea1 = 0xFFBFE3FF; wave = 0xFFFFFFFF; }
-  if (world == 1 || world == 4) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
-  if (world == 2) { sea0 = 0xFF0B1030; sea1 = 0xFF24346E; wave = 0xFF4A5C94; }
+  if (world == 1) { sea0 = 0xFF1FA0C0; sea1 = 0xFF6FE0E8; wave = 0xFFE0FFFF; }
+  if (world == 2) { sea0 = 0xFF3F7FB4; sea1 = 0xFF86BFE2; wave = 0xFFD6ECFA; }
+  if (world == 5) { sea0 = 0xFF0B1030; sea1 = 0xFF24346E; wave = 0xFF4A5C94; }
   for (int y = 0; y < SCR_H; y++) {
     fill(0, y, SCR_W, 1, blend(sea0, sea1, y / (float)SCR_H));
   }
@@ -2003,7 +2187,7 @@ static void draw_map(void) {
     int x = (int)(h % SCR_W + frame / 6) % SCR_W, y = (h >> 9) % SCR_H;
     if ((frame / 15 + i) % 4) fill(x, y, 3, 1, wave);
   }
-  if (world == 0) map_jungle(); else if (world >= 3) map_land(world == 4 ? 1 : world == 5 ? 2 : world == 6 ? 3 : 0); else map_snow(world == 2);
+  { static const char KIND[7] = { 0, 4, 1, 2, 0, 1, 3 }; map_land(KIND[world]); }
   // path between the stops
   for (int n = 0; n + 1 < w->n; n++) {
     int open = node_open(n + 1);
@@ -2224,8 +2408,9 @@ typedef struct {
   const char *mel, *chords, *bass, *stab, *kick, *snare, *hat, *bah;
   int arp, bell, harm, brass;
 } Song;
-enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_WILD, SONG_CAVE, SONG_FALLS, SONG_SNOW, SONG_ICE, SONG_NIGHT, SONG_DESERT, SONG_CASTLE, SONG_BOSS, NSONGS };
-static const Song SONGS[NSONGS] = {
+enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_WILD, SONG_CAVE, SONG_FALLS, SONG_SNOW, SONG_ICE, SONG_NIGHT, SONG_DESERT, SONG_CASTLE, SONG_BOSS, SONG_WATER, SONG_BEACH, NSONGS };
+// the built-in band only has tunes up to the boss; the recorded music has them all
+static const Song SONGS[SONG_BOSS + 1] = {
   { 62, 168, 4, 8, 0.60f,   // Hello Dino (title): a little parade
     "7.77C.G." "E.C.9.7-" "9.99C.9." "7--.4.2." "4.57C.G." "H.G.E.C-" "E.EGE.B." "C--....."
     "H.HGH.L." "J.G.E.G-" "H.HGH.L." "N--.L.J." "O.L.J.G." "H.E.C.9." "B.EGJ.N." "O--.....",
@@ -2308,16 +2493,18 @@ static int pick_song(void) {
   if (state == ST_MAP) return SONG_MAP;
   if (state == ST_PLAY || state == ST_PAUSE) {
     if (g_boss_music) return SONG_BOSS;
-    if (lvl >= 21) return SONG_CASTLE;   // the whole Cloud Castle world
+    if (L->theme == 9) return SONG_WATER;
+    if (lvl >= 48) return SONG_CASTLE;   // the whole Cloud Castle world
     switch (L->theme) {
       case 1: case 2: return SONG_CAVE;
       case 8: return SONG_DESERT;
+      case 10: return SONG_BEACH;
       case 3: return SONG_FALLS;
-      case 4: return lvl >= 12 ? SONG_WILD : SONG_FALLS;
+      case 4: return lvl >= 32 ? SONG_WILD : SONG_FALLS;
       case 5: return SONG_SNOW;
       case 6: return SONG_ICE;
       case 7: return SONG_NIGHT;
-      default: return lvl >= 12 ? SONG_WILD : SONG_GRASS;
+      default: return lvl >= 32 ? SONG_WILD : SONG_GRASS;
     }
   }
   return -1;
@@ -2402,6 +2589,8 @@ static float music_sample(float dt) {
 #endif
   return stream_sample(want, dt);
 #endif
+  if (want == SONG_WATER) want = SONG_FALLS;
+  if (want == SONG_BEACH) want = SONG_GRASS;
   if (want != song_now) {
     song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_harm.on = 0; half_done = 1;
     for (int i = 0; i < NPOOL; i++) m_pool[i].ins = -1;

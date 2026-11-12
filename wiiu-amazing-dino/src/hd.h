@@ -51,7 +51,7 @@ static Bmp make_spring(void) {
     float fx = x + 0.5f, fy = y + 0.5f;
     float dbase = sd_rrect(fx, fy, 16, 27.5f, 11, 4, 2);
     float dcoil = minf(minf(sd_seg(fx, fy, 9, 23, 23, 20), sd_seg(fx, fy, 23, 20, 9, 17)), sd_seg(fx, fy, 9, 17, 23, 14)) - 1.4f;
-    float dcap = sd_ellipse(fx, fy, 16, 11, 14.5f, 6);
+    float dcap = sd_rrect(fx, fy, 16, 11, 14, 4, 3);
     float dall = minf(dbase, minf(dcoil, dcap));
     if (dall > 3) continue;
     uint32_t* d = &b.px[y * b.w + x];
@@ -60,8 +60,9 @@ static Bmp make_spring(void) {
     over(d, mixc(0xFFE8ECF4, 0xFF8C8F9C, (fx - 9) / 14), cov(dcoil));
     if (dcap < 2) over(d, OUTLINE, cov(dcap - 1.4f));
     if (dcap < 1) {
-      uint32_t c = mixc(0xFFFF8A7A, 0xFFC8322C, (fy - 5) / 12);
-      if (sd_circle(fx, fy, 9, 10, 2.6f) < 0 || sd_circle(fx, fy, 17, 8.5f, 2.8f) < 0 || sd_circle(fx, fy, 24.5f, 11, 2.3f) < 0) c = 0xFFFFFFFF;
+      // a flat teal pad with a light band across it (a plain spring, nothing like a mushroom)
+      uint32_t c = mixc(0xFF7AE8D8, 0xFF1E9A8A, (fy - 5) / 12);
+      if (fabsf(fy - 9.5f) < 1.3f) c = 0xFFE8FFF8;
       over(d, c, cov(dcap));
     }
   }
@@ -150,10 +151,10 @@ static void hd_init(void) {
 static Bmp LVB;
 static unsigned char* LV_ROW;   // for each screen row of the level picture: 0 empty, 1 has something
 static int snowy(void) { return L->theme >= 5 && L->theme <= 7; }
-static int desert(void) { return L->theme == 8; }
+static int desert(void) { return L->theme == 8 || L->theme == 9 || L->theme == 10; }   // sandy ground
 #define TXW 512
 #define TXH 256
-static uint32_t *GTEX[3][2], *STEX[6], *ITEX;
+static uint32_t *GTEX[3][2], *STEX[7], *ITEX;
 static float CAP_TAB[32];
 static float pnoise(float x, float y, int wx, int wy) {   // smooth noise that repeats every wx, wy cells
   int xi = (int)floorf(x), yi = (int)floorf(y);
@@ -184,11 +185,12 @@ static uint32_t* ground_tex(int sn, int dark) {
   }
   return t;
 }
-static int stone_pal(void) { int th = L->theme; return th == 1 ? 1 : th == 2 ? 2 : (th == 5 || th == 7) ? 3 : th == 6 ? 4 : th == 8 ? 5 : 0; }
+static int stone_pal(void) { int th = L->theme; return th == 1 ? 1 : th == 2 ? 2 : (th == 5 || th == 7) ? 3 : th == 6 ? 4 : (th == 8 || th == 10) ? 5 : th == 9 ? 6 : 0; }
 static uint32_t* stone_tex(int pal) {
   if (STEX[pal]) return STEX[pal];
-  static const uint32_t COL[6][3] = { { 0xFFA9AFBE, 0xFF646A7A, 0xFFD6DBE6 }, { 0xFF9A8BC0, 0xFF54487A, 0xFFC9BCE8 }, { 0xFF857869, 0xFF483E36, 0xFFAA9C8C },
-                                      { 0xFF9CC0DE, 0xFF567FA6, 0xFFD2E8F7 }, { 0xFF5F8FB8, 0xFF2A527A, 0xFF8FBBDD }, { 0xFFE2C28A, 0xFFA67C44, 0xFFF8E6BA } };
+  static const uint32_t COL[7][3] = { { 0xFFA9AFBE, 0xFF646A7A, 0xFFD6DBE6 }, { 0xFF9A8BC0, 0xFF54487A, 0xFFC9BCE8 }, { 0xFF857869, 0xFF483E36, 0xFFAA9C8C },
+                                      { 0xFF9CC0DE, 0xFF567FA6, 0xFFD2E8F7 }, { 0xFF5F8FB8, 0xFF2A527A, 0xFF8FBBDD }, { 0xFFE2C28A, 0xFFA67C44, 0xFFF8E6BA },
+                                      { 0xFF8A7AB0, 0xFF443A6A, 0xFFB8A8DA } };
   uint32_t* t = STEX[pal] = (uint32_t*)malloc(TXW * TXH * 4);
   uint32_t base = COL[pal][0], dark = COL[pal][1], lite = COL[pal][2];
   for (int Y = 0; Y < TXH; Y++) for (int X = 0; X < TXW; X++) {
@@ -243,7 +245,21 @@ static uint32_t ground_px(int X, int Y, int tx, int ty, int depth_t, int top, in
 static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   char below = tile(tx, ty + 1);
   if (!(below == '#' || (below == 'X' && L->theme != 1 && L->theme != 2 && L->theme != 6))) return 0;
-  if (tile(tx, ty) != ' ' || desert()) return 0;
+  if (tile(tx, ty) != ' ') return 0;
+  if (L->theme == 9) {   // swaying weed on the sea floor
+    uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
+    if (h % 9 > 3) return 0;
+    float fx = (X & 31) + 0.5f, fy = (Y & 31) + 0.5f, dd = 99;
+    for (int k = 0; k < 3; k++) {
+      float bx = 7 + k * 8 + (hash2(h, k) % 5), hh = 14 + hash2(k, h) % 16, bend = (fy - 32) / hh;
+      float cx = bx + sinf(bend * 3 + k) * 3 * -bend;
+      if (fy > 32 - hh) dd = minf(dd, fabsf(fx - cx) - 1.6f * (1 + bend * 0.8f));
+    }
+    if (dd > 1.2f) return 0;
+    *out = dd > 0.1f ? mixc(L->nearc, 0xFF000000, 0.4f) : mixc(mixc(L->nearc, 0xFFFFFFFF, 0.25f), L->nearc, (fy - 10) / 22);
+    return cov(dd - 0.9f);
+  }
+  if (desert()) return 0;
   for (int i = 0; i < nsigns; i++) if (sign_x[i] == tx && sign_y[i] == ty) return 0;
   if (goal_x == tx && goal_y == ty) return 0;
   uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
@@ -319,7 +335,7 @@ static void hd_render_level(void) {
   for (int i = 0; i < 32; i++) CAP_TAB[i] = fabsf(sinf(i * 3.14159f / 16));
   int sn = snowy(), th = L->theme;
   const uint32_t *tl = ground_tex(desert() ? 2 : sn, 0), *td = ground_tex(desert() ? 2 : sn, 1), *ts = stone_tex(stone_pal()), *ti = ice_tex();
-  int stone_cap = th == 0 || th == 3 || th == 4 || th == 5 || th == 7;
+  int stone_cap = th == 0 || th == 3 || th == 4 || th == 5 || th == 7;   // grass (or snow) on top of stone
   int decor_ok_x = !(th == 1 || th == 2 || th == 6);
   for (int ty = 0; ty < LH; ty++) for (int tx = 0; tx < LW; tx++) {
     char c = G[ty][tx];
@@ -415,6 +431,7 @@ static void hd_render_level(void) {
 static Bmp BG_FAR, BG_NEAR, HD_SUN, HD_MOON;
 static unsigned char NEAR_ROW[FB_H];   // 0 empty, 1 solid, 2 mixed
 static int bg_theme = -1;
+static float fx_island(int x) { return (x - 300) * 6.28318f / 260; }
 static void hd_render_bg(void) {
   int th = L->theme;
   static uint32_t bg_cols[4];
@@ -433,12 +450,13 @@ static void hd_render_bg(void) {
     }
   }
   memset(BG_NEAR.px, 0, (size_t)BGW * FB_H * 4);
-  int sn = th == 5 || th == 7, cave = th == 2 || th == 6, sky = th == 3;
+  int sn = th == 5 || th == 7, cave = th == 2 || th == 6, sky = th == 3, water = th == 9, beach = th == 10;
   uint32_t hA = mixc(L->far, L->sky1, 0.5f), hB = L->far, hC = mixc(L->far, L->nearc, 0.5f);
   static float H1[BGW], H2[BGW], H3[BGW];
   for (int x = 0; x < BGW; x++) {
     float fx = x + 0.5f, k = 6.28318f / BGW;
-    if (cave) { H1[x] = 60 + 46 * fabsf(sinf(fx * k * 5)) * fabsf(sinf(fx * k * 2 + 1)); H2[x] = 250 - 26 * sinf(fx * k * 3 + 0.4f) - 12 * sinf(fx * k * 7 + 0.92f); }
+    if (water) { H1[x] = 0; H2[x] = 268 - 34 * sinf(fx * k * 3 + 0.4f) - 16 * sinf(fx * k * 8 + 1.9f); }
+    else if (cave) { H1[x] = 60 + 46 * fabsf(sinf(fx * k * 5)) * fabsf(sinf(fx * k * 2 + 1)); H2[x] = 250 - 26 * sinf(fx * k * 3 + 0.4f) - 12 * sinf(fx * k * 7 + 0.92f); }
     else if (sky) { H1[x] = 290 - 14 * sinf(fx * k * 4) - 8 * sinf(fx * k * 9); H2[x] = 320 - 12 * sinf(fx * k * 3 + 2) - 6 * sinf(fx * k * 11 + 4.6f); }
     else { H1[x] = 196 - 30 * sinf(fx * k * 2 + 0.3f) - 12 * sinf(fx * k * 5 + 0.69f); H2[x] = 232 - 24 * sinf(fx * k * 3 + 1.7f) - 10 * sinf(fx * k * 7 + 3.91f); H3[x] = 268 - 16 * sinf(fx * k * 4 + 3.1f) - 8 * sinf(fx * k * 9 + 7.13f); }
   }
@@ -462,7 +480,17 @@ static void hd_render_bg(void) {
       if ((unsigned)(y0 + j) < FB_H) { uint32_t* d = &BG_FAR.px[(y0 + j) * BGW + x]; *d = mixc(*d, j < 16 ? 0xFF7CFFB2 : 0xFF58D6E8, a); }
     }
   }
-  if (!cave && th != 7) for (int k = 0; k < 7; k++) {   // fluffy clouds
+  if (water) for (int y = 0; y < FB_H; y++) for (int x = 0; x < BGW; x++) {   // light coming down through the water
+    float k = 6.28318f / BGW, r = sinf((x + y * 0.45f) * k * 9) * 0.5f + sinf((x + y * 0.45f) * k * 4 + 1.3f) * 0.5f;
+    if (r > 0.55f) { uint32_t* d = &BG_FAR.px[y * BGW + x]; *d = mixc(*d, 0xFFFFFFFF, (r - 0.55f) * 0.42f * (1 - y / (float)FB_H)); }
+  }
+  if (beach) for (int y = 200; y < FB_H; y++) for (int x = 0; x < BGW; x++) {   // the sea, out to the horizon
+    uint32_t* d = &BG_FAR.px[y * BGW + x];
+    *d = mixc(mixc(L->far, 0xFFFFFFFF, 0.25f), L->far, clampf((y - 200) / 90.0f, 0, 1));
+    if (y == 200) *d = mixc(*d, 0xFFFFFFFF, 0.5f);
+    if (hash2(x / 6, y / 2) % 37 == 0 && y > 204) *d = mixc(*d, 0xFFFFFFFF, 0.55f);
+  }
+  if (!cave && th != 7 && !water) for (int k = 0; k < 7; k++) {   // fluffy clouds
     float cx = k * (BGW / 7.0f) + 40 + hashf(k, 1) * 60, cy = 50 + hashf(k, 2) * 110;
     for (int y = (int)cy - 30; y <= (int)cy + 30; y++) for (int xx = (int)cx - 70; xx <= (int)cx + 70; xx++) {
       if ((unsigned)y >= FB_H) continue;
@@ -474,7 +502,13 @@ static void hd_render_bg(void) {
   for (int y = 0; y < FB_H; y++) for (int x = 0; x < BGW; x++) {
     float fy = y + 0.5f;
     uint32_t* d = &BG_FAR.px[y * BGW + x];
-    if (cave) {
+    if (water) {
+      if (fy > H2[x] - 1) *d = mixc(*d, mixc(mixc(L->far, 0xFFFFFFFF, 0.12f), L->far, clampf((fy - H2[x]) / 40, 0, 1)), cov(H2[x] - fy + 0.5f));
+    } else if (beach) {
+      // a low island far out to sea
+      float hx = 250 - 30 * maxf(0, sinf(fx_island(x)));
+      if (fy > hx - 1 && fy < 201) *d = mixc(*d, mixc(L->nearc, L->sky1, 0.55f), cov(hx - fy + 0.5f));
+    } else if (cave) {
       // hanging rock above, lumpy rock below
       if (fy < H1[x]) *d = mixc(L->far, 0xFF000000, 0.25f - 0.25f * fy / H1[x]);
       if (fy > H2[x]) *d = mixc(mixc(L->far, 0xFFFFFFFF, 0.08f), L->far, (fy - H2[x]) / 40);
@@ -488,7 +522,53 @@ static void hd_render_bg(void) {
       if (fy > H3[x] - 1) *d = mixc(*d, mixc(mixc(hC, 0xFFFFFFFF, sn ? 0.7f : 0.2f), hC, clampf((fy - H3[x]) / 18, 0, 1)), cov(H3[x] - fy + 0.5f));
     }
   }
-  if (cave) {
+  if (water) {
+    for (int ki = 0; ki < 10; ki++) {   // tall weed swaying up from the bottom, and lumps of coral
+      float cx = ki * 102.4f + 30 + hashf(ki, 3) * 50, hgt = 120 + hashf(ki, 4) * 120, base = FB_H + 4;
+      for (int y = (int)(base - hgt - 10); y < FB_H; y++) for (int xx = (int)cx - 40; xx <= (int)cx + 40; xx++) {
+        if (y < 0) continue;
+        float fx = xx + 0.5f, fy = y + 0.5f, t = (base - fy) / hgt;
+        uint32_t* d = &BG_NEAR.px[y * BGW + (xx & (BGW - 1))];
+        float sx = cx + sinf(t * 4.5f + ki) * 12 * t;
+        float dd = fabsf(fx - sx) - (5 - 3 * t);
+        if (t < 1 && dd < 1) over(d, mixc(mixc(L->nearc, 0xFFFFFFFF, 0.15f), mixc(L->nearc, 0xFF000000, 0.3f), clampf((fx - sx + 5) / 10, 0, 1)), cov(dd) * 0.9f);
+        for (int l = 1; l < 6; l++) {   // leaves
+          float ly = base - hgt * l / 6.0f, lx = cx + sinf((l / 6.0f) * 4.5f + ki) * 12 * (l / 6.0f) + ((l & 1) ? 9 : -9);
+          float dl = sd_ellipse(fx, fy, lx, ly, 9, 3.4f);
+          if (dl < 1) over(d, mixc(L->nearc, 0xFFFFFFFF, 0.1f), cov(dl) * 0.85f);
+        }
+      }
+      float ccx = cx + 52, ccy = FB_H - 6;
+      for (int y = FB_H - 46; y < FB_H; y++) for (int xx = (int)ccx - 26; xx <= (int)ccx + 26; xx++) {
+        float fx = xx + 0.5f, fy = y + 0.5f;
+        float dd = minf(minf(sd_circle(fx, fy, ccx - 12, ccy - 10, 12), sd_circle(fx, fy, ccx + 8, ccy - 18, 14)), sd_circle(fx, fy, ccx + 2, ccy - 2, 16));
+        if (dd < 1) over(&BG_NEAR.px[y * BGW + (xx & (BGW - 1))], mixc(mixc(0xFFFF8A9A, L->sky1, 0.35f), mixc(0xFFC04A6A, L->sky1, 0.4f), clampf((fy - ccy + 30) / 40, 0, 1)), cov(dd));
+      }
+    }
+  } else if (beach) {
+    uint32_t tl = mixc(L->nearc, 0xFFFFFFFF, 0.25f), td = mixc(L->nearc, 0xFF000000, 0.25f);
+    for (int ki = 0; ki < 6; ki++) {   // palm trees leaning over the sand
+      float cx = ki * 170 + 60 + hashf(ki, 3) * 60, hgt = 150 + hashf(ki, 4) * 60, base = 336, lean = (ki & 1 ? 1 : -1) * (20 + hashf(ki, 5) * 20);
+      float tx = cx + lean, ty = base - hgt;
+      for (int y = (int)ty - 60; y < (int)base; y++) for (int xx = (int)minf(cx, tx) - 80; xx <= (int)maxf(cx, tx) + 80; xx++) {
+        if (y < 0 || y >= FB_H) continue;
+        float fx = xx + 0.5f, fy = y + 0.5f;
+        uint32_t* d = &BG_NEAR.px[y * BGW + (xx & (BGW - 1))];
+        float t = clampf((base - fy) / hgt, 0, 1), sx = cx + lean * t * t;
+        float dt = fabsf(fx - sx) - (7 - 2.5f * t);
+        if (fy > ty && dt < 1) over(d, mixc(0xFFC8945A, 0xFF8A5A30, clampf((fx - sx + 6) / 12, 0, 1) + ((int)(fy / 7) & 1) * 0.15f), cov(dt));
+        for (int f = 0; f < 6; f++) {   // fronds
+          float a = f * 1.047f + 0.3f, ex = tx + cosf(a) * 56, ey = ty + sinf(a) * 18 + 14;
+          float df = sd_seg(fx, fy, tx, ty, ex, ey) - 7 * (1 - clampf(sd_circle(fx, fy, tx, ty, 0) / 60, 0, 1)) - 1;
+          if (df < 1) over(d, mixc(tl, td, clampf((fy - ty + 10) / 30, 0, 1)), cov(df));
+        }
+      }
+    }
+    for (int x = 0; x < BGW; x++) {   // the sand in front
+      float fx = x + 0.5f, bb = 334 - 8 * sinf(fx * 6.28318f * 3 / BGW) - 4 * sinf(fx * 6.28318f * 11 / BGW + 1);
+      for (int y = (int)bb - 1; y < FB_H; y++) { float fy = y + 0.5f; if (fy > bb - 0.5f) over(&BG_NEAR.px[y * BGW + x], mixc(0xFFFFF0C8, 0xFFE8C888, (fy - bb) / 26), cov(bb - fy + 0.5f)); }
+    }
+  } else if (cave) {
     for (int k = 0; k < 4; k++) {   // rock pillars close by
       float cx = k * 256 + 90 + hashf(k, 5) * 60, w = 26 + hashf(k, 6) * 14;
       for (int y = 0; y < FB_H; y++) {
@@ -575,7 +655,7 @@ static void hd_background(void) {
       if (n1 < FB_W) memcpy(FB + y * FB_W + n1, src, (size_t)(FB_W - n1) * 4);
     }
   }
-  if (th == 0 || th == 3 || th == 4 || th == 5 || th == 8) hblit(&HD_SUN, 486, 28, 0);
+  if (th == 0 || th == 3 || th == 4 || th == 5 || th == 8 || th == 10) hblit(&HD_SUN, 486, 28, 0);
   if (th == 1 || th == 7) hblit(&HD_MOON, 470, 42, 0);
   {
     int scroll = (((int)(camx * 1.0f) % BGW) + BGW) % BGW, yoff = (int)((1 - vy) * 70) - 50;

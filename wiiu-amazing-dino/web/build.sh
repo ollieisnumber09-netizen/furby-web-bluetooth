@@ -12,6 +12,6 @@ d = open('music/music.bin', 'rb').read()
 h = b'RIFF' + struct.pack('<I', 36 + len(d)) + b'WAVEfmt ' + struct.pack('<IHHIIHH', 16, 1, 1, 32000, 32000, 1, 8) + b'data' + struct.pack('<I', len(d))
 open('web/out/music.wav', 'wb').write(h + d)
 s = open('web/page.html').read()
-s = s.replace('/*DINOJS*/', open('web/out/dino.js').read()).replace('/*DINOJS2*/', open('web/out/dinojs.js').read())
+s = s.replace('/*DINOJS*/', open('web/out/dino.js').read()).replace('/*DINOJS2*/', open('web/out/dinojs.js').read().replace('ENVIRONMENT_IS_NODE=typeof process','ENVIRONMENT_IS_NODE=false&&typeof process'))
 open('web/out/amazing-dino.html', 'w').write(s)
 P

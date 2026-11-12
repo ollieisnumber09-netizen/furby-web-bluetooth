@@ -519,6 +519,169 @@ static void bat3d(Bmp* b, float flap, float yaw, int dead, float S, int crown) {
   rt_end(b);
 }
 
+// ---- the newer creatures
+#define V3A(n, a, b, c) float n[3] = { a, b, c }
+// a crab: a round shell on six thin legs, eyes on stalks and two big claws (snap 0 shut .. 1 open)
+static void crab3d(Bmp* b, float ph, float snap, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  for (int i = 0; i < 6; i++) {
+    float sgn = i < 3 ? -1 : 1, j = (float)(i % 3), z = -4 + j * 3.5f, lift = maxf(0, sinf(ph + j * 2.1f + (sgn > 0 ? 3.14159f : 0))) * 2.2f;
+    V3A(a, sgn * 7, 5, z); V3A(m, sgn * 12, 7.5f + lift, z * 1.15f); V3A(c, sgn * 14.5f, 0.6f + lift * 0.5f, z * 1.3f);
+    stick(&Wm, a, m, 0.95f, 0xFFB8452E, 5); stick(&Wm, m, c, 0.8f, 0xFFB8452E, 5);
+  }
+  ball(&Wm, 0, 7.5f, 0, 11, 5.8f, 8.5f, 0xFFFF7A3C, MAT_SHINY, 16);
+  ball(&Wm, 0, 10.6f, -0.5f, 7.5f, 2.6f, 5.5f, 0xFFFFB07A, MAT_SHINY, 12);
+  for (int k = 0; k < 3; k++) ball(&Wm, -4 + k * 4, 12.4f, -1, 1.1f, 0.7f, 1.1f, 0xFFFFE0C0, MAT_PLAIN, 6);   // freckles on the shell
+  for (int i = 0; i < 2; i++) {
+    float sgn = i ? 1 : -1;
+    V3A(a, sgn * 2.6f, 10.5f, 5); V3A(c, sgn * 3.8f, 15.5f, 5.6f); stick(&Wm, a, c, 0.85f, 0xFFB8452E, 5);
+    V3A(a2, sgn * 8.5f, 8, 4.5f); V3A(c2, sgn * 13, 11.5f, 8.5f); stick(&Wm, a2, c2, 1.4f, 0xFFE0602E, 6);
+    ball(&Wm, sgn * 14, 12.2f, 10, 3.8f, 2.4f, 3.2f, 0xFFFF7A3C, MAT_SHINY, 10);
+    M3 Pc = m3_mul(Wm, m3_mul(m3_trans(sgn * 14, 13.2f, 8), m3_rotx(-0.15f - snap * 0.7f)));
+    ball(&Pc, 0, 1.4f, 2.6f, 3.0f, 1.5f, 3.4f, 0xFFFFA05A, MAT_SHINY, 10);
+  }
+  crit_eyes(&Wm, 3.9f, 16.8f, 5.6f, 2.3f, dead, 0xFFFFFFFF);
+  rt_end(b);
+}
+// a fish: a plump teal body with navy stripes, yellow fins and a swishing tail
+static void fish3d(Bmp* b, float ph, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  M3 Pt = m3_mul(Wm, m3_mul(m3_trans(0, 10, -9.5f), m3_roty(sinf(ph) * 0.55f)));
+  ball(&Pt, 0, 0, -4, 0.9f, 6, 4.6f, 0xFFFFC23A, MAT_SHINY, 10);
+  ball(&Wm, 0, 10, 0, 6.2f, 6.8f, 10.5f, 0xFF3FC0C8, MAT_SHINY, 16);
+  ball(&Wm, 0, 7.6f, 1.5f, 5, 4, 8.6f, 0xFFDDF6E8, MAT_PLAIN, 12);
+  for (int k = 0; k < 2; k++) ball(&Wm, 0, 10, -1.5f - k * 4.2f, 6.4f, 7.0f - k * 0.6f, 1.1f, 0xFF27507E, MAT_PLAIN, 14);
+  ball(&Wm, 0, 16.6f, -1.5f, 0.9f, 3.4f, 5, 0xFFFFC23A, MAT_SHINY, 10);
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; M3 Pf = m3_mul(Wm, m3_mul(m3_trans(sgn * 5.6f, 8.5f, 1), m3_rotz(sgn * (0.5f + sinf(ph * 2) * 0.3f)))); ball(&Pf, sgn * 2, 0, 0, 3.2f, 0.8f, 2.4f, 0xFFFFC23A, MAT_SHINY, 8); }
+  crit_eyes(&Wm, 3.6f, 12.2f, 7.4f, 2.5f, dead, 0xFFFFFFFF);
+  ball(&Wm, 0, 8.6f, 10.2f, 1.6f, 1.1f, 0.8f, 0xFF27507E, MAT_PLAIN, 8);   // little round mouth
+  rt_end(b);
+}
+// a jellyfish: a see-through pink dome on wavy tentacles. pulse 0..1 squeezes it
+static void jelly3d(Bmp* b, float pulse, float ph, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  for (int k = 0; k < 6; k++) {
+    float a = k * 1.0472f + 0.3f, r = 5.5f - pulse * 1.5f;
+    V3A(p0, cosf(a) * r, 9, sinf(a) * r);
+    V3A(p1, cosf(a) * (r + 0.6f) + sinf(ph + k) * 1.4f, 4.5f, sinf(a) * (r + 0.6f));
+    V3A(p2, cosf(a) * (r - 0.4f) + sinf(ph + k + 1.5f) * 2.0f, 0.2f + pulse * 2, sinf(a) * (r - 0.4f));
+    stick(&Wm, p0, p1, 0.8f, 0xFFE07ACC, 5); stick(&Wm, p1, p2, 0.65f, 0xFFF0A0DC, 5);
+  }
+  ball(&Wm, 0, 14, 0, 9.5f + pulse * 1.2f, 7.4f - pulse * 1.6f, 9.5f + pulse * 1.2f, 0xFFF29AE6, MAT_SHINY, 16);
+  ball(&Wm, 0, 9.6f + pulse, 0, 9.2f + pulse * 1.2f, 1.6f, 9.2f + pulse * 1.2f, 0xFFC860C0, MAT_SHINY, 14);
+  for (int k = 0; k < 4; k++) { float a = k * 1.5708f + 0.8f; ball(&Wm, cosf(a) * 4.5f, 18.4f - pulse, sinf(a) * 4.5f, 1.4f, 1, 1.4f, 0xFFFFE0F6, MAT_PLAIN, 6); }
+  crit_eyes(&Wm, 3.0f, 13.2f, 8.2f, 2.0f, dead, 0xFFFFFFFF);
+  rt_end(b);
+}
+// an armadillo: fr 0..3 walking, 4 curling up, 5..7 rolling (a banded ball turning)
+static void roller3d(Bmp* b, int fr, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  uint32_t shell = 0xFF9A6A4A, band = 0xFF6A4434, skin = 0xFFE8B89A;
+  if (fr >= 4) {
+    float spin = fr == 4 ? 0.3f : (fr - 5) * 2.094f;
+    M3 Pb = m3_mul(Wm, m3_mul(m3_trans(0, 8.2f, 0), m3_rotx(spin)));
+    ball(&Pb, 0, 0, 0, 8.2f, 8.2f, 8.2f, shell, MAT_SHINY, 16);
+    for (int k = -2; k <= 2; k++) { float xo = k * 2.6f, r = sqrtf(maxf(1, 70 - xo * xo)); ball(&Pb, xo, 0, 0, 0.8f, r, r, band, MAT_PLAIN, 14); }
+    ball(&Pb, 0, 0, 8.0f, 3, 3, 1.2f, skin, MAT_PLAIN, 10);
+    if (fr == 4) crit_eyes(&Wm, 2.2f, 10, 7.2f, 1.6f, dead, 0xFFFFFFFF);
+    rt_end(b);
+    return;
+  }
+  float ph = fr * 1.5708f;
+  for (int i = 0; i < 4; i++) { float sx = i & 1 ? 1 : -1, sz = i < 2 ? 4.5f : -4.5f, lift = maxf(0, sinf(ph + i * 1.5708f)) * 1.8f; ball(&Wm, sx * 4.6f, 1.6f + lift, sz + cosf(ph + i * 1.5708f) * 1.2f, 2, 1.8f, 2.4f, skin, MAT_PLAIN, 8); }
+  ball(&Wm, 0, 8.5f, -1, 7.6f, 6.6f, 10, shell, MAT_SHINY, 16);
+  for (int k = -2; k <= 2; k++) ball(&Wm, 0, 8.6f, -1 + k * 3.2f, 7.9f - abs(k) * 0.6f, 6.9f - abs(k) * 0.5f, 0.9f, band, MAT_PLAIN, 14);
+  { V3A(a, 0, 6, -10); V3A(c, 0, 3.5f, -14); stick(&Wm, a, c, 1.0f, band, 5); }
+  ball(&Wm, 0, 7.4f, 9.6f, 3.8f, 3.6f, 4.2f, skin, MAT_SHINY, 12);
+  ball(&Wm, 0, 6.6f, 13.6f, 1.7f, 1.5f, 1.9f, 0xFFFF9AA8, MAT_SHINY, 8);
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; crit_spike(&Wm, sgn * 2.4f, 10.2f, 8.4f, 0, sgn * -0.4f, 1.3f, 3.2f, skin); }
+  crit_eyes(&Wm, 2.1f, 9.0f, 12.0f, 1.6f, dead, 0xFFFFFFFF);
+  rt_end(b);
+}
+// a penguin in a red scarf: ph waddles; slide lays it on its belly
+static void penguin3d(Bmp* b, float ph, int slide, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  if (slide) Wm = m3_mul(Wm, m3_mul(m3_trans(0, 6.5f, -3), m3_rotx(1.4f)));
+  else Wm = m3_mul(Wm, m3_rotz(sinf(ph) * 0.12f));
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1, lift = slide ? 0 : maxf(0, sinf(ph + i * 3.14159f)) * 1.6f; ball(&Wm, sgn * 3.2f, 0.9f + lift, 2.4f, 2.4f, 1.0f, 3.2f, 0xFFFF9A2E, MAT_PLAIN, 8); }
+  ball(&Wm, 0, 9.2f, 0, 7.2f, 9.6f, 6.6f, 0xFF262C4E, MAT_SHINY, 16);
+  ball(&Wm, 0, 8.4f, 3.2f, 5.9f, 7.8f, 4.4f, 0xFFF4F8FF, MAT_PLAIN, 14);
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; M3 Pf = m3_mul(Wm, m3_mul(m3_trans(sgn * 6.6f, 11, 0), m3_rotz(sgn * (slide ? 1.2f : 0.25f + maxf(0, sinf(ph * 2)) * 0.3f)))); ball(&Pf, 0, -3.5f, 0, 1.3f, 4.6f, 2.6f, 0xFF262C4E, MAT_SHINY, 8); }
+  ball(&Wm, 0, 12.2f, 0, 7.0f, 1.4f, 6.4f, 0xFFE0384A, MAT_PLAIN, 14);
+  ball(&Wm, -4.2f, 9.4f, 4.6f, 1.4f, 3.2f, 0.9f, 0xFFE0384A, MAT_PLAIN, 8);
+  crit_spike(&Wm, 0, 14.6f, 5.4f, 0, 1.5708f, 1.4f, 3.6f, 0xFFFF9A2E);
+  crit_eyes(&Wm, 2.4f, 15.6f, 4.8f, 1.8f, dead, 0xFFFFFFFF);
+  rt_end(b);
+}
+// a mole in a miner's hat: up 0 (down its hole) .. 1 (all the way out); throwing raises a paw
+static void mole3d(Bmp* b, float up, int throwing, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  ball(&Wm, 0, 1.0f, 0, 11.5f, 3.4f, 8, 0xFF8A5A30, MAT_PLAIN, 14);
+  ball(&Wm, -8.5f, 2.6f, 4, 2.2f, 1.6f, 2, 0xFF6A4224, MAT_PLAIN, 8); ball(&Wm, 8, 2.4f, 3, 1.8f, 1.4f, 1.8f, 0xFF6A4224, MAT_PLAIN, 8);
+  if (up > 0.04f) {
+    M3 Wb = m3_mul(Wm, m3_mul(m3_trans(0, 2, 0), m3_scale(1, up, 1)));
+    ball(&Wb, 0, 7, 0, 6.4f, 7.4f, 6.2f, 0xFF6E5A64, MAT_SHINY, 14);
+    ball(&Wb, 0, 7.6f, 6.0f, 1.9f, 1.6f, 1.7f, 0xFFFF8AA8, MAT_SHINY, 8);
+    ball(&Wb, 0, 13.2f, 0, 5.8f, 2.6f, 5.8f, 0xFFFFC21E, MAT_SHINY, 12);
+    ball(&Wb, 0, 13.6f, 5.4f, 1.6f, 1.6f, 0.8f, 0xFFFFF6C8, MAT_SHINY, 8);
+    for (int i = 0; i < 2; i++) {
+      float sgn = i ? 1 : -1;
+      if (throwing && i) ball(&Wb, 5.6f, 15.5f, 1, 2.2f, 2.6f, 1.8f, 0xFFF0B8C0, MAT_PLAIN, 8);
+      else ball(&Wb, sgn * 5.4f, 4.4f, 4.2f, 2.4f, 1.6f, 1.8f, 0xFFF0B8C0, MAT_PLAIN, 8);
+    }
+    if (up > 0.6f) crit_eyes(&Wm, 2.2f, 2 + 10.4f * up, 5.4f, 1.3f, dead, 0xFFFFFFFF);
+  }
+  rt_end(b);
+}
+// a swooping bird: flap swings the wings; dive folds them back and points the beak down
+static void bird3d(Bmp* b, float flap, int dive, float yaw, int dead, float S, int crown) {
+  crit_begin(S, crown);
+  M3 Wm = m3_roty(yaw);
+  if (dive) { Wm = m3_mul(Wm, m3_mul(m3_trans(0, 10, 0), m3_mul(m3_rotx(0.85f), m3_trans(0, -10, 0)))); flap = -0.2f; }
+  for (int i = 0; i < 2; i++) {
+    float sgn = i ? 1 : -1;
+    M3 Ww = m3_mul(Wm, m3_mul(m3_trans(sgn * 4.5f, 11.5f, -1), m3_mul(m3_rotz(sgn * flap * 0.9f), m3_roty(dive ? sgn * 0.9f : 0))));
+    ball(&Ww, sgn * 7, 0, -1, 8, 1.0f, 5, 0xFF4A8AD8, MAT_PLAIN, 12);
+    ball(&Ww, sgn * 13, -0.4f, -2.5f, 3.6f, 0.8f, 3.4f, 0xFFF4F8FF, MAT_PLAIN, 10);
+  }
+  ball(&Wm, 0, 10.5f, 0, 6, 6, 7.8f, 0xFF5AA0F0, MAT_SHINY, 16);
+  ball(&Wm, 0, 9.0f, 2.4f, 4.4f, 4.2f, 5.4f, 0xFFF4F8FF, MAT_PLAIN, 12);
+  crit_spike(&Wm, 0, 10.5f, -7, 0, -1.9f, 2.2f, 5, 0xFF2E5A9A);
+  crit_spike(&Wm, 0, 15.6f, 1, 0, -0.5f, 1.2f, 4, 0xFF2E5A9A);
+  crit_spike(&Wm, 0, 10.6f, 7.2f, 0, 1.5708f, 1.5f, 4.4f, 0xFFFFB02E);
+  crit_eyes(&Wm, 2.6f, 12.8f, 6.0f, 1.9f, dead, 0xFFFFFFFF);
+  if (crown) crown3d(&Wm, 0, 17.6f, 0, 3.6f);
+  rt_end(b);
+}
+// a snowman with a blue bucket hat, a red scarf and twig arms; throwing lifts one arm with a snowball
+static void snowman3d(Bmp* b, float bob, int throwing, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_roty(yaw);
+  ball(&Wm, 0, 6, 0, 8.2f, 6.6f, 8.2f, 0xFFF8FBFF, MAT_SHINY, 16);
+  ball(&Wm, 0, 15, 0, 6.2f, 5.2f, 6.2f, 0xFFF8FBFF, MAT_SHINY, 14);
+  ball(&Wm, 0, 22.5f + bob, 0, 4.8f, 4.5f, 4.8f, 0xFFF8FBFF, MAT_SHINY, 14);
+  for (int k = 0; k < 2; k++) ball(&Wm, 0, 13.6f + k * 3, 5.7f - k * 0.4f, 0.9f, 0.9f, 0.6f, 0xFF2A2630, MAT_SHINY, 6);
+  ball(&Wm, 0, 18.9f + bob * 0.5f, 0, 5.4f, 1.4f, 5.4f, 0xFFE0384A, MAT_PLAIN, 14);
+  ball(&Wm, -3.2f, 16.6f, 4.2f, 1.2f, 2.8f, 0.9f, 0xFFE0384A, MAT_PLAIN, 8);
+  ball(&Wm, 0, 27.4f + bob, 0, 4.0f, 2.2f, 4.0f, 0xFF3A6AD8, MAT_SHINY, 12);
+  ball(&Wm, 0, 25.6f + bob, 0, 4.6f, 0.6f, 4.6f, 0xFF2A4AA8, MAT_PLAIN, 12);
+  crit_spike(&Wm, 0, 22.2f + bob, 4.0f, 0, 1.5708f, 1.0f, 4.8f, 0xFFFF8A2E);
+  crit_eyes(&Wm, 1.9f, 23.8f + bob, 3.9f, 1.25f, dead, 0xFF2A2630);
+  for (int i = 0; i < 2; i++) {
+    float sgn = i ? 1 : -1;
+    V3A(a, sgn * 5.6f, 16, 0);
+    if (throwing && i) { V3A(c, 8, 25, -1.5f); stick(&Wm, a, c, 0.7f, 0xFF6B3F1D, 5); ball(&Wm, 8.4f, 26.6f, -1.6f, 2.4f, 2.4f, 2.4f, 0xFFFFFFFF, MAT_SHINY, 10); }
+    else { V3A(c, sgn * 11, 19.5f, 0.5f); stick(&Wm, a, c, 0.7f, 0xFF6B3F1D, 5); V3A(d, sgn * 9.5f, 18.7f, 0.3f); V3A(e2, sgn * 10.6f, 21.6f, 0.2f); stick(&Wm, d, e2, 0.5f, 0xFF6B3F1D, 4); }
+  }
+  rt_end(b);
+}
+
 static void m3d_build(void) {
   m3d_init();
   for (int i = 0; i < COIN_FRAMES; i++) coin3d(&HD_COIN[i], i * 3.14159f / COIN_FRAMES, 1);

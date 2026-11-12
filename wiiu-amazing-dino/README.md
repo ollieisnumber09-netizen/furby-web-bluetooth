@@ -1,14 +1,19 @@
 # Amazing Dino (Wii U)
 
 An original platformer starring Dino (white egg body, smooth green spikes). Walk the world maps
-from Dino's house through 24 levels in 7 worlds: Jungle Island, Frosty Forest, Ice Mountain,
-Wild Jungle, Snowflake Peaks, Sunny Dunes and Cloud Castle. Clearing a level opens the next one,
-and seven bosses guard the way. The later worlds add moving platforms, frogs, spiky balls,
-seed-spitting flowers, bats, pretend walls hiding secret rooms and cracked blocks.
-Stomp or headbutt beetles and bees, grab coins (50 coins = 1 extra life).
+from Dino's house through 56 levels in 7 worlds of 8: Jungle Island, Coral Coast, Frosty Forest,
+Sunny Dunes, Wild Jungle, Snowflake Peaks and Cloud Castle. Clearing a level opens the next one,
+and the last level of each world is a boss. Levels are long and built in sections: moving and
+crumbly platforms, pools and whole underwater levels (tap jump to swim), pretend walls hiding
+secret rooms, cracked blocks, and three key pieces per level that make a key for the locked door
+to a bonus room. Creatures include beetles, bees, frogs, spiky balls, seed-spitting flowers, bats,
+crabs, fish, jellyfish (never stomp them), armadillos that curl up and roll, sliding penguins,
+moles that throw dirt, diving birds and snowmen that throw snowballs.
+Stomp or headbutt them, grab coins (50 coins = 1 extra life).
 ? boxes (jump into them from below, or headbutt them) hold 5 coins or a power-up:
 wings (double jump), a sword (X/Y swings it), a helmet (headbutts smash cracked blocks and
-spiky balls) or a star (X/Y throws bouncing stars). Getting hit loses the power-up instead of a life.
+spiky balls) or a star (X/Y throws bouncing stars). The sword, helmet and star all show on Dino.
+Getting hit loses the power-up instead of a life. Each kind of area has its own song (14 in all).
 Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).
 
 ## Put it on the Wii U (Aroma)
@@ -33,8 +38,8 @@ Needs devkitPro with wut and wiiu-sdl2 (or the `devkitpro/devkitppc` Docker imag
 `docker run --rm -v "$PWD":/src -w /src devkitpro/devkitppc make`
 
 `src/game.c` is the whole game (art is drawn from text in the code, music and sounds are made
-on the fly). `src/main.c` is the Wii U side. Levels are the `L1`/`L2`/`L3` lists near the top
-of game.c, so adding a level is just adding another list.
+on the fly). `src/main.c` is the Wii U side. Levels are made by `build_level()` in game.c from
+the level table (name, theme, seed) and a set of section builders.
 `test/video.c` records a gameplay video with an autopilot. `test/test.c` runs the game on a PC without a screen and saves screenshots
 (`gcc -o kiptest test/test.c -lm && ./kiptest .`).
 
