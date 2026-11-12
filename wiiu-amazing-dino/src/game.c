@@ -2091,8 +2091,12 @@ void game_draw(uint32_t* fb) {
     hblit(&HD_COIN[(frame / 2 + 8) % COIN_FRAMES], 528, 250 + (int)(sinf(frame * 0.08f + 2) * 4), 0);
     text_c("AMAZING DINO", 24, 5, 0xFFF7D038);
     text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
+#ifdef __EMSCRIPTEN__
+    if ((state_t / 30) % 2 == 0) text_c("PRESS JUMP TO START", 80, 2, 0xFFFFFFFF);
+#else
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
     if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
+#endif
     return;
   }
   if (state == ST_MAP) { draw_map(); return; }
@@ -2361,8 +2365,12 @@ static void music_step(const Song* sg, int half) {
 // recordings (made by tools/mkmidi.py from the same tunes), packed four bits a sample and played
 // straight from memory; each one loops without a gap. Without it, the little synth band below plays.
 #ifdef MUSIC_BIN_PATH
+#ifdef MUSIC_PTR
+const unsigned char* music_bin;   // the web build loads music.bin itself and points this at it
+#else
 __asm__(".pushsection .rodata\n.balign 4\n.global music_bin\nmusic_bin:\n.incbin \"" MUSIC_BIN_PATH "\"\n.popsection\n");
 extern const unsigned char music_bin[];
+#endif
 #include "music_tab.h"
 #define MUS_RATE 32000
 static struct { int song, pos, pred, idx, s0, s1; float frac, gain; } MS = { -1 };
@@ -2389,6 +2397,9 @@ static float music_sample(float dt) {
   static int half_done;
   int want = pick_song();
 #ifdef MUSIC_BIN_PATH
+#ifdef MUSIC_PTR
+  if (music_bin)   // no recorded music loaded: play the built-in band instead
+#endif
   return stream_sample(want, dt);
 #endif
   if (want != song_now) {

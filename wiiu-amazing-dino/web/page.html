@@ -1,0 +1,298 @@
+<title>Amazing Dino</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one screen. Upright phone: picture on top, thumb controls underneath.
+   Sideways phone: picture fills the height, controls float over the bottom corners. */
+:root {
+  --night: #0b1f17;      /* deep jungle night, the page ground */
+  --leaf: #1f6b45;       /* control surfaces */
+  --leaf-hi: #2f9460;    /* pressed / edge light */
+  --banana: #ffd23f;     /* the one loud colour: jump and play */
+  --berry: #ff6b8b;      /* attack */
+  --mist: #dff3e6;       /* text */
+  --ink: #06120d;        /* text on banana */
+  --display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--night); color: var(--mist); font-family: var(--body); font-weight: 600;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px;
+  box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden; overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; }
+.bar h1 { font: 800 1.25rem/1 var(--display); margin: 0; letter-spacing: .01em; }
+.bar h1 span { color: var(--banana); }
+.ghost {
+  font: 800 .8rem/1 var(--body); color: var(--mist); background: transparent;
+  border: 2px solid var(--leaf); border-radius: 999px; padding: 8px 14px;
+}
+.ghost:focus-visible, .play:focus-visible { outline: 3px solid var(--banana); outline-offset: 3px; }
+.stage { position: relative; flex: none; display: flex; justify-content: center; min-height: 0; }
+canvas {
+  display: block; width: 100%; max-width: calc((100vh - 16px) * 16 / 9); aspect-ratio: 16 / 9;
+  background: #000; border-radius: 10px;
+}
+.cover {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; background: rgba(6, 18, 13, .78); border-radius: 10px; padding: 12px;
+}
+.cover p { margin: 0; font-size: .85rem; max-width: 30ch; text-wrap: balance; }
+.play {
+  font: 800 1.5rem/1 var(--display); color: var(--ink); background: var(--banana); border: 0;
+  border-radius: 999px; padding: 14px 34px 12px; box-shadow: 0 5px 0 #b98a00;
+}
+.play:disabled { opacity: .55; box-shadow: none; }
+.pad-area {
+  flex: 1; min-height: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  touch-action: none;
+}
+.dpad {
+  position: relative; width: min(42vw, 180px); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, var(--leaf-hi), var(--leaf) 70%); touch-action: none; flex: none;
+}
+.dpad i {
+  position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -9px;
+  border: 9px solid transparent; opacity: .55;
+}
+.dpad .l { border-right-color: var(--mist); transform: translate(-52px, 0); }
+.dpad .r { border-left-color: var(--mist); transform: translate(52px, 0); }
+.dpad .u { border-bottom-color: var(--mist); transform: translate(0, -52px); }
+.dpad .d { border-top-color: var(--mist); transform: translate(0, 52px); }
+.dpad .on { opacity: 1; }
+.btns { position: relative; width: min(46vw, 200px); aspect-ratio: 200 / 180; flex: none; }
+.btn {
+  position: absolute; display: grid; place-items: center; border-radius: 50%; touch-action: none;
+  font: 800 .95rem/1 var(--display); letter-spacing: .04em; color: var(--ink);
+}
+.btn.jump { width: 54%; aspect-ratio: 1; right: 0; bottom: 0; background: var(--banana); box-shadow: 0 5px 0 #b98a00; }
+.btn.hit { width: 44%; aspect-ratio: 1; left: 0; bottom: 30%; background: var(--berry); box-shadow: 0 5px 0 #b23a57; }
+.btn.pause {
+  width: 44%; height: 20%; right: 5%; top: 0; border-radius: 999px; background: transparent;
+  border: 2px solid var(--leaf-hi); color: var(--mist); font-size: .75rem;
+}
+.btn.on { transform: translateY(4px); box-shadow: none; filter: brightness(1.15); }
+.hint { flex: none; margin: 0; text-align: center; font-size: .75rem; opacity: .7; }
+
+@media (orientation: landscape) and (max-height: 520px) {
+  body { padding-block: 0; gap: 0; }
+  .bar, .hint { display: none; }
+  .stage { flex: 1; align-items: center; }
+  canvas { width: auto; height: 100%; max-width: 100%; max-height: 100%; border-radius: 0; }
+  .cover { border-radius: 0; }
+  .pad-area {
+    position: fixed; inset: auto 0 0 0; flex: none; align-items: flex-end; pointer-events: none;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .dpad, .btns { pointer-events: auto; opacity: .62; }
+  .dpad { width: min(34vh, 150px); }
+  .btns { width: min(42vh, 180px); }
+}
+@media (min-width: 700px) and (min-height: 521px) {
+  .pad-area { justify-content: center; gap: 15vw; }
+}
+</style>
+
+<div class="bar">
+  <h1>Amazing <span>Dino</span></h1>
+  <button class="ghost" id="fs" type="button">Full screen</button>
+</div>
+<div class="stage">
+  <canvas id="cv" width="640" height="360"></canvas>
+  <div class="cover" id="cover">
+    <button class="play" id="play" type="button" disabled>Loading</button>
+    <p id="msg">Getting the music ready.</p>
+  </div>
+</div>
+<div class="pad-area" id="pads">
+  <div class="dpad" id="dpad"><i class="l"></i><i class="r"></i><i class="u"></i><i class="d"></i></div>
+  <div class="btns">
+    <div class="btn pause" data-bit="32">PAUSE</div>
+    <div class="btn hit" data-bit="64">HIT</div>
+    <div class="btn jump" data-bit="16">JUMP</div>
+  </div>
+</div>
+<p class="hint">Turn your phone sideways for a bigger picture. Keyboard: arrows, Z jump, X hit, Enter pause.</p>
+
+<script>
+/*DINOJS*/
+</script>
+<script>
+/*DINOJS2*/
+</script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var cv = $('cv'), ctx2d = cv.getContext('2d'), img = ctx2d.createImageData(640, 360);
+  var play = $('play'), msg = $('msg'), cover = $('cover'), dpad = $('dpad');
+  var mod = null, musPtr = 0, running = false, actx = null, node = null;
+  var SAVE_KEY = 'amazing-dino-save', lastSave = '';
+
+  function loadSave() { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (e) { return ''; } }
+  function keepSave() {
+    try {
+      var s = new TextDecoder().decode(mod.FS.readFile('/save.txt'));
+      if (s && s !== lastSave) { lastSave = s; localStorage.setItem(SAVE_KEY, s); }
+    } catch (e) {}
+  }
+
+  // ---- loading: the game code, then the recorded music (the game still plays without it)
+  function fetchMusic() {
+    return fetch('music.wav').then(function (r) {
+      if (!r.ok) throw new Error('no music');
+      var total = +r.headers.get('content-length') || 5900000, got = 0, parts = [];
+      if (!r.body || !r.body.getReader) return r.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+      var rd = r.body.getReader();
+      return (function pump() {
+        return rd.read().then(function (x) {
+          if (x.done) {
+            var all = new Uint8Array(got), o = 0;
+            parts.forEach(function (p) { all.set(p, o); o += p.length; });
+            return all;
+          }
+          parts.push(x.value); got += x.value.length;
+          play.textContent = 'Loading ' + Math.min(99, Math.round(100 * got / total)) + '%';
+          return pump();
+        });
+      })();
+    });
+  }
+  var slow = false;
+  // if this browser refuses WebAssembly, fall back to the plain JavaScript build of the same game
+  var boot = DinoModule().catch(function () { slow = true; return DinoModuleJS(); });
+  Promise.all([boot, fetchMusic().catch(function () { return null; })]).then(function (r) {
+    mod = r[0];
+    if (r[1]) { var mus = r[1].subarray(44); musPtr = mod._malloc(mus.length); mod.HEAPU8.set(mus, musPtr); }   // skip the 44-byte file header
+    var s = loadSave();
+    if (s) { try { mod.FS.writeFile('/save.txt', s); lastSave = s; } catch (e) {} }
+    mod._web_init(musPtr);
+    draw();
+    play.disabled = false; play.textContent = 'Play';
+    msg.textContent = slow ? 'This browser is running the game the slow way, so it may feel sluggish.' : r[1] ? 'Sound starts when you tap Play.' : 'The recorded music did not load, so the game will use its built-in tunes.';
+  }).catch(function (e) {
+    play.textContent = 'Stuck';
+    msg.textContent = 'The game could not start in this browser: ' + (e && e.message ? e.message : e);
+  });
+
+  // ---- picture
+  var lowq = 0, drawAvg = 0, frames = 0;
+  function draw() {
+    var t0 = performance.now(), p = mod._web_draw(lowq);
+    img.data.set(new Uint8ClampedArray(mod.HEAPU8.buffer, p, 640 * 360 * 4));
+    ctx2d.putImageData(img, 0, 0);
+    drawAvg = drawAvg * 0.95 + (performance.now() - t0) * 0.05;
+    if (++frames > 120 && drawAvg > 12) lowq = 1;
+  }
+
+  // ---- sound
+  function startAudio() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      actx = new AC();
+      node = actx.createScriptProcessor(2048, 0, 2);
+      node.onaudioprocess = function (e) {
+        var L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), n = L.length;
+        if (!running) { L.fill(0); R.fill(0); return; }
+        var a = new Int16Array(mod.HEAP16.buffer, mod._web_audio(n, actx.sampleRate), n * 2);
+        for (var i = 0; i < n; i++) { L[i] = a[2 * i] / 32768; R[i] = a[2 * i + 1] / 32768; }
+      };
+      node.connect(actx.destination);
+      if (actx.state === 'suspended') actx.resume();
+    } catch (e) { actx = null; }
+  }
+
+  // ---- controls: bits 1 left, 2 right, 4 up, 8 down, 16 jump, 32 pause, 64 hit
+  var pointers = new Map(), keys = 0, touchBits = 0, latched = 0;   // latched: a tap shorter than one tick still counts
+  var KEY = { ArrowLeft: 1, a: 1, ArrowRight: 2, d: 2, ArrowUp: 4, w: 4, ArrowDown: 8, s: 8,
+              z: 16, ' ': 16, Enter: 32, Escape: 32, x: 64, Shift: 64 };
+  function recompute() {
+    var bits = 0, r = dpad.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2;
+    pointers.forEach(function (p) {
+      if (p.pad) {
+        var dx = (p.x - cx) / R, dy = (p.y - cy) / R;
+        if (dx < -0.28) bits |= 1; if (dx > 0.28) bits |= 2;
+        if (dy < -0.45) bits |= 4; if (dy > 0.45) bits |= 8;
+      } else {
+        var el = document.elementFromPoint(p.x, p.y);
+        el = el && el.closest ? el.closest('[data-bit]') : null;
+        if (el) bits |= +el.dataset.bit;
+      }
+    });
+    touchBits = bits; latched |= bits;
+    document.querySelectorAll('[data-bit]').forEach(function (b) { b.classList.toggle('on', !!(bits & +b.dataset.bit)); });
+    dpad.querySelector('.l').classList.toggle('on', !!(bits & 1));
+    dpad.querySelector('.r').classList.toggle('on', !!(bits & 2));
+    dpad.querySelector('.u').classList.toggle('on', !!(bits & 4));
+    dpad.querySelector('.d').classList.toggle('on', !!(bits & 8));
+  }
+  $('pads').addEventListener('pointerdown', function (e) {
+    var onPad = !!e.target.closest('#dpad'), onBtn = !!e.target.closest('[data-bit]');
+    if (!onPad && !onBtn) return;
+    e.preventDefault();
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pad: onPad });
+    recompute();
+  });
+  window.addEventListener('pointermove', function (e) {
+    var p = pointers.get(e.pointerId);
+    if (p) { p.x = e.clientX; p.y = e.clientY; recompute(); }
+  });
+  function lift(e) { if (pointers.delete(e.pointerId)) recompute(); }
+  window.addEventListener('pointerup', lift);
+  window.addEventListener('pointercancel', lift);
+  $('pads').addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  document.addEventListener('touchmove', function (e) { if (running) e.preventDefault(); }, { passive: false });
+  window.addEventListener('keydown', function (e) {
+    var k = KEY[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (k && running) { keys |= k; latched |= k; e.preventDefault(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    var k = KEY[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (k) keys &= ~k;
+  });
+  window.addEventListener('blur', function () { keys = 0; pointers.clear(); recompute(); });
+
+  // ---- the loop: 60 game ticks a second whatever the screen's refresh rate
+  var last = 0, acc = 0, saveT = 0;
+  function frame(now) {
+    if (!running) return;
+    acc += Math.min(100, now - last); last = now;
+    var steps = 0;
+    while (acc >= 1000 / 60 && steps < 4) { mod._web_tick(keys | touchBits | latched); latched = 0; acc -= 1000 / 60; steps++; }
+    if (steps) draw();
+    if (now - saveT > 2000) { saveT = now; keepSave(); }
+    requestAnimationFrame(frame);
+  }
+  function go() {
+    if (running || !mod) return;
+    running = true; cover.hidden = true;
+    if (!actx) startAudio(); else if (actx.state === 'suspended') actx.resume();
+    last = performance.now(); acc = 0;
+    requestAnimationFrame(frame);
+  }
+  function hold(text) {
+    if (!running) return;
+    running = false; keepSave();
+    if (actx) actx.suspend();
+    play.textContent = 'Keep playing'; msg.textContent = text; cover.hidden = false;
+  }
+  play.addEventListener('click', go);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) hold('Paused while you were away.'); });
+
+  $('fs').addEventListener('click', function () {
+    var el = document.documentElement;
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (el.requestFullscreen) el.requestFullscreen().then(function () {
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+      }).catch(function () {});
+    } catch (e) {}
+  });
+})();
+</script>

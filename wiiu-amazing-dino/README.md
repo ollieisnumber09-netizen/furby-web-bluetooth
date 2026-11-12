@@ -37,3 +37,7 @@ on the fly). `src/main.c` is the Wii U side. Levels are the `L1`/`L2`/`L3` lists
 of game.c, so adding a level is just adding another list.
 `test/video.c` records a gameplay video with an autopilot. `test/test.c` runs the game on a PC without a screen and saves screenshots
 (`gcc -o kiptest test/test.c -lm && ./kiptest .`).
+
+## Phone and browser version
+
+`web/build.sh` builds the same game for a browser with on-screen touch buttons (needs Emscripten). It writes `web/out/amazing-dino.html` and `music.wav`, which must sit next to each other.
