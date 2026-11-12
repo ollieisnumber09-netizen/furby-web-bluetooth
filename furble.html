@@ -16,6 +16,7 @@
 <div id='menu'>
     <h2>FurBLE</h2>
     <ul>
+        <li><a href='#partner'>Partner Mode</a></li>
         <li><a href='#actions'>Actions</a></li>
         <li><a href='#misc'>Misc</a></li>
         <li><a href='#dlc'>DLC Upload</a></li>
@@ -35,6 +36,24 @@
 </div>
 
 <div id='furby-buttons'>
+
+    <section id='partner'>
+        <h2>Partner Mode</h2>
+        <p>Two Furbies have a conversation. Connect both (use "Add another Furby"), tell me which is which, and they'll take turns talking.</p>
+        <div class='row'>
+            <label>Person 1 Furby: <select id='partner-p1'></select></label>
+            <label>Person 2 Furby: <select id='partner-p2'></select></label>
+            <button onclick='partnerRefresh()'>Refresh list</button>
+        </div>
+        <div class='row'>
+            <button onclick='partnerPrepare()'>1. Upload both chat DLCs</button>
+            <button onclick='partnerCheck()'>Check they're ready</button>
+        </div>
+        <div class='row' id='partner-start-row' style='display:none'>
+            <button id='partner-start-btn' onclick='partnerStart()'>&#9654; Start conversation (both at once)</button>
+        </div>
+        <p id='partner-status'>Not set up yet.</p>
+    </section>
 
     <section id='misc'>
         <h2>Antenna Colour</h2>
@@ -181,6 +200,7 @@ function showSection(section) {
     currentSection = section;
     document.querySelector('section#' + currentSection).classList.add('current');
     document.querySelector(`a[href="#${currentSection}`).classList.add('current');
+    if (section == 'partner' && typeof partnerRefresh == 'function') partnerRefresh();
 }
 
 async function loadDLCIndex() {
@@ -351,6 +371,126 @@ function setupDLCButtons(dlcParams) {
         };
         container.appendChild(button);
     });
+}
+
+// ---- Partner Mode: two Furbies have a conversation ----
+const PARTNER = {
+    p1: { dlc: 'P1CHAT.DLC', prefix: 'P1CHAT' },
+    p2: { dlc: 'P2CHAT.DLC', prefix: 'P2CHAT' },
+};
+function partnerStatus(text) {
+    let el = document.getElementById('partner-status');
+    if (el) el.textContent = text;
+}
+function partnerRefresh() {
+    let list = (typeof furbies !== 'undefined') ? furbies : [];
+    for (let which of ['p1', 'p2']) {
+        let sel = document.getElementById('partner-' + which);
+        if (!sel) continue;
+        let prev = sel.value;
+        sel.innerHTML = '';
+        list.forEach(f => {
+            let o = document.createElement('option');
+            o.value = f.id;
+            o.textContent = f.name + (f.ready ? '' : ' (reconnecting)');
+            sel.appendChild(o);
+        });
+        if (prev && list.some(f => f.id == prev)) sel.value = prev;
+    }
+    let p1 = document.getElementById('partner-p1'), p2 = document.getElementById('partner-p2');
+    if (p1 && p2 && list.length >= 2 && p1.value === p2.value) p2.value = list[1].id;
+    if (list.length < 2)
+        partnerStatus('Connect a second Furby with "Add another Furby" to use partner mode.');
+}
+function partnerFurby(which) {
+    let sel = document.getElementById('partner-' + which);
+    if (!sel || !sel.value) return null;
+    return furbies.find(f => f.id == sel.value) || null;
+}
+// Temporarily point the "current Furby" at f while fn runs, then restore.
+async function withFurby(f, fn) {
+    let prevT = sendTarget, prevC = furby_chars;
+    sendTarget = f.id; furby_chars = f.chars;
+    try { return await fn(); }
+    finally { sendTarget = prevT; furby_chars = furbies.length ? furbies[0].chars : prevC; }
+}
+async function partnerPrepare() {
+    let f1 = partnerFurby('p1'), f2 = partnerFurby('p2');
+    if (!f1 || !f2) { msg.error('Pick a Furby for each person first'); return; }
+    if (f1.id == f2.id) { msg.error('Person 1 and Person 2 must be different Furbies'); return; }
+    document.getElementById('partner-start-row').style.display = 'none';
+    try {
+        partnerStatus('Uploading Person 1 to ' + f1.name + '... (about 3 min)');
+        await withFurby(f1, async () => {
+            let buf = await fetchDLC('dlc/' + PARTNER.p1.dlc);
+            let slot = await uploadDLCOnly(buf, 'dlc/' + PARTNER.p1.dlc, f1.name + ': ');
+            await activateUploadedDLC(slot);
+            await setAntennaColor(0, 255, 0);
+        });
+        partnerStatus('Uploading Person 2 to ' + f2.name + '... (about 3 min)');
+        await withFurby(f2, async () => {
+            let buf = await fetchDLC('dlc/' + PARTNER.p2.dlc);
+            let slot = await uploadDLCOnly(buf, 'dlc/' + PARTNER.p2.dlc, f2.name + ': ');
+            await activateUploadedDLC(slot);
+            await setAntennaColor(0, 255, 0);
+        });
+        msg.ok('Both Furbies are set up!');
+        await partnerCheck();
+    } catch (e) {
+        partnerStatus('Setup failed: ' + (e && e.message ? e.message : e));
+        msg.error('Partner setup failed: ' + (e && e.message ? e.message : e));
+    }
+}
+async function furbyHasDLC(f, prefix) {
+    return await withFurby(f, async () => {
+        let slots = await getDLCInfo();
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i] == SLOT_EMPTY) continue;
+            let info = await getDLCSlotInfo(i);
+            if (info.name && info.name.replace(/^_+/, '').toUpperCase().startsWith(prefix)) return true;
+        }
+        return false;
+    });
+}
+async function partnerCheck() {
+    let f1 = partnerFurby('p1'), f2 = partnerFurby('p2');
+    if (!f1 || !f2) { msg.error('Pick a Furby for each person first'); return; }
+    if (f1.id == f2.id) { msg.error('Person 1 and Person 2 must be different Furbies'); return; }
+    partnerStatus('Checking both Furbies have their chat DLC...');
+    try {
+        let ok1 = await furbyHasDLC(f1, PARTNER.p1.prefix);
+        let ok2 = await furbyHasDLC(f2, PARTNER.p2.prefix);
+        let row = document.getElementById('partner-start-row');
+        if (ok1 && ok2) {
+            row.style.display = '';
+            partnerStatus('Ready! ' + f1.name + ' = Person 1, ' + f2.name + ' = Person 2. Press Start.');
+            msg.ok('Both ready — Start button is showing');
+        } else {
+            row.style.display = 'none';
+            let miss = [];
+            if (!ok1) miss.push(f1.name + ' is missing its Person 1 DLC');
+            if (!ok2) miss.push(f2.name + ' is missing its Person 2 DLC');
+            partnerStatus('Not ready: ' + miss.join('; ') + '. Press "Upload both chat DLCs".');
+        }
+    } catch (e) {
+        partnerStatus('Check failed: ' + (e && e.message ? e.message : e));
+    }
+}
+async function partnerStart() {
+    let f1 = partnerFurby('p1'), f2 = partnerFurby('p2');
+    if (!f1 || !f2 || f1.id == f2.id) { msg.error('Pick two different Furbies first'); return; }
+    // Action 75/0/0/0 plays each Furby's chat DLC. Fire both at the same instant,
+    // each on its own write queue, so they start together and take turns on their own
+    // (the audio has the silences built in, so neither talks over the other).
+    let cmd = [0x13, 0, 75, 0, 0, 0];
+    partnerStatus('Playing the conversation...');
+    try {
+        await Promise.all([writeTo(f1, cmd), writeTo(f2, cmd)]);
+        msg.ok('Go! They should be talking now.');
+    } catch (e) {
+        partnerStatus('Could not start: ' + (e && e.message ? e.message : e));
+        msg.error('Start failed: ' + (e && e.message ? e.message : e));
+    }
 }
 
 function log2clipboard() {

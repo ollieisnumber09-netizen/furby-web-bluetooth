@@ -1,5 +1,35 @@
 [
     {
+        "file": "P1CHAT.DLC",
+        "title": "Partner chat \u2014 Person 1",
+        "buttons": [
+            {
+                "title": "person 1 line",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
+        ]
+    },
+    {
+        "file": "P2CHAT.DLC",
+        "title": "Partner chat \u2014 Person 2",
+        "buttons": [
+            {
+                "title": "person 2 line",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
+        ]
+    },
+    {
         "file": "princlk.dlc",
         "title": "Princess lock (experimental: eyes go black, ignores the mask until restart)",
         "buttons": []
