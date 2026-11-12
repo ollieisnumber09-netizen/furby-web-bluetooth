@@ -450,6 +450,75 @@ static void box3d(Bmp* b, int used) {
   quad(&Wm, B, F, G2, C, nx, col, MAT_QBOX); quad(&Wm, E, A, D, H, mx, col, MAT_QBOX);
   rt_end(b);
 }
+// ---- more creatures. Each is a 52x44 picture with its ground point at (26, 38).
+static void crit_begin(float S, int crown) { rt_begin((int)(52 * S), (int)(44 * S) + (crown ? (int)(8 * S) : 0), 26 * S, 38 * S + (crown ? (int)(8 * S) : 0), S); VIEW = m3_rotx(CAM_TILT); }
+static void crit_eyes(const M3* W, float x, float y, float z, float r, int dead, uint32_t white) {
+  for (int i = 0; i < 2; i++) {
+    float sgn = i ? 1 : -1;
+    if (dead) ball(W, sgn * x, y, z + r * 0.4f, r * 0.9f, r * 0.3f, r * 0.6f, 0xFF1E1A22, MAT_PLAIN, 8);
+    else { ball(W, sgn * x, y, z, r, r, r * 0.85f, white, MAT_SHINY, 10); ball(W, sgn * x * 1.05f, y - r * 0.05f, z + r * 0.6f, r * 0.5f, r * 0.55f, r * 0.4f, 0xFF16121A, MAT_SHINY, 8); }
+  }
+}
+static void crit_spike(const M3* W, float x, float y, float z, float yaw, float pit, float r, float len, uint32_t col) {
+  M3 P = m3_mul(m3_trans(x, y, z), m3_mul(m3_roty(yaw), m3_mul(m3_rotx(pit), m3_scale(r, len, r))));
+  lathe(W, &P, PROF_SPIKE, 10, 7, 0, col, MAT_SHINY);
+}
+// a frog: sq squashes or stretches it (stretched in the air)
+static void frog3d(Bmp* b, float sq, float yaw, int dead, float S, int crown) {
+  crit_begin(S, crown);
+  M3 Wm = m3_mul(m3_roty(yaw), m3_scale(1.0f / sqrtf(sq), sq, 1.0f / sqrtf(sq)));
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; ball(&Wm, sgn * 8.5f, 1.6f, 3, 4.2f, 1.7f, 5.5f, 0xFF2E8A4A, MAT_PLAIN, 10); }
+  ball(&Wm, 0, 7.5f, 0, 10, 7.5f, 11, 0xFF4CC46A, MAT_SHINY, 16);
+  ball(&Wm, 0, 5.6f, 3.2f, 8, 5.4f, 8.6f, 0xFFE9F2B8, MAT_PLAIN, 14);
+  crit_eyes(&Wm, 4.6f, 14.2f, 5.5f, 3.4f, dead, 0xFFFFFFFF);
+  { float a[3] = { -5, 7.2f, 11.3f }, c[3] = { 5, 7.2f, 11.3f }; stick(&Wm, a, c, 0.7f, 0xFF1E3A22, 5); }
+  if (crown) crown3d(&Wm, 0, 17.5f, 0, 4.2f);
+  rt_end(b);
+}
+// a spiny: an orange ball covered in pale spikes, on two little feet
+static void spiny3d(Bmp* b, float ph, float sq, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_mul(m3_roty(yaw), m3_scale(1.0f / sqrtf(sq), sq, 1.0f / sqrtf(sq)));
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; ball(&Wm, sgn * 5, 1.5f + maxf(0, sinf(ph + i * 3.14159f)) * 1.6f, 2 + cosf(ph + i * 3.14159f) * 2.5f, 3, 1.6f, 4, 0xFF2E3A7A, MAT_PLAIN, 8); }
+  ball(&Wm, 0, 9, 0, 10, 8.2f, 10.5f, 0xFF5A78D8, MAT_SHINY, 16);
+  crit_spike(&Wm, 0, 16.2f, -1, 0, 0, 2.6f, 7, 0xFFFFD84A);
+  for (int k = 0; k < 5; k++) { float a = 0.9f + k * 1.1f, pt = 1.0f; crit_spike(&Wm, sinf(a) * sinf(pt) * 9, 9 + cosf(pt) * 7.4f, cosf(a) * sinf(pt) * 9.6f - 1, a, pt, 2.4f, 6.4f, 0xFFFFD84A); }
+  crit_eyes(&Wm, 3.3f, 8.2f, 9.6f, 2.5f, dead, 0xFFFFFFFF);
+  if (!dead) for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; float b0[3] = { sgn * 1.0f, 10.4f, 10.8f }, b1[3] = { sgn * 5.4f, 12.2f, 9.4f }; stick(&Wm, b0, b1, 0.75f, 0xFF3A1E14, 5); }
+  rt_end(b);
+}
+// a snapping plant: open is how wide its mouth is (0..1)
+static void plant3d(Bmp* b, float open, float sq, float yaw, int dead, float S) {
+  crit_begin(S, 0);
+  M3 Wm = m3_mul(m3_roty(yaw), m3_scale(1, sq, 1));
+  { float a[3] = { 0, 0, 0 }, c[3] = { 0, 13, 0 }; stick(&Wm, a, c, 1.7f, 0xFF3FA34D, 7); }
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; ball(&Wm, sgn * 6.5f, 2.6f, 0, 6, 1.3f, 3.4f, 0xFF58C85A, MAT_PLAIN, 10); }
+  for (int k = 0; k < 6; k++) { float a = k * 1.0472f; ball(&Wm, cosf(a) * 9.5f, 19.5f + sinf(a) * 9, -2.5f, 4.2f, 4.2f, 1.6f, 0xFFFF9AC8, MAT_PLAIN, 8); }   // petals
+  ball(&Wm, 0, 19.5f, 1, 8.6f, 8, 8.6f, 0xFF2FB8A8, MAT_SHINY, 16);
+  ball(&Wm, 0, 17.6f, 8.4f, 5.6f, 1.3f + open * 3.4f, 2.6f, 0xFF3A141A, MAT_PLAIN, 10);
+  ball(&Wm, 0, 19.2f + open * 3.2f, 8.6f, 6.2f, 1.2f, 2.6f, 0xFFFFE9E0, MAT_PLAIN, 10);
+  ball(&Wm, 0, 16.0f - open * 3.2f, 8.6f, 6.2f, 1.2f, 2.6f, 0xFFFFE9E0, MAT_PLAIN, 10);
+  crit_eyes(&Wm, 4.0f, 23.0f, 7.4f, 1.9f, dead, 0xFFFFFFFF);
+  rt_end(b);
+}
+// a bat: flap swings the wings (-1 folded down while it hangs asleep .. 1 up)
+static void bat3d(Bmp* b, float flap, float yaw, int dead, float S, int crown) {
+  crit_begin(S, crown);
+  M3 Wm = m3_roty(yaw);
+  for (int i = 0; i < 2; i++) {
+    float sgn = i ? 1 : -1;
+    M3 Ww = m3_mul(Wm, m3_mul(m3_trans(sgn * 5, 11, -1), m3_rotz(sgn * flap * 0.9f)));
+    ball(&Ww, sgn * 8, 0, 0, 9, 1.1f, 6, 0xFF4A3490, MAT_PLAIN, 12);
+    ball(&Ww, sgn * 15, -0.6f, 1, 4.5f, 0.9f, 4.4f, 0xFF4A3490, MAT_PLAIN, 10);
+    crit_spike(&Wm, sgn * 4, 15.5f, 0, 0, sgn * -0.25f, 2.2f, 5.5f, 0xFF7A58C8);
+  }
+  ball(&Wm, 0, 10, 0, 7.4f, 7.4f, 7.4f, 0xFF7A58C8, MAT_SHINY, 16);
+  crit_eyes(&Wm, 2.9f, 11.4f, 6.2f, 2.3f, dead, 0xFFFFE27A);
+  for (int i = 0; i < 2; i++) { float sgn = i ? 1 : -1; crit_spike(&Wm, sgn * 1.6f, 7.6f, 6.6f, 0, 3.14159f, 0.9f, 2.2f, 0xFFFFFFFF); }
+  if (crown) crown3d(&Wm, 0, 17.6f, 0, 3.6f);
+  rt_end(b);
+}
+
 static void m3d_build(void) {
   m3d_init();
   for (int i = 0; i < COIN_FRAMES; i++) coin3d(&HD_COIN[i], i * 3.14159f / COIN_FRAMES, 1);

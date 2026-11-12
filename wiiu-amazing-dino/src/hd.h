@@ -149,10 +149,11 @@ static void hd_init(void) {
 // edges of things (grass caps, rounded corners, shadows) are worked out pixel by pixel.
 static Bmp LVB;
 static unsigned char* LV_ROW;   // for each screen row of the level picture: 0 empty, 1 has something
-static int snowy(void) { return L->theme >= 5; }
+static int snowy(void) { return L->theme >= 5 && L->theme <= 7; }
+static int desert(void) { return L->theme == 8; }
 #define TXW 512
 #define TXH 256
-static uint32_t *GTEX[2][2], *STEX[5], *ITEX;
+static uint32_t *GTEX[3][2], *STEX[6], *ITEX;
 static float CAP_TAB[32];
 static float pnoise(float x, float y, int wx, int wy) {   // smooth noise that repeats every wx, wy cells
   int xi = (int)floorf(x), yi = (int)floorf(y);
@@ -165,7 +166,7 @@ static float pnoise(float x, float y, int wx, int wy) {   // smooth noise that r
 static uint32_t* ground_tex(int sn, int dark) {
   if (GTEX[sn][dark]) return GTEX[sn][dark];
   uint32_t* t = GTEX[sn][dark] = (uint32_t*)malloc(TXW * TXH * 4);
-  uint32_t base = dark ? (sn ? 0xFF5E6F8C : 0xFF8E5A30) : (sn ? 0xFF8FA2BE : 0xFFD79A58);
+  uint32_t base = dark ? (sn == 2 ? 0xFFB98C48 : sn ? 0xFF5E6F8C : 0xFF8E5A30) : (sn == 2 ? 0xFFEBCB82 : sn ? 0xFF8FA2BE : 0xFFD79A58);
   for (int Y = 0; Y < TXH; Y++) for (int X = 0; X < TXW; X++) {
     uint32_t c = base;
     // soft layers of earth and a few pebbles
@@ -183,11 +184,11 @@ static uint32_t* ground_tex(int sn, int dark) {
   }
   return t;
 }
-static int stone_pal(void) { int th = L->theme; return th == 1 ? 1 : th == 2 ? 2 : (th == 5 || th == 7) ? 3 : th == 6 ? 4 : 0; }
+static int stone_pal(void) { int th = L->theme; return th == 1 ? 1 : th == 2 ? 2 : (th == 5 || th == 7) ? 3 : th == 6 ? 4 : th == 8 ? 5 : 0; }
 static uint32_t* stone_tex(int pal) {
   if (STEX[pal]) return STEX[pal];
-  static const uint32_t COL[5][3] = { { 0xFFA9AFBE, 0xFF646A7A, 0xFFD6DBE6 }, { 0xFF9A8BC0, 0xFF54487A, 0xFFC9BCE8 }, { 0xFF857869, 0xFF483E36, 0xFFAA9C8C },
-                                      { 0xFF9CC0DE, 0xFF567FA6, 0xFFD2E8F7 }, { 0xFF5F8FB8, 0xFF2A527A, 0xFF8FBBDD } };
+  static const uint32_t COL[6][3] = { { 0xFFA9AFBE, 0xFF646A7A, 0xFFD6DBE6 }, { 0xFF9A8BC0, 0xFF54487A, 0xFFC9BCE8 }, { 0xFF857869, 0xFF483E36, 0xFFAA9C8C },
+                                      { 0xFF9CC0DE, 0xFF567FA6, 0xFFD2E8F7 }, { 0xFF5F8FB8, 0xFF2A527A, 0xFF8FBBDD }, { 0xFFE2C28A, 0xFFA67C44, 0xFFF8E6BA } };
   uint32_t* t = STEX[pal] = (uint32_t*)malloc(TXW * TXH * 4);
   uint32_t base = COL[pal][0], dark = COL[pal][1], lite = COL[pal][2];
   for (int Y = 0; Y < TXH; Y++) for (int X = 0; X < TXW; X++) {
@@ -228,10 +229,11 @@ static uint32_t ground_px(int X, int Y, int tx, int ty, int depth_t, int top, in
     float edge = 12 + 4 * CAP_TAB[(X + 4) & 31];
     if (v < edge) {
       uint32_t g0 = sn ? 0xFFFFFFFF : 0xFFC8F27A, g1 = sn ? 0xFFEAF4FF : 0xFF6CC943, g2 = sn ? 0xFFB7CEE8 : 0xFF3B9A36;
+      if (desert()) { g0 = 0xFFFFF4C8; g1 = 0xFFF6DC96; g2 = 0xFFDDB866; }
       float k = v / edge;
       c = k < 0.45f ? mixc(g0, g1, k / 0.45f) : mixc(g1, g2, (k - 0.45f) / 0.55f);
       if (v < 2) c = lerpc(c, 0xFFFFFFFF, 115);
-      if (edge - v < 1.6f) c = sn ? 0xFF8FAACB : 0xFF2A7A2E;
+      if (edge - v < 1.6f) c = desert() ? 0xFFB98C48 : sn ? 0xFF8FAACB : 0xFF2A7A2E;
       else if (hash2(X, Y) & 1) c = lerpc(c, 0xFF000000, 8);
     } else if (v < edge + 5) c = lerpc(c, 0xFF000000, (int)(0.26f * (1 - (v - edge) / 5) * 256));
   }
@@ -241,7 +243,7 @@ static uint32_t ground_px(int X, int Y, int tx, int ty, int depth_t, int top, in
 static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   char below = tile(tx, ty + 1);
   if (!(below == '#' || (below == 'X' && L->theme != 1 && L->theme != 2 && L->theme != 6))) return 0;
-  if (tile(tx, ty) != ' ') return 0;
+  if (tile(tx, ty) != ' ' || desert()) return 0;
   for (int i = 0; i < nsigns; i++) if (sign_x[i] == tx && sign_y[i] == ty) return 0;
   if (goal_x == tx && goal_y == ty) return 0;
   uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
@@ -316,7 +318,7 @@ static void hd_render_level(void) {
   LV_ROW = (unsigned char*)calloc(LH * HT, 1);
   for (int i = 0; i < 32; i++) CAP_TAB[i] = fabsf(sinf(i * 3.14159f / 16));
   int sn = snowy(), th = L->theme;
-  const uint32_t *tl = ground_tex(sn, 0), *td = ground_tex(sn, 1), *ts = stone_tex(stone_pal()), *ti = ice_tex();
+  const uint32_t *tl = ground_tex(desert() ? 2 : sn, 0), *td = ground_tex(desert() ? 2 : sn, 1), *ts = stone_tex(stone_pal()), *ti = ice_tex();
   int stone_cap = th == 0 || th == 3 || th == 4 || th == 5 || th == 7;
   int decor_ok_x = !(th == 1 || th == 2 || th == 6);
   for (int ty = 0; ty < LH; ty++) for (int tx = 0; tx < LW; tx++) {
@@ -519,6 +521,12 @@ static void hd_render_bg(void) {
             if (fy < snowline) c = mixc(0xFFFFFFFF, 0xFFCFE0F2, sh);
             over(d, c, cov(dd));
           }
+        } else if (th == 8) {
+          // a cactus with two arms
+          float h2 = hgt * 0.6f;
+          float dd = minf(sd_seg(fx, fy, cx, base - h2, cx, base) - 10, minf(minf(sd_seg(fx, fy, cx - 26, base - h2 * 0.75f, cx - 26, base - h2 * 0.4f), sd_seg(fx, fy, cx - 26, base - h2 * 0.4f, cx, base - h2 * 0.4f)) - 6.5f,
+                                                                           minf(sd_seg(fx, fy, cx + 24, base - h2 * 0.95f, cx + 24, base - h2 * 0.6f), sd_seg(fx, fy, cx + 24, base - h2 * 0.6f, cx, base - h2 * 0.6f)) - 6.5f));
+          if (dd < 1) over(d, mixc(tl, td, clampf((fx - cx + 30) / 60 + 0.1f * sinf(fx * 1.6f), 0, 1)), cov(dd));
         } else {
           // a tree with a round, shaded top
           over(d, td, cov(fabsf(fx - cx) - 5) * (fy > base - hgt && fy < base ? 1 : 0));
@@ -567,7 +575,7 @@ static void hd_background(void) {
       if (n1 < FB_W) memcpy(FB + y * FB_W + n1, src, (size_t)(FB_W - n1) * 4);
     }
   }
-  if (th == 0 || th == 3 || th == 4 || th == 5) hblit(&HD_SUN, 486, 28, 0);
+  if (th == 0 || th == 3 || th == 4 || th == 5 || th == 8) hblit(&HD_SUN, 486, 28, 0);
   if (th == 1 || th == 7) hblit(&HD_MOON, 470, 42, 0);
   {
     int scroll = (((int)(camx * 1.0f) % BGW) + BGW) % BGW, yoff = (int)((1 - vy) * 70) - 50;

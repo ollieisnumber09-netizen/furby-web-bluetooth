@@ -1,11 +1,14 @@
 # Amazing Dino (Wii U)
 
 An original platformer starring Dino (white egg body, smooth green spikes). Walk the world maps
-from Dino's house through 18 levels in 5 worlds: Jungle Island, Frosty Forest, Ice Mountain,
-Wild Jungle and Snowflake Peaks. Clearing a level opens the next one, and five bosses guard the way.
+from Dino's house through 24 levels in 7 worlds: Jungle Island, Frosty Forest, Ice Mountain,
+Wild Jungle, Snowflake Peaks, Sunny Dunes and Cloud Castle. Clearing a level opens the next one,
+and seven bosses guard the way. The later worlds add moving platforms, frogs, spiky balls,
+seed-spitting flowers, bats, pretend walls hiding secret rooms and cracked blocks.
 Stomp or headbutt beetles and bees, grab coins (50 coins = 1 extra life).
 ? boxes (jump into them from below, or headbutt them) hold 5 coins or a power-up:
-wings (double jump) or a sword (X/Y swings it). Getting hit loses the power-up instead of a life.
+wings (double jump), a sword (X/Y swings it), a helmet (headbutts smash cracked blocks and
+spiky balls) or a star (X/Y throws bouncing stars). Getting hit loses the power-up instead of a life.
 Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).
 
 ## Put it on the Wii U (Aroma)

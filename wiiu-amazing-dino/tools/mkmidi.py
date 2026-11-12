@@ -72,7 +72,7 @@ def arrange(sg, fn, loops=2, seed=1):
         if sec.get('trom') and st == 0: m.note(TROM, t, tri[1] - 12, spb * 240 - 40, hum(72))
         if sg.get('arp') and (sg['arp'] == 1 or st % 2 == 0):
             m.note(PERC2, t, tri[[0, 1, 2, 3, 2, 1, 2, 3][st % 8]] + 12, 200, hum(70))
-        bp = sg['bah']; bh = bp[step % len(bp)]
+        bp = sg.get('bah') or '.'; bh = bp[step % len(bp)]
         if bh == 'b':
             for q in tri[:3]: bahs.append((t, q + 12 if q < 58 else q))
         if pat('kick', step) == 'x': m.note(DR, t, 36, 100, hum(112))
@@ -92,7 +92,8 @@ def arrange(sg, fn, loops=2, seed=1):
     end = T(total)   # a last chord to finish
     root = base - 12
     for ch_, n in ((BASS, root - 12), (LEAD, root + 24), (KEYS, root + 12), (KEYS, root + 16), (KEYS, root + 19), ): m.note(ch_, end, n, 700, 104)
-    for q in (12, 16, 19): bahs.append((end, root + q))
+    if sg.get('bah'):
+        for q in (12, 16, 19): bahs.append((end, root + q))
     m.note(DR, end, 36, 100, 110); m.note(DR, end, 49, 600, 96)
     m.save(fn)
     return [(tk / PPQ * 60.0 / sg['bpm'], n) for tk, n in bahs]
@@ -120,8 +121,6 @@ SONGS = {
         "9.CE.C9." "7.BE.B7." "5.9C.95." "7.B.E.G." "L.J.G.E." "H.E.C.9." "7.B.E.J." "O--.C...",
     chords="0M0M5M7M0M9m7M0M9m4m5M7M9m5M7M0M",
     bass="0.7.0.7.", stab=".x.x.x.x", kick="x...x...", snare="..x...x.", hat="x.x.x.x.", perc="..s.h.sl" "..s.h.s.",
-    # the singers only answer at the end of each line of the tune
-    bah="........" "........" "........" "....b.b." "........" "........" "........" "....b.b.",
     sections=[dict(lead=114, harm=12),                                  # steel drums, marimba underneath
               dict(lead=71, lead2=13, harm=73, pizz=1),                 # clarinet with xylophone, flute, plucked strings
               dict(lead=21, lead2=73, harm=12, piano=1, trom=1),        # accordion with flute, piano, trombone
