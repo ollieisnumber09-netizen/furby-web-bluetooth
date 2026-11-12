@@ -2220,7 +2220,7 @@ typedef struct {
   const char *mel, *chords, *bass, *stab, *kick, *snare, *hat, *bah;
   int arp, bell, harm, brass;
 } Song;
-enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_WILD, SONG_CAVE, SONG_FALLS, SONG_SNOW, SONG_ICE, SONG_NIGHT, SONG_BOSS, NSONGS };
+enum { SONG_TITLE, SONG_MAP, SONG_GRASS, SONG_WILD, SONG_CAVE, SONG_FALLS, SONG_SNOW, SONG_ICE, SONG_NIGHT, SONG_DESERT, SONG_CASTLE, SONG_BOSS, NSONGS };
 static const Song SONGS[NSONGS] = {
   { 62, 168, 4, 8, 0.60f,   // Hello Dino (title): a little parade
     "7.77C.G." "E.C.9.7-" "9.99C.9." "7--.4.2." "4.57C.G." "H.G.E.C-" "E.EGE.B." "C--....."
@@ -2266,6 +2266,14 @@ static const Song SONGS[NSONGS] = {
     "7---C-G-" "J---G-E-" "H---L-O-" "N-L-J---" "L---O-L-" "H---C-9-" "B-E-J-N-" "O-----..",
     "0M4m5M7M9m5M7M0M",
     "0...7.0.", "..x...x.", "x...x...", "....c...", "x.x.x.x.", "....b..." "....b.b.", 0, 1, 1, 0 },
+  { 62, 126, 1, 8, 0.5f,    // Dune Dance (the desert)
+    "0.14.5.4" "1-0-...." "4.57.8.7" "5-8-...." "7.8A.C.A" "8.7.5.4." "5.8.5.1." "0--.....",
+    "0M1M0M5m0M5m1M0M",
+    "0..0..7.", "..x...x.", "x..x..x.", "", "x.xxx.xx", "", 0, 0, 0, 0 },
+  { 57, 138, 1, 8, 0.5f,    // Castle in the Clouds
+    "C.E.F.J." "N.J.E.B." "C.F.J.O." "M.H.E.A." "K.O.K.F." "H.K.H.C." "E.J.N.J." "O--.C...",
+    "0m7M0mAM8M5m7M0m",
+    "0.7.3.7.", "", "", "", "..x...x.", "", 2, 0, 0, 0 },
   { 62, 184, 4, 8, 0.5f,    // Big Trouble (bosses)
     "0.03.5.7" "8.7.5.3." "8.8C.F.C" "E.B.7-.." "C.CF.H.J" "K.J.H.F." "E.EJ.N.J" "O--.C.C.",
     "0m0m8M7M0m5m7M0m",
@@ -2296,8 +2304,10 @@ static int pick_song(void) {
   if (state == ST_MAP) return SONG_MAP;
   if (state == ST_PLAY || state == ST_PAUSE) {
     if (g_boss_music) return SONG_BOSS;
+    if (lvl >= 21) return SONG_CASTLE;   // the whole Cloud Castle world
     switch (L->theme) {
       case 1: case 2: return SONG_CAVE;
+      case 8: return SONG_DESERT;
       case 3: return SONG_FALLS;
       case 4: return lvl >= 12 ? SONG_WILD : SONG_FALLS;
       case 5: return SONG_SNOW;
@@ -2347,9 +2357,40 @@ static void music_step(const Song* sg, int half) {
   if (c == 'b') for (int i = 0; i < 3; i++) m_play(I_BAH, midi_hz(tri[i]) * (1 + (i - 1) * 0.004f));   // the singers: "bah!"
   if (c == 'l') m_play(I_BAH, midi_hz(root + 24));
 }
+// ---- recorded music. When the game is built with MUSIC_BIN_PATH, the songs are real-instrument
+// recordings (made by tools/mkmidi.py from the same tunes), packed four bits a sample and played
+// straight from memory; each one loops without a gap. Without it, the little synth band below plays.
+#ifdef MUSIC_BIN_PATH
+__asm__(".pushsection .rodata\n.balign 4\n.global music_bin\nmusic_bin:\n.incbin \"" MUSIC_BIN_PATH "\"\n.popsection\n");
+extern const unsigned char music_bin[];
+#include "music_tab.h"
+#define MUS_RATE 32000
+static struct { int song, pos, pred, idx, s0, s1; float frac, gain; } MS = { -1 };
+static int ms_next(void) {
+  static const short STEP[89] = { 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767 };
+  static const signed char IDX[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
+  int code = (music_bin[MUS_TAB[MS.song].off + (MS.pos >> 1)] >> ((MS.pos & 1) ? 4 : 0)) & 15, step = STEP[MS.idx];
+  int dq = step >> 3; if (code & 4) dq += step; if (code & 2) dq += step >> 1; if (code & 1) dq += step >> 2;
+  MS.pred += code & 8 ? -dq : dq; if (MS.pred > 32767) MS.pred = 32767; if (MS.pred < -32768) MS.pred = -32768;
+  MS.idx += IDX[code & 7]; if (MS.idx < 0) MS.idx = 0; if (MS.idx > 88) MS.idx = 88;
+  if (++MS.pos >= MUS_TAB[MS.song].n) { MS.pos = 0; MS.pred = MUS_TAB[MS.song].first; MS.idx = 0; }   // round again
+  return MS.pred;
+}
+static float stream_sample(int want, float dt) {
+  if (want != MS.song) { MS.song = want; MS.pos = 0; MS.idx = 0; MS.frac = 0; MS.gain = 0; if (want >= 0) MS.pred = MS.s0 = MS.s1 = MUS_TAB[want].first; }
+  if (want < 0) return 0;
+  MS.frac += MUS_RATE * dt;
+  while (MS.frac >= 1) { MS.frac -= 1; MS.s0 = MS.s1; MS.s1 = ms_next(); }
+  if (MS.gain < 1) MS.gain += dt * 8;
+  return (MS.s0 + (MS.s1 - MS.s0) * MS.frac) * (1.0f / 32768) * 0.62f * MS.gain * (state == ST_PAUSE ? 0.35f : 1);
+}
+#endif
 static float music_sample(float dt) {
   static int half_done;
   int want = pick_song();
+#ifdef MUSIC_BIN_PATH
+  return stream_sample(want, dt);
+#endif
   if (want != song_now) {
     song_now = want; mus_step = -1; mus_t = mus_len = 0; m_lead.on = 0; m_harm.on = 0; half_done = 1;
     for (int i = 0; i < NPOOL; i++) m_pool[i].ins = -1;

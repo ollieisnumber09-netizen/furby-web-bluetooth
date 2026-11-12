@@ -19,7 +19,7 @@ SOURCES		:=	src
 INCLUDES	:=	src
 
 CFLAGS	:=	-g -O3 -ffast-math -funroll-loops -ffunction-sections -Wall -Wno-missing-field-initializers $(MACHDEP)
-CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSAVE_PATH=\"fs:/vol/external01/wiiu/apps/AmazingDino/save.txt\" $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --cflags sdl2)
+CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DSAVE_PATH=\"fs:/vol/external01/wiiu/apps/AmazingDino/save.txt\" -DMUSIC_BIN_PATH=\"$(TOPDIR)/music/music.bin\" $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --cflags sdl2)
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
 LIBS	:= $(shell $(PORTLIBS_PATH)/wiiu/bin/powerpc-eabi-pkg-config --libs sdl2) -lwut -lm
