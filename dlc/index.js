@@ -1,7 +1,7 @@
 [
     {
         "file": "BADAPL.DLC",
-        "title": "Bad Apple (10s, smooth silhouette eyes + song)",
+        "title": "Bad Apple (smooth silhouette eyes + song)",
         "buttons": [
             {
                 "title": "Bad Apple",
