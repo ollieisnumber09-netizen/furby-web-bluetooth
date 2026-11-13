@@ -25,7 +25,7 @@ int main(void) {
     printf("jump %s: %.0f px high\n", hold ? "held" : "tapped", y0 - top);
   }
   // twirl: jump, then press R at the top
-  start_level(0); intro_t = 0; ticks(I0, 30); { float y0 = py; Input j = I0; j.jump = 1; ticks(j, 22); float y1 = py; Input r = I0; r.run = 1; ticks(r, 1); ticks(I0, 31); printf("twirl: fell %.1f px in the half second after pressing R (height %.0f)\n", py - y1, y0 - y1);
+  start_level(0); intro_t = 0; ticks(I0, 30); { float y0 = py; Input j = I0; j.jump = 1; ticks(j, 22); float y1 = py; Input r = I0; r.run = 1; ticks(r, 1); ticks(I0, 17); printf("twirl: fell %.1f px in the 0.3 seconds after pressing R (height %.0f)\n", py - y1, y0 - y1);
     ticks(r, 1); printf("second twirl in the same jump: %d (should be 0)\n", twirl_t > 0); }
   return 0;
 }

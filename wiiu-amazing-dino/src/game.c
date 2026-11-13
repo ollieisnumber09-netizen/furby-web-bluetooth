@@ -423,7 +423,7 @@ static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 #define RUN_V 3.0f
 #define RUN_RAMP 90
 #define G_HOLD 0.22f
-#define TWIRL_T 32
+#define TWIRL_T 18   // 0.3 seconds
 static int slot, run_ramp, prev_run, prev_pop, twirl_t, twirl_used;   // slot: the power-up kept for later
 static int face, on_ground, coyote, jbuf, wall_lock, wall_dir, dead_t, run_t, land_t;
 static int start_x, start_y, check_x, check_y, prev_jump, prev_start, prev_down, prev_up, prev_left, prev_right;
