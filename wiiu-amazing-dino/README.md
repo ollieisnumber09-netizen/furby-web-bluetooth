@@ -14,7 +14,7 @@ Stomp or headbutt them, grab coins (50 coins = 1 extra life).
 wings (double jump), a sword (X/Y swings it), a helmet (headbutts smash cracked blocks and
 spiky balls) or a star (X/Y throws bouncing stars). The sword, helmet and star all show on Dino.
 Picking up a new power-up while wearing one puts the old one in the slot on the GamePad; tap the slot
-(or press -) to drop it back down. Hold L, R, ZL or ZR to sprint (top speed after 1.5 seconds), press
+(or press -) to drop it back down. Hold ZL or ZR to sprint (top speed after 1.5 seconds), press
 L or R in the air to twirl (one spin that hangs for 0.3 seconds), and hold jump to jump higher.
 Getting hit loses the power-up instead of a life. Each kind of area has its own song (14 in all).
 Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).

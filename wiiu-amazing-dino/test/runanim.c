@@ -11,8 +11,8 @@ int main(void) {
   for (int i = 0; i < 40; i++) game_update(&in);
   for (int c = 0; c < 8; c++) { game_update(&in); game_draw(fb); grab(c, 1); }   // top speed, one tick apart
   in.run = 0; in.right = 0; for (int i = 0; i < 40; i++) game_update(&in);
-  in.jump = 1; for (int i = 0; i < 20; i++) game_update(&in); in.jump = 0; in.run = 1;
-  for (int c = 0; c < 8; c++) { game_update(&in); game_update(&in); in.run = 0; game_draw(fb); grab(c, 2); }   // twirl
+  in.jump = 1; for (int i = 0; i < 20; i++) game_update(&in); in.jump = 0; in.twirl = 1;
+  for (int c = 0; c < 8; c++) { game_update(&in); game_update(&in); in.twirl = 0; game_draw(fb); grab(c, 2); }   // twirl
   FILE* f = fopen("out/run.ppm", "wb"); fprintf(f, "P6 960 360 255\n"); for (int i = 0; i < 960 * 360; i++) { unsigned char c[3] = { strip[i] >> 16, strip[i] >> 8, strip[i] }; fwrite(c, 1, 3, f); } fclose(f);
   return 0;
 }

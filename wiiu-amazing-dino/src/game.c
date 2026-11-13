@@ -427,7 +427,7 @@ static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 #define RUN_RAMP 90
 #define G_HOLD 0.22f
 #define TWIRL_T 18   // 0.3 seconds
-static int slot, run_ramp, prev_run, prev_pop, twirl_t, twirl_used, snap_turn;   // slot: the power-up kept for later
+static int slot, run_ramp, prev_twirl, prev_pop, twirl_t, twirl_used, snap_turn;   // slot: the power-up kept for later
 static int face, on_ground, coyote, jbuf, wall_lock, wall_dir, dead_t, run_t, land_t;
 static int start_x, start_y, check_x, check_y, prev_jump, prev_start, prev_down, prev_up, prev_left, prev_right;
 static int ncheck;
@@ -1249,8 +1249,8 @@ static void update_player(const Input* in) {
   if (jp) jbuf = 7; else if (jbuf > 0) jbuf--;
   if (on_ground) { coyote = 6; air_jumps = 1; twirl_used = 0; twirl_t = 0; } else if (coyote > 0) coyote--;
   // the twirl: a fresh press of L or R in the air spins Dino round and holds him up for half a second, once per jump
-  if (in->run && !prev_run && !on_ground && !in_water && !twirl_used && !atk_t) { twirl_t = TWIRL_T; twirl_used = 1; if (pvy > -1) pvy = -1.0f; plat_sfx(SFX_JUMP2); spawn_parts(px + PW / 2, py + PH / 2, 8, 0xFFFFFFFF, 1.4f, 0.0f); }
-  prev_run = in->run;
+  if (in->twirl && !prev_twirl && !on_ground && !in_water && !twirl_used && !atk_t) { twirl_t = TWIRL_T; twirl_used = 1; if (pvy > -1) pvy = -1.0f; plat_sfx(SFX_JUMP2); spawn_parts(px + PW / 2, py + PH / 2, 8, 0xFFFFFFFF, 1.4f, 0.0f); }
+  prev_twirl = in->twirl;
   // the slot: drop the kept power-up from the top of the screen
   if (in->pop && !prev_pop && slot && nents < MAXENT) {
     Ent* e = &ents[nents++]; memset(e, 0, sizeof *e);
@@ -2365,7 +2365,7 @@ void game_draw(uint32_t* fb) {
 #else
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
     if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 161, 1, 0xFFFFF4C2);
-    if (!g_no_hud) text_c("SPRINT: HOLD L OR R   TWIRL: L OR R IN THE AIR   USE SLOT: -", 171, 1, 0xFFFFF4C2);
+    if (!g_no_hud) text_c("SPRINT: HOLD ZL OR ZR   TWIRL: L OR R IN THE AIR   USE SLOT: -", 171, 1, 0xFFFFF4C2);
 #endif
     return;
   }

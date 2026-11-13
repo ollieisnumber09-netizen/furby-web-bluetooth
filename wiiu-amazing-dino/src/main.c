@@ -38,7 +38,8 @@ static void wiiu_read(Input* in) {
     if (h & (VPAD_BUTTON_A | VPAD_BUTTON_B)) in->jump = 1;
     if (h & VPAD_BUTTON_PLUS) in->start = 1;
     if (h & (VPAD_BUTTON_X | VPAD_BUTTON_Y)) in->attack = 1;
-    if (h & (VPAD_BUTTON_L | VPAD_BUTTON_R | VPAD_BUTTON_ZL | VPAD_BUTTON_ZR)) in->run = 1;
+    if (h & (VPAD_BUTTON_ZL | VPAD_BUTTON_ZR)) in->run = 1;
+    if (h & (VPAD_BUTTON_L | VPAD_BUTTON_R)) in->twirl = 1;
     if (h & VPAD_BUTTON_MINUS) in->pop = 1;
     if (v.tpNormal.touched) {   // a tap on the power-up slot
       VPADTouchData t;
@@ -65,7 +66,8 @@ static void wiiu_read(Input* in) {
       if (b & (WPAD_PRO_BUTTON_A | WPAD_PRO_BUTTON_B)) in->jump = 1;
       if (b & WPAD_PRO_BUTTON_PLUS) in->start = 1;
       if (b & (WPAD_PRO_BUTTON_X | WPAD_PRO_BUTTON_Y)) in->attack = 1;
-      if (b & (WPAD_PRO_TRIGGER_L | WPAD_PRO_TRIGGER_R | WPAD_PRO_TRIGGER_ZL | WPAD_PRO_TRIGGER_ZR)) in->run = 1;
+      if (b & (WPAD_PRO_TRIGGER_ZL | WPAD_PRO_TRIGGER_ZR)) in->run = 1;
+      if (b & (WPAD_PRO_TRIGGER_L | WPAD_PRO_TRIGGER_R)) in->twirl = 1;
       if (b & WPAD_PRO_BUTTON_MINUS) in->pop = 1;
       sx = k.pro.leftStick.x; sy = k.pro.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_CLASSIC || k.extensionType == WPAD_EXT_MPLUS_CLASSIC) {
@@ -77,7 +79,8 @@ static void wiiu_read(Input* in) {
       if (b & (WPAD_CLASSIC_BUTTON_A | WPAD_CLASSIC_BUTTON_B)) in->jump = 1;
       if (b & WPAD_CLASSIC_BUTTON_PLUS) in->start = 1;
       if (b & (WPAD_CLASSIC_BUTTON_X | WPAD_CLASSIC_BUTTON_Y)) in->attack = 1;
-      if (b & (WPAD_CLASSIC_BUTTON_L | WPAD_CLASSIC_BUTTON_R | WPAD_CLASSIC_BUTTON_ZL | WPAD_CLASSIC_BUTTON_ZR)) in->run = 1;
+      if (b & (WPAD_CLASSIC_BUTTON_ZL | WPAD_CLASSIC_BUTTON_ZR)) in->run = 1;
+      if (b & (WPAD_CLASSIC_BUTTON_L | WPAD_CLASSIC_BUTTON_R)) in->twirl = 1;
       if (b & WPAD_CLASSIC_BUTTON_MINUS) in->pop = 1;
       sx = k.classic.leftStick.x; sy = k.classic.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_NUNCHUK || k.extensionType == WPAD_EXT_MPLUS_NUNCHUK) {
@@ -85,7 +88,8 @@ static void wiiu_read(Input* in) {
       if (k.hold & WPAD_BUTTON_B) in->attack = 1;
       if (k.hold & WPAD_BUTTON_PLUS) in->start = 1;
       if (k.hold & WPAD_BUTTON_MINUS) in->pop = 1;
-      if (k.nunchuk.hold & (WPAD_NUNCHUK_BUTTON_Z | WPAD_NUNCHUK_BUTTON_C)) in->run = 1;
+      if (k.nunchuk.hold & WPAD_NUNCHUK_BUTTON_Z) in->run = 1;
+      if (k.nunchuk.hold & WPAD_NUNCHUK_BUTTON_C) in->twirl = 1;
       sx = k.nunchuk.stick.x; sy = k.nunchuk.stick.y;
     } else {
       // Wii Remote on its own, held sideways (D-pad on the left)
@@ -99,6 +103,7 @@ static void wiiu_read(Input* in) {
       if (b & WPAD_BUTTON_PLUS) in->start = 1;
       if (b & WPAD_BUTTON_MINUS) in->pop = 1;
       if (b & WPAD_BUTTON_B) in->run = 1;   // the trigger on the back
+      if (b & WPAD_BUTTON_A) in->twirl = 1;
     }
     if (sx < -0.35f) in->left = 1;
     if (sx > 0.35f) in->right = 1;
@@ -179,6 +184,7 @@ int main(int argc, char** argv) {
     in.start = ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_ESCAPE];
     in.attack = ks[SDL_SCANCODE_X] || ks[SDL_SCANCODE_LSHIFT];
     in.run = ks[SDL_SCANCODE_C] || ks[SDL_SCANCODE_RSHIFT];
+    in.twirl = ks[SDL_SCANCODE_Q] || ks[SDL_SCANCODE_E];
     in.pop = ks[SDL_SCANCODE_V] || ks[SDL_SCANCODE_TAB];
     if (pad) {
       in.left |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) < -12000;
@@ -187,7 +193,8 @@ int main(int argc, char** argv) {
       in.jump |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B);
       in.start |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START);
       in.attack |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
-      in.run |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+      in.run |= SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+      in.twirl |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
       in.pop |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
     }
 #endif

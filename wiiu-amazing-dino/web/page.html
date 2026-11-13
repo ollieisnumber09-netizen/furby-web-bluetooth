@@ -74,10 +74,11 @@ canvas {
 }
 .btn.jump { width: 54%; aspect-ratio: 1; right: 0; bottom: 0; background: var(--banana); box-shadow: 0 5px 0 #b98a00; }
 .btn.hit { width: 44%; aspect-ratio: 1; left: 0; bottom: 30%; background: var(--berry); box-shadow: 0 5px 0 #b23a57; }
-.btn.run, .btn.item {
+.btn.run, .btn.item, .btn.spin {
   width: 40%; height: 20%; left: 0; border-radius: 999px; font-size: .75rem;
 }
 .btn.run { bottom: 2%; background: var(--leaf-hi); box-shadow: 0 4px 0 #2b6b34; }
+.btn.spin { left: auto; right: 5%; top: 22%; height: 16%; width: 44%; background: transparent; border: 2px solid var(--leaf-hi); color: var(--mist); }
 .btn.item { top: 0; background: transparent; border: 2px solid var(--banana); color: var(--mist); }
 .btn.pause {
   width: 44%; height: 20%; right: 5%; top: 0; border-radius: 999px; background: transparent;
@@ -123,10 +124,11 @@ canvas {
     <div class="btn item" data-bit="256">ITEM</div>
     <div class="btn hit" data-bit="64">HIT</div>
     <div class="btn run" data-bit="128">RUN</div>
+    <div class="btn spin" data-bit="512">SPIN</div>
     <div class="btn jump" data-bit="16">JUMP</div>
   </div>
 </div>
-<p class="hint">Turn your phone sideways for a bigger picture. Keyboard: arrows, Z jump, X hit, C run (tap in the air to twirl), V drop the kept power-up, Enter pause.</p>
+<p class="hint">Turn your phone sideways for a bigger picture. Keyboard: arrows, Z jump, X hit, C run, Q twirl in the air, V drop the kept power-up, Enter pause.</p>
 
 <script>
 /*DINOJS*/
@@ -225,10 +227,10 @@ canvas {
   }
   setInterval(pumpAudio, 25);
 
-  // ---- controls: bits 1 left, 2 right, 4 up, 8 down, 16 jump, 32 pause, 64 hit, 128 run, 256 item
+  // ---- controls: bits 1 left, 2 right, 4 up, 8 down, 16 jump, 32 pause, 64 hit, 128 run, 256 item, 512 twirl
   var pointers = new Map(), keys = 0, touchBits = 0, latched = 0;   // latched: a tap shorter than one tick still counts
   var KEY = { ArrowLeft: 1, a: 1, ArrowRight: 2, d: 2, ArrowUp: 4, w: 4, ArrowDown: 8, s: 8,
-              z: 16, ' ': 16, Enter: 32, Escape: 32, x: 64, Shift: 64, c: 128, v: 256 };
+              z: 16, ' ': 16, Enter: 32, Escape: 32, x: 64, Shift: 64, c: 128, v: 256, q: 512 };
   function recompute() {
     var bits = 0, r = dpad.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2;
     pointers.forEach(function (p) {

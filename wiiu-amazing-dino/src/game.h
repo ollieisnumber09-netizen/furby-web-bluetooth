@@ -15,7 +15,8 @@ typedef struct {
   int jump;   // held
   int start;  // held
   int attack; // held
-  int run;    // held: any back trigger. Hold to sprint; a fresh press in the air twirls
+  int run;    // held: ZL or ZR, sprint
+  int twirl;  // held: L or R, a fresh press in the air twirls
   int pop;    // held: drop the power-up waiting in the slot (GamePad touch or -)
 } Input;
 
