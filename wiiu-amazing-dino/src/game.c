@@ -396,7 +396,10 @@ typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz, x0; }
 typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 
 static char G[MAXH][MAXW];
-static unsigned char FAKE[MAXH][MAXW];   // a pretend wall: looks like ground, but you can walk through it
+static unsigned char FAKE[MAXH][MAXW];   // a pretend wall or hidden room: drawn as this ground tile until Dino walks in
+#define MAXROOM 24
+static struct { int x0, y0, x1, y1; float show; Bmp cover; } ROOM[MAXROOM];   // hidden rooms: the ground picture that covers each one
+static int nrooms;
 static int tile_raw, ride_i = -1;        // tile_raw: show pretend walls as ground (for painting). ride_i: the platform Dino stands on
 static Bmp CRIT_C[NCRIT][2][8], HD_FPLAT, HD_DOOR, HD_KEYP, HD_PLAT, HD_CRACK, HD_HELMI, HD_STARI, HD_HELM;
 static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
@@ -501,7 +504,7 @@ static int node_open(int n) {
 static char tile(int tx, int ty) {
   if (tx < 0 || tx >= LW) return 'X';
   if (ty < 0 || ty >= LH) return ' ';
-  if (FAKE[ty][tx] && !tile_raw) return ' ';
+  if (FAKE[ty][tx]) return tile_raw == 1 ? (char)FAKE[ty][tx] : G[ty][tx] == FAKE[ty][tx] ? ' ' : G[ty][tx];
   return G[ty][tx];
 }
 static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u' || c == 'I' || c == 'k' || c == 'D'; }
@@ -628,8 +631,8 @@ static void key_piece(int piece) {
     coin(GX - 2, GY - 1); coin(GX - 1, GY - 1);
     int x = GX;
     for (int i = 0; i < 9; i++) colm(x + i, GY - 2);
-    for (int i = 1; i < 8; i++) SET(x + i, GY - 1, ' ');
-    SET(x, GY - 1, GC); FAKE[GY - 1][x] = 1;
+    for (int i = 1; i < 8; i++) { SET(x + i, GY - 1, ' '); FAKE[GY - 1][x + i] = GC; }
+    SET(x, GY - 1, GC); FAKE[GY - 1][x] = GC;
     coin_row(x + 1, GY - 1, 5); key_at(x + 7, GY - 1, piece);
     GX += 9; flat(3);
   } else if (v == 2) {           // in mid-air over a pit: grab it on the way across
@@ -829,8 +832,8 @@ static void land_piece(int k) {
     case P_SECRET: {   // a hill with a room hidden behind a pretend wall
       flat(3); x = GX;
       for (int i = 0; i < 10; i++) colm(x + i, GY - 2);
-      for (int i = 1; i < 9; i++) SET(x + i, GY - 1, ' ');
-      SET(x, GY - 1, GC); FAKE[GY - 1][x] = 1;
+      for (int i = 1; i < 9; i++) { SET(x + i, GY - 1, ' '); FAKE[GY - 1][x + i] = GC; }
+      SET(x, GY - 1, GC); FAKE[GY - 1][x] = GC;
       coin_row(x + 1, GY - 1, 8);
       GX += 10; flat(3);
       if (grnd(2)) box(x + 4, GY - 6, power_kind());
@@ -1038,6 +1041,31 @@ static void load_level(int n) {
   check_x = start_x; check_y = start_y;
   lvl_frames = 0;
   tile_raw = 1; hd_render_level(); tile_raw = 0;
+  // hidden rooms: keep the covered-up picture of each one, then draw the level again there with the room open
+  for (int i = 0; i < nrooms; i++) free(ROOM[i].cover.px);
+  nrooms = 0;
+  {
+    static unsigned char done[MAXH][MAXW]; memset(done, 0, sizeof done);
+    static short qx[MAXH * MAXW], qy[MAXH * MAXW];
+    for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (FAKE[y][x] && !done[y][x] && nrooms < MAXROOM) {
+      int n = 0, x0 = x, y0 = y, x1 = x, y1 = y;
+      qx[n] = x; qy[n] = y; n++; done[y][x] = 1;
+      for (int k = 0; k < n; k++) {
+        int cx = qx[k], cy = qy[k];
+        if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+        static const int D[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        for (int d = 0; d < 4; d++) { int nx = cx + D[d][0], ny = cy + D[d][1]; if (nx >= 0 && nx < LW && ny >= 0 && ny < LH && FAKE[ny][nx] && !done[ny][nx]) { done[ny][nx] = 1; qx[n] = nx; qy[n] = ny; n++; } }
+      }
+      ROOM[nrooms].x0 = x0; ROOM[nrooms].y0 = y0; ROOM[nrooms].x1 = x1; ROOM[nrooms].y1 = y1; ROOM[nrooms].show = 0;
+      // the picture covers one tile all round, since the ground next to the room changes its edges too
+      int ax = x0 > 0 ? x0 - 1 : 0, ay = y0 > 0 ? y0 - 1 : 0, bx = x1 + 1 < LW ? x1 + 1 : LW - 1, by = y1 + 5 < LH ? y1 + 5 : LH - 1;   // (and further down, where the ground's shading depends on what is above)
+      Bmp c = bmp_new((bx - ax + 1) * HT, (by - ay + 1) * HT);
+      for (int v = 0; v < c.h; v++) memcpy(c.px + v * c.w, LVB.px + (ay * HT + v) * LVB.w + ax * HT, (size_t)c.w * 4);
+      ROOM[nrooms].cover = c;
+      hd_render_tiles(ax, ay, bx + 1, by + 1);
+      nrooms++;
+    }
+  }
   for (int d = 0; d < 2; d++) for (int i = 0; i < 20; i++) if (BOSS_C[d][i].px) { free(BOSS_C[d][i].px); BOSS_C[d][i].px = NULL; BOSS_C[d][i].w = 0; }
 }
 
@@ -1340,6 +1368,14 @@ static void update_player(const Input* in) {
         if (keyp == 7) open_door(tx);
         else if (!door_msg_t) { door_msg_t = 150; plat_sfx(SFX_WALL); }
       }
+    }
+  }
+  {   // is Dino inside a hidden room? Then it opens up (and covers over again when he leaves)
+    int cx = (int)floorf((px + PW / 2) / T), cy = (int)floorf((py + PH / 2) / T);
+    for (int r = 0; r < nrooms; r++) {
+      int in = cx >= ROOM[r].x0 && cx <= ROOM[r].x1 && cy >= ROOM[r].y0 && cy <= ROOM[r].y1;
+      ROOM[r].show += in ? 0.1f : -0.05f;
+      ROOM[r].show = clampf(ROOM[r].show, 0, 1);
     }
   }
   if (door_msg_t) door_msg_t--;
@@ -1903,6 +1939,22 @@ static void draw_world(void) {
         fb_flag(X + 18, Y + 3, 22, 14, on ? 0xFF7FE06A : 0xFFC4C8D2, on ? 0xFF3FA34D : 0xFF8C8F9C, on ? 1 : 0.15f, 0);
       }
     }
+  // hidden rooms stay covered by ground until Dino walks in, then the ground fades away
+  for (int r = 0; r < nrooms; r++) {
+    float a = 1 - ROOM[r].show; if (a <= 0.01f) continue;
+    const Bmp* c = &ROOM[r].cover;
+    int X = (ROOM[r].x0 > 0 ? ROOM[r].x0 - 1 : 0) * HT - CX, Y = (ROOM[r].y0 > 0 ? ROOM[r].y0 - 1 : 0) * HT - CY;
+    if (X > FB_W || Y > FB_H || X + c->w < 0 || Y + c->h < 0) continue;
+    int k = (int)(a * 256);
+    for (int v = 0; v < c->h; v++) {
+      int fy = Y + v; if ((unsigned)fy >= FB_H) continue;
+      for (int u = 0; u < c->w; u++) {
+        int fx = X + u; if ((unsigned)fx >= FB_W) continue;
+        uint32_t col = c->px[v * c->w + u], al = (col >> 24) * k >> 8;
+        if (al) { uint32_t* d = &FB[fy * FB_W + fx]; *d = lerpc(*d, col | 0xFF000000, al + (al >> 7)); }
+      }
+    }
+  }
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (!e->alive) continue;

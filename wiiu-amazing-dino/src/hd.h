@@ -327,18 +327,24 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   }
   return 0;
 }
+static void hd_render_tiles(int ax, int ay, int bx, int by);
 static void hd_render_level(void) {
   if (LVB.px) free(LVB.px);
   if (LV_ROW) free(LV_ROW);
   LVB = bmp_new(LW * HT, LH * HT);
   LV_ROW = (unsigned char*)calloc(LH * HT, 1);
+  hd_render_tiles(0, 0, LW, LH);
+}
+// paint tiles ax..bx-1, ay..by-1 of the level picture (clearing them first)
+static void hd_render_tiles(int ax, int ay, int bx, int by) {
+  for (int y = ay * HT; y < by * HT; y++) memset(LVB.px + y * LVB.w + ax * HT, 0, (size_t)(bx - ax) * HT * 4);
   for (int i = 0; i < 32; i++) CAP_TAB[i] = fabsf(sinf(i * 3.14159f / 16));
   int sn = snowy(), th = L->theme;
   const uint32_t *tl = ground_tex(desert() ? 2 : sn, 0), *td = ground_tex(desert() ? 2 : sn, 1), *ts = stone_tex(stone_pal()), *ti = ice_tex();
   int stone_cap = th == 0 || th == 3 || th == 4 || th == 5 || th == 7;   // grass (or snow) on top of stone
   int decor_ok_x = !(th == 1 || th == 2 || th == 6);
-  for (int ty = 0; ty < LH; ty++) for (int tx = 0; tx < LW; tx++) {
-    char c = G[ty][tx];
+  for (int ty = ay; ty < by; ty++) for (int tx = ax; tx < bx; tx++) {
+    char c = tile(tx, ty);
     uint32_t* base = &LVB.px[ty * HT * LVB.w + tx * HT];
     int X0 = tx * HT, Y0 = ty * HT;
     if (c == '#') {
