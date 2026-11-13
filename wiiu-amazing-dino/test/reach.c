@@ -5,6 +5,7 @@
 void plat_sfx(int id) {}
 static unsigned char seen[MAXH][MAXW], wseen[MAXH][MAXW], got[MAXH][MAXW];
 static int qx[MAXH * MAXW * 2], qy[MAXH * MAXW * 2], qn, wqx[MAXH * MAXW], wqy[MAXH * MAXW], wqn;
+static float VMAX = WALK_V;   // top speed: walking, or sprinting when run with SPRINT=1
 static int k_open;   // cracked blocks count as open (Dino has the helmet)
 static int solid_r(char c) { return solid_c(c) && !(k_open && c == 'k'); }
 static int bsolid(float x, float y, float w, float h) {
@@ -24,8 +25,8 @@ static void sim(float x, float y, float vx, float vy, int d, int hold, int steer
     if (steer == 1 && vy > 0) dir = 0;
     if (steer == 2 && vy > 0) dir = -d;
     if (lock > 0) { lock--; dir = 0; }
-    float acc = ground ? 0.32f : 0.22f;
-    if (dir) { vx += dir * acc; if (vx > 2.1f) vx = 2.1f; if (vx < -2.1f) vx = -2.1f; }
+    float acc = ground ? 0.3f : 0.2f;
+    if (dir) { vx += dir * acc; if (vx > VMAX) vx = VMAX; if (vx < -VMAX) vx = -VMAX; }
     else if (!lock) { float f = ground ? 0.3f : 0.08f; if (vx > f) vx -= f; else if (vx < -f) vx += f; else vx = 0; }
     int wd = 0;
     if (!ground) { if (bsolid(x + PW, y + 2, 1, PH - 4)) wd = 1; else if (bsolid(x - 1, y + 2, 1, PH - 4)) wd = -1; }
@@ -33,7 +34,7 @@ static void sim(float x, float y, float vx, float vy, int d, int hold, int steer
     if (wj && wd && vy > -0.5f && since > 8) { vy = -5.0f; vx = -wd * 2.3f; lock = 9; since = 0; d = -wd; }
     if (vy >= 0) spring = 0;
     int holding = since < hold || (wj && since < 14);
-    float g = ((holding || spring) && vy < 0) ? 0.28f : 0.55f;
+    float g = ((holding || spring) && vy < 0) ? G_HOLD : 0.55f;
     vy += g;
     float mf = (wd && dir == wd && vy > 0) ? 1.1f : 5.5f;
     if (vy > mf) vy = mf;
@@ -70,8 +71,8 @@ static void from_cell(int cx, int cy) {
     if (h == 0 && st) continue;
     float x = d > 0 ? cx * T + T - PW - 0.2f : d < 0 ? cx * T + 0.2f : cx * T + 3;
     if (bsolid(x, y, PW, PH)) x = cx * T + 3;
-    sim(x, y, s ? d * 2.1f : 0, 0, d, h, st, 0);
-    if (h == 4) sim(x, y, s ? d * 2.1f : 0, 0, d, h, st, 1);
+    sim(x, y, s ? d * VMAX : 0, 0, d, h, st, 0);
+    if (h == 4) sim(x, y, s ? d * VMAX : 0, 0, d, h, st, 1);
   }
 }
 static int analyse(int door_open, int* keys_out) {
@@ -112,6 +113,7 @@ static int analyse(int door_open, int* keys_out) {
 }
 int main(int argc, char** argv) {
   game_init();
+  if (getenv("SPRINT")) VMAX = RUN_V;
   int bad = 0, from = argc > 1 ? atoi(argv[1]) - 1 : 0, to = argc > 2 ? atoi(argv[2]) : NLEVELS;
   for (int n = from; n < to; n++) {
     start_level(n);

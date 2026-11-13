@@ -11,11 +11,11 @@ static int16_t abuf[8192 * 2];
 void plat_sfx(int id) { synth_trigger(id); }
 
 EMSCRIPTEN_KEEPALIVE void web_init(const unsigned char* music) { music_bin = music; game_init(); }
-// bits: 1 left, 2 right, 4 up, 8 down, 16 jump, 32 start, 64 attack
+// bits: 1 left, 2 right, 4 up, 8 down, 16 jump, 32 start, 64 attack, 128 run, 256 drop the kept power-up
 EMSCRIPTEN_KEEPALIVE void web_tick(int bits) {
   Input in;
   in.left = bits & 1; in.right = (bits >> 1) & 1; in.up = (bits >> 2) & 1; in.down = (bits >> 3) & 1;
-  in.jump = (bits >> 4) & 1; in.start = (bits >> 5) & 1; in.attack = (bits >> 6) & 1;
+  in.jump = (bits >> 4) & 1; in.start = (bits >> 5) & 1; in.attack = (bits >> 6) & 1; in.run = (bits >> 7) & 1; in.pop = (bits >> 8) & 1;
   game_update(&in);
 }
 EMSCRIPTEN_KEEPALIVE uint32_t* web_draw(int lowq) {

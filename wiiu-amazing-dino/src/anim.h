@@ -126,7 +126,8 @@ static void dino_render(Bmp* b, const DinoPose* p, int flip, float S) {
 static struct { float sq, sqv, tilt, bob, ph, lx[2], ly[2], spk, spkv, mouth, wing; int wasg, mood, air; float vy0, yaw; } DA = { 1 };
 
 static void dino_tick(void) {
-  float sp = fabsf(pvx) / 2.1f; if (sp > 1) sp = 1;
+  float sp = fabsf(pvx) / WALK_V; if (sp > 1) sp = 1;
+  float run = clampf((fabsf(pvx) - WALK_V) / (RUN_V - WALK_V), 0, 1);   // 0 walking .. 1 full sprint
   float tsq = 1, ttilt = 0, tbob = 0, tmouth = 0, tl[2][2] = { { 0, 0 }, { 0, 0 } };
   int walling = !on_ground && wall_dir && pvy > 0 && !dead_t;
   int butting = atk_t > 4 && power != 2;
@@ -148,12 +149,13 @@ static void dino_tick(void) {
         tl[0][0] = -2.5f + sinf(frame * 0.45f) * 1.6f; tl[1][0] = 2.5f - sinf(frame * 0.45f) * 1.6f; tl[0][1] = tl[1][1] = 0.5f;
       }
     } else if (sp > 0.04f) {
-      DA.ph += fabsf(pvx) * 0.2f;
+      // a slow, flat shuffle when walking; longer strides and a lean when sprinting
+      DA.ph += fabsf(pvx) * (0.13f - 0.03f * run);
       for (int i = 0; i < 2; i++) {
         float a = DA.ph + i * 3.14159f;
-        tl[i][0] = (sinf(a) * 7.5f + (i ? -2.8f : 2.8f)) * sp; tl[i][1] = maxf(0, cosf(a)) * 5.5f * sp;
+        tl[i][0] = (sinf(a) * (5.0f + 3.5f * run) + (i ? -2.4f : 2.4f)) * sp; tl[i][1] = maxf(0, cosf(a)) * (2.2f + 3.0f * run) * sp;
       }
-      tbob = 1.6f * sp * fabsf(cosf(DA.ph)); ttilt = 0.15f * sp; tsq = 1 + 0.035f * sinf(DA.ph * 2) * sp;
+      tbob = (0.45f + 1.2f * run) * sp * fabsf(cosf(DA.ph)); ttilt = 0.06f * sp + 0.16f * run; tsq = 1 + (0.012f + 0.025f * run) * sinf(DA.ph * 2) * sp;
       if (atk_t > 0) ttilt = 0.25f;
     } else {
       tsq = 1 + 0.025f * sinf(frame * 0.06f);   // breathing
@@ -170,7 +172,7 @@ static void dino_tick(void) {
   for (int i = 0; i < 2; i++) { DA.lx[i] += (tl[i][0] - DA.lx[i]) * 0.4f; DA.ly[i] += (tl[i][1] - DA.ly[i]) * 0.4f; }
   // the spikes lag behind: they lift when he falls, press down when he rises, and bounce as he runs
   float tspk = clampf(pvy * 0.08f, -0.45f, 0.6f);
-  if (on_ground) tspk = sp > 0.04f ? sinf(DA.ph * 2 + 1) * 0.12f * sp - 0.05f * sp : sinf(frame * 0.05f) * 0.05f;
+  if (on_ground) tspk = sp > 0.04f ? sinf(DA.ph * 2 + 1) * (0.05f + 0.08f * run) * sp - 0.05f * sp : sinf(frame * 0.05f) * 0.05f;
   if (butting) tspk = -0.35f;
   DA.spkv += (tspk - DA.spk) * 0.16f; DA.spkv *= 0.8f; DA.spk += DA.spkv;
   DA.wing = power == 1 ? (on_ground ? 0.25f + sinf(frame * 0.12f) * 0.2f : sinf(frame * 0.9f) * 0.8f) : -9;
@@ -180,6 +182,7 @@ static void dino_tick(void) {
   if (butting) tyaw = face * 1.05f;
   if (state == ST_CLEAR && on_ground) tyaw = 0.2f;
   if (dead_t) { DA.yaw += 0.3f; DA.tilt = -0.4f; }
+  else if (twirl_t > 0) DA.yaw += 0.5f;   // the twirl: spin right round
   else { if (fabsf(DA.yaw) > 2) DA.yaw = fmodf(DA.yaw, 6.28318f) > 3.14159f ? 0 : DA.yaw > 0 ? 1 : -1; DA.yaw += (tyaw - DA.yaw) * 0.22f; }
   DA.wasg = on_ground; DA.vy0 = pvy;
 }

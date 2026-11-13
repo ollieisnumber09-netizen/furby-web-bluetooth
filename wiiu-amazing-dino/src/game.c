@@ -416,6 +416,15 @@ static int goal_x, goal_y;
 static int state, frame, lives, bananas, total_bananas, state_t;
 static float px, py, pvx, pvy, camx, camy;
 static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
+// walking speed, top sprinting speed (built up over RUN_RAMP ticks of holding a back trigger), gravity while jump is held
+#ifndef WALK_V
+#define WALK_V 1.7f
+#endif
+#define RUN_V 3.0f
+#define RUN_RAMP 90
+#define G_HOLD 0.22f
+#define TWIRL_T 32
+static int slot, run_ramp, prev_run, prev_pop, twirl_t, twirl_used;   // slot: the power-up kept for later
 static int face, on_ground, coyote, jbuf, wall_lock, wall_dir, dead_t, run_t, land_t;
 static int start_x, start_y, check_x, check_y, prev_jump, prev_start, prev_down, prev_up, prev_left, prev_right;
 static int ncheck;
@@ -1198,14 +1207,27 @@ static void update_player(const Input* in) {
     int cx = (int)floorf((px + PW / 2) / T), cy = (int)floorf((py + PH / 2) / T);
     in_water = L->theme == 9 || tile(cx, cy) == 'w';
   }
-  float acc = on_ice ? 0.07f : on_ground ? 0.32f : 0.22f, maxv = 2.1f;
+  // sprinting: hold a back trigger and Dino speeds up bit by bit, reaching top speed after 1.5 seconds
+  if (in->run && dir && !in_water) { if (run_ramp < RUN_RAMP) run_ramp++; }
+  else if (on_ground || in_water) { run_ramp -= 3; if (run_ramp < 0) run_ramp = 0; }
+  float acc = on_ice ? 0.07f : on_ground ? 0.3f : 0.2f, maxv = WALK_V + (RUN_V - WALK_V) * run_ramp / (float)RUN_RAMP;
   if (in_water) { acc = on_ground ? 0.2f : 0.13f; maxv = 1.5f; }
   if (atk_t > 6 && power != 2) maxv = 4.2f;
   if (dir) { pvx += dir * acc; face = dir; if (pvx > maxv) pvx = maxv; if (pvx < -maxv) pvx = -maxv; }
   else if (wall_lock <= 0) { float f = in_water ? 0.05f : on_ice ? 0.02f : on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
 
   if (jp) jbuf = 7; else if (jbuf > 0) jbuf--;
-  if (on_ground) { coyote = 6; air_jumps = 1; } else if (coyote > 0) coyote--;
+  if (on_ground) { coyote = 6; air_jumps = 1; twirl_used = 0; twirl_t = 0; } else if (coyote > 0) coyote--;
+  // the twirl: a fresh press of L or R in the air spins Dino round and holds him up for half a second, once per jump
+  if (in->run && !prev_run && !on_ground && !in_water && !twirl_used && !atk_t) { twirl_t = TWIRL_T; twirl_used = 1; if (pvy > -1) pvy = -1.0f; plat_sfx(SFX_JUMP2); spawn_parts(px + PW / 2, py + PH / 2, 8, 0xFFFFFFFF, 1.4f, 0.0f); }
+  prev_run = in->run;
+  // the slot: drop the kept power-up from the top of the screen
+  if (in->pop && !prev_pop && slot && nents < MAXENT) {
+    Ent* e = &ents[nents++]; memset(e, 0, sizeof *e);
+    e->type = E_POW; e->alive = 1; e->k = slot; e->vx = 0; e->t = 17; e->x = px; e->y = e->by = camy - 14; slot = 0;
+    plat_sfx(SFX_CHECK);
+  }
+  prev_pop = in->pop;
 
   // walls next to the player
   wall_dir = 0;
@@ -1237,12 +1259,13 @@ static void update_player(const Input* in) {
   }
 
   if (pvy >= 0) spring_up = 0;
-  float g = ((in->jump || spring_up) && pvy < 0) ? 0.28f : 0.55f;
+  float g = ((in->jump || spring_up) && pvy < 0) ? G_HOLD : 0.55f;
   if (in_water) { g = in->down ? 0.16f : 0.085f; if (pvy < -2.6f && !(pvy < -4)) pvy += 0.06f; }
   pvy += g;
   float maxfall = in_water ? (in->down ? 2.4f : 1.25f) : 5.5f;
   if (in_water && frame % 47 == 0) add_bubble(px + PW / 2 + face * 3, py + 3);
   if (wall_dir && dir == wall_dir && pvy > 0) { maxfall = 1.1f; if (frame % 6 == 0) spawn_parts(px + (wall_dir > 0 ? PW : 0), py + 4, 1, 0xFFE8E0C8, 0.4f, 0); }
+  if (twirl_t > 0) { twirl_t--; if (pvy > 0.25f) pvy = 0.25f; }   // twirling: hardly falls at all
   if (pvy > maxfall) pvy = maxfall;
 
   // move x
@@ -1426,6 +1449,7 @@ static void update_ents(void) {
         if (e->y > LH * T + 40) e->alive = 0;
       }
       if (!dead_t && state == ST_PLAY && px + PW > e->x && px < e->x + 12 && py + PH > e->y && py < e->y + 12) {
+        if (power && power != e->k) slot = power;   // the one he had goes into the slot
         power = e->k; e->alive = 0; air_jumps = 1;
 #ifdef TRACE
         printf("got power %d at x=%.0f\n", power, px / 16);
@@ -2037,6 +2061,8 @@ static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
   hblit(&big, X - (int)(36 * S), Y - (int)(64 * S), 0);
 }
 
+static const Bmp* pow_icon(int k) { return k == 2 ? &HD_SWORDI : k == 3 ? &HD_HELMI : k == 4 ? &HD_STARI : &HD_WINGI; }
+int g_pad_screen;   // the platform sets this when it shows game_draw_pad on a second screen
 static int hud_cx, hud_cy, hud_lx, hud_ly;   // how far the coin and lives counters are from their usual places
 static void draw_hud(void) {
   char buf[64];
@@ -2071,6 +2097,11 @@ static void draw_hud(void) {
     fill(SCR_W - 82, 1, 18, 18, 0xFF1B1020); fill(SCR_W - 81, 2, 16, 16, 0xFF3B2F6B);
     make_extra_art();
     hblit(power == 2 ? &HD_SWORDI : power == 3 ? &HD_HELMI : power == 4 ? &HD_STARI : &HD_WINGI, (SCR_W - 81) * 2, 4, 0);
+  }
+  if (slot && !g_pad_screen) {   // the kept power-up (on the Wii U it sits on the GamePad instead)
+    fill(SCR_W - 104, 1, 18, 18, 0xFFF7D038); fill(SCR_W - 103, 2, 16, 16, 0xFF1B1020);
+    make_extra_art();
+    hblit(pow_icon(slot), (SCR_W - 103) * 2, 4, 0);
   }
 }
 
@@ -2247,11 +2278,11 @@ dino:;
   text(buf, 4, SCR_H - 8, 1, 0xFFFFF4C2);
 }
 
+static uint32_t* title_bg;   // the title's sky, trees and hill never change, so they are painted once and kept
 void game_draw(uint32_t* fb) {
   FB = fb;
   char buf[64];
   if (state == ST_TITLE) {
-    static uint32_t* title_bg;   // the sky, trees and hill never change, so they are painted once and kept
     if (!title_bg) {
       title_bg = (uint32_t*)malloc(FB_W * FB_H * 4);
       hd_background();
@@ -2279,7 +2310,8 @@ void game_draw(uint32_t* fb) {
     if ((state_t / 30) % 2 == 0) text_c("PRESS JUMP TO START", 80, 2, 0xFFFFFFFF);
 #else
     if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
-    if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 167, 1, 0xFFFFF4C2);
+    if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 161, 1, 0xFFFFF4C2);
+    if (!g_no_hud) text_c("SPRINT: HOLD L OR R   TWIRL: L OR R IN THE AIR   USE SLOT: -", 171, 1, 0xFFFFF4C2);
 #endif
     return;
   }
@@ -2365,6 +2397,70 @@ void game_draw(uint32_t* fb) {
     text_c(buf, 128, 2, 0xFFFFFFFF);
     if (state_t > 60) text_c("PRESS A", 150, 2, 0xFFFFF4C2);
   }
+}
+
+// ============================================================ the GamePad screen
+// a picture drawn s times bigger (s whole pixels per pixel)
+static void hblit_big(const Bmp* b, int X, int Y, int s) {
+  for (int y = 0; y < b->h * s; y++) {
+    int fy = Y + y; if ((unsigned)fy >= FB_H) continue;
+    const uint32_t* src = b->px + (y / s) * b->w;
+    for (int x = 0; x < b->w * s; x++) {
+      int fx = X + x; if ((unsigned)fx >= FB_W) continue;
+      uint32_t c = src[x / s], a = c >> 24;
+      if (!a) continue;
+      uint32_t* d = &FB[fy * FB_W + fx];
+      *d = a == 255 ? c : lerpc(*d, c, a + (a >> 7));
+    }
+  }
+}
+// the power-up slot, in the middle of the GamePad
+#define PAD_SX 250
+#define PAD_SY 96
+#define PAD_SW 140
+int game_pad_slot_hit(int x, int y) { return x >= PAD_SX - 20 && x < PAD_SX + PAD_SW + 20 && y >= PAD_SY - 20 && y < PAD_SY + PAD_SW + 20; }
+void game_draw_pad(uint32_t* fb) {
+  uint32_t* keep = FB; FB = fb;
+  char buf[64];
+  int in_level = L && (state == ST_PLAY || state == ST_PAUSE || state == ST_CLEAR || (state == ST_OVER && state_t < 40));
+  if (in_level) hd_background();
+  else if (title_bg) memcpy(FB, title_bg, FB_W * FB_H * 4);
+  else for (int i = 0; i < FB_W * FB_H; i++) FB[i] = 0xFF7EC8F0;
+  make_extra_art();
+  // coins, top left
+  darken(4, 4, 74, 30, 0.35f);
+  hblit_big(&HD_COIN[(frame / 3) % COIN_FRAMES], 12, 14, 2);
+  snprintf(buf, sizeof buf, "%02d", bananas); text(buf, 36, 9, 4, 0xFFFFF4C2);
+  // lives, top right
+  darken(SCR_W - 80, 4, 76, 30, 0.35f);
+  static Bmp pad_dino;
+  if (!pad_dino.px) { DinoPose p; dino_idle_pose(&p, 50); dino3d(&pad_dino, &p, 0.5f, 0.9f); }
+  hblit(&pad_dino, (SCR_W - 72) * 2 - (int)(36 * 0.9f), 66 - (int)(64 * 0.9f), 0);
+  snprintf(buf, sizeof buf, "x%d", lives < 0 ? 0 : lives); text(buf, SCR_W - 62, 9, 4, 0xFFFFFFFF);
+  // which level (or world) you are in, along the bottom
+  const char* nm = in_level ? L->name : state == ST_MAP ? WORLDS[world].name : "AMAZING DINO";
+  while ((*nm >= '0' && *nm <= '9') || *nm == ' ') nm++;   // drop the level number at the front
+  int sc = text_w(nm, 3) <= SCR_W - 12 ? 3 : 2;
+  darken(0, 146, SCR_W, 34, 0.35f);
+  if (in_level) { snprintf(buf, sizeof buf, "WORLD %d-%d", lvl / 8 + 1, lvl % 8 + 1); text_c(buf, 148, 1, 0xFFFFF4C2); }
+  text_c(nm, 158, sc, 0xFFFFFFFF);
+  // the slot
+  {
+    int X = PAD_SX, Y = PAD_SY, W = PAD_SW;
+    for (int y = Y - 6; y < Y + W + 6; y++) for (int x = X - 6; x < X + W + 6; x++) {
+      int edge = x < X || x >= X + W || y < Y || y >= Y + W;
+      if ((x < X - 2 || x >= X + W + 2) && (y < Y - 2 || y >= Y + W + 2)) continue;   // rounded-ish corners
+      FB[y * FB_W + x] = edge ? (slot ? 0xFFF7D038 : 0xFFE8E0C8) : lerpc(FB[y * FB_W + x], 0xFF1B1020, 225);
+    }
+    if (slot) {
+      float bob = sinf(frame * 0.08f) * 4;
+      hblit_big(pow_icon(slot), X + W / 2 - 48, Y + W / 2 - 48 + (int)bob, 3);
+      text_c("TAP TO USE", (Y + W) / 2 + 8, 1, 0xFFFFF4C2);
+    } else text_c("EMPTY", (Y + W / 2) / 2 - 3, 2, 0xFF9A94A8);
+    text_c("POWER-UP SLOT", Y / 2 - 9, 1, 0xFFFFFFFF);
+  }
+  if (state == ST_PAUSE) text_c("PAUSED", 30, 2, 0xFFFFFFFF);
+  FB = keep;
 }
 
 // ============================================================ sound

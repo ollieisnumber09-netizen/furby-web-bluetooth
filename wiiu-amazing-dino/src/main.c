@@ -38,6 +38,13 @@ static void wiiu_read(Input* in) {
     if (h & (VPAD_BUTTON_A | VPAD_BUTTON_B)) in->jump = 1;
     if (h & VPAD_BUTTON_PLUS) in->start = 1;
     if (h & (VPAD_BUTTON_X | VPAD_BUTTON_Y)) in->attack = 1;
+    if (h & (VPAD_BUTTON_L | VPAD_BUTTON_R | VPAD_BUTTON_ZL | VPAD_BUTTON_ZR)) in->run = 1;
+    if (h & VPAD_BUTTON_MINUS) in->pop = 1;
+    if (v.tpNormal.touched) {   // a tap on the power-up slot
+      VPADTouchData t;
+      VPADGetTPCalibratedPointEx(VPAD_CHAN_0, VPAD_TP_854X480, &t, &v.tpNormal);
+      if (game_pad_slot_hit(t.x * FB_W / 854, t.y * FB_H / 480)) in->pop = 1;
+    }
     if (v.leftStick.x < -0.35f) in->left = 1;
     if (v.leftStick.x > 0.35f) in->right = 1;
     if (v.leftStick.y < -0.5f) in->down = 1;
@@ -58,6 +65,8 @@ static void wiiu_read(Input* in) {
       if (b & (WPAD_PRO_BUTTON_A | WPAD_PRO_BUTTON_B)) in->jump = 1;
       if (b & WPAD_PRO_BUTTON_PLUS) in->start = 1;
       if (b & (WPAD_PRO_BUTTON_X | WPAD_PRO_BUTTON_Y)) in->attack = 1;
+      if (b & (WPAD_PRO_TRIGGER_L | WPAD_PRO_TRIGGER_R | WPAD_PRO_TRIGGER_ZL | WPAD_PRO_TRIGGER_ZR)) in->run = 1;
+      if (b & WPAD_PRO_BUTTON_MINUS) in->pop = 1;
       sx = k.pro.leftStick.x; sy = k.pro.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_CLASSIC || k.extensionType == WPAD_EXT_MPLUS_CLASSIC) {
       uint32_t b = k.classic.hold;
@@ -68,11 +77,15 @@ static void wiiu_read(Input* in) {
       if (b & (WPAD_CLASSIC_BUTTON_A | WPAD_CLASSIC_BUTTON_B)) in->jump = 1;
       if (b & WPAD_CLASSIC_BUTTON_PLUS) in->start = 1;
       if (b & (WPAD_CLASSIC_BUTTON_X | WPAD_CLASSIC_BUTTON_Y)) in->attack = 1;
+      if (b & (WPAD_CLASSIC_BUTTON_L | WPAD_CLASSIC_BUTTON_R | WPAD_CLASSIC_BUTTON_ZL | WPAD_CLASSIC_BUTTON_ZR)) in->run = 1;
+      if (b & WPAD_CLASSIC_BUTTON_MINUS) in->pop = 1;
       sx = k.classic.leftStick.x; sy = k.classic.leftStick.y;
     } else if (k.extensionType == WPAD_EXT_NUNCHUK || k.extensionType == WPAD_EXT_MPLUS_NUNCHUK) {
       if (k.hold & WPAD_BUTTON_A) in->jump = 1;
       if (k.hold & WPAD_BUTTON_B) in->attack = 1;
       if (k.hold & WPAD_BUTTON_PLUS) in->start = 1;
+      if (k.hold & WPAD_BUTTON_MINUS) in->pop = 1;
+      if (k.nunchuk.hold & (WPAD_NUNCHUK_BUTTON_Z | WPAD_NUNCHUK_BUTTON_C)) in->run = 1;
       sx = k.nunchuk.stick.x; sy = k.nunchuk.stick.y;
     } else {
       // Wii Remote on its own, held sideways (D-pad on the left)
@@ -84,6 +97,8 @@ static void wiiu_read(Input* in) {
       if (b & WPAD_BUTTON_2) in->jump = 1;
       if (b & WPAD_BUTTON_1) in->attack = 1;
       if (b & WPAD_BUTTON_PLUS) in->start = 1;
+      if (b & WPAD_BUTTON_MINUS) in->pop = 1;
+      if (b & WPAD_BUTTON_B) in->run = 1;   // the trigger on the back
     }
     if (sx < -0.35f) in->left = 1;
     if (sx > 0.35f) in->right = 1;
@@ -105,10 +120,25 @@ int main(int argc, char** argv) {
   WPADEnableURCC(1);
   WPADEnableWiiRemote(1);
 #endif
+#ifdef __WIIU__
+  // the game on the TV; the GamePad gets its own screen (background, coins, lives, level and the power-up slot)
+  SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_WIIU_TV_ONLY);
+  SDL_Window* pwin = SDL_CreateWindow("Amazing Dino pad", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 854, 480, SDL_WINDOW_WIIU_GAMEPAD_ONLY);
+#else
   SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
+  SDL_Window* pwin = NULL;
+#endif
   SDL_Renderer* r = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_RenderSetLogicalSize(r, 1280, 720);
   SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
+  SDL_Renderer* pr = pwin ? SDL_CreateRenderer(pwin, -1, SDL_RENDERER_ACCELERATED) : NULL;
+  SDL_Texture* ptex = pr ? SDL_CreateTexture(pr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H) : NULL;
+  static uint32_t pfb[FB_W * FB_H];
+  int pad_n = 0;
+  if (!ptex) {   // no second screen after all: show the game on both, as before
+    if (pwin) SDL_DestroyWindow(pwin);
+    pwin = NULL;
+  } else g_pad_screen = 1;
 
   game_init();
 
@@ -148,6 +178,8 @@ int main(int argc, char** argv) {
     in.jump = ks[SDL_SCANCODE_SPACE] || ks[SDL_SCANCODE_Z];
     in.start = ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_ESCAPE];
     in.attack = ks[SDL_SCANCODE_X] || ks[SDL_SCANCODE_LSHIFT];
+    in.run = ks[SDL_SCANCODE_C] || ks[SDL_SCANCODE_RSHIFT];
+    in.pop = ks[SDL_SCANCODE_V] || ks[SDL_SCANCODE_TAB];
     if (pad) {
       in.left |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) < -12000;
       in.right |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) > 12000;
@@ -155,6 +187,8 @@ int main(int argc, char** argv) {
       in.jump |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B);
       in.start |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START);
       in.attack |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
+      in.run |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000 || SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+      in.pop |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
     }
 #endif
     Uint64 now = SDL_GetPerformanceCounter();
@@ -177,6 +211,14 @@ int main(int argc, char** argv) {
     SDL_RenderClear(r);
     SDL_RenderCopy(r, tex, NULL, NULL);
     SDL_RenderPresent(r);
+    // the GamePad screen changes slowly, so it is drawn every other frame (every fourth if the game is struggling)
+    if (ptex && ++pad_n % (g_lowq ? 4 : 2) == 0) {
+      game_draw_pad(pfb);
+      SDL_UpdateTexture(ptex, NULL, pfb, FB_W * 4);
+      SDL_RenderClear(pr);
+      SDL_RenderCopy(pr, ptex, NULL, NULL);
+      SDL_RenderPresent(pr);
+    }
   }
   if (g_audio) SDL_CloseAudioDevice(g_audio);
   SDL_Quit();
