@@ -424,7 +424,7 @@ static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 #define RUN_RAMP 90
 #define G_HOLD 0.22f
 #define TWIRL_T 18   // 0.3 seconds
-static int slot, run_ramp, prev_run, prev_pop, twirl_t, twirl_used;   // slot: the power-up kept for later
+static int slot, run_ramp, prev_run, prev_pop, twirl_t, twirl_used, snap_turn;   // slot: the power-up kept for later
 static int face, on_ground, coyote, jbuf, wall_lock, wall_dir, dead_t, run_t, land_t;
 static int start_x, start_y, check_x, check_y, prev_jump, prev_start, prev_down, prev_up, prev_left, prev_right;
 static int ncheck;
@@ -1213,6 +1213,8 @@ static void update_player(const Input* in) {
   float acc = on_ice ? 0.07f : on_ground ? 0.3f : 0.2f, maxv = WALK_V + (RUN_V - WALK_V) * run_ramp / (float)RUN_RAMP;
   if (in_water) { acc = on_ground ? 0.2f : 0.13f; maxv = 1.5f; }
   if (atk_t > 6 && power != 2) maxv = 4.2f;
+  // turning round while moving: snap straight round, keeping the speed
+  if (dir && on_ground && !on_ice && !in_water && pvx * dir < -0.4f) { pvx = -pvx; snap_turn = 1; }
   if (dir) { pvx += dir * acc; face = dir; if (pvx > maxv) pvx = maxv; if (pvx < -maxv) pvx = -maxv; }
   else if (wall_lock <= 0) { float f = in_water ? 0.05f : on_ice ? 0.02f : on_ground ? 0.3f : 0.08f; if (pvx > f) pvx -= f; else if (pvx < -f) pvx += f; else pvx = 0; }
 
