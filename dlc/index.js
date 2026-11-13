@@ -1,5 +1,20 @@
 [
     {
+        "file": "BADAPL.DLC",
+        "title": "Bad Apple (15s silhouette eyes + song)",
+        "buttons": [
+            {
+                "title": "Bad Apple",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
+        ]
+    },
+    {
         "file": "P1CHAT.DLC",
         "title": "Partner chat \u2014 Person 1",
         "buttons": [
