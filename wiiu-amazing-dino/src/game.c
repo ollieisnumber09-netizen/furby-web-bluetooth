@@ -392,10 +392,11 @@ enum { E_BEETLE, E_BEE, E_POW, E_ICE, E_BOSS, E_PLAT, E_SHOT, E_FROG, E_SPINY, E
 #define IS_FOE(t) ((t) == E_BEETLE || (t) == E_BEE || ((t) >= E_FROG && (t) <= E_SNOWMAN))   // E_ICE: an icicle (k: 0 hanging, 1 shaking, 2 falling)   // E_POW: a power-up (e->vx holds which: 1 double jump, 2 sword)
 enum { SFX_JUMP, SFX_BANANA, SFX_STOMP, SFX_HURT, SFX_SPRING, SFX_CHECK, SFX_CLEAR, SFX_LIFE, SFX_SELECT, SFX_WALL, SFX_DASH, SFX_SWORD, SFX_JUMP2 };
 
-typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz, x0; } Ent;
+typedef struct { int type, alive, dying, t, k; float x, y, vx, vy, by, fz, x0, ox, oy, ovx; } Ent;   // ox, oy, ovx: where it started
 typedef struct { float x, y, vx, vy; int life; uint32_t c; } Part;
 
 static char G[MAXH][MAXW];
+static unsigned char WET[MAXH][MAXW];    // water under a coin or key piece
 static unsigned char FAKE[MAXH][MAXW];   // a pretend wall or hidden room: drawn as this ground tile until Dino walks in
 #define MAXROOM 24
 static struct { int x0, y0, x1, y1; float show; Bmp cover; } ROOM[MAXROOM];   // hidden rooms: the ground picture that covers each one
@@ -418,12 +419,13 @@ static int goal_x, goal_y;
 
 static int state, frame, lives, bananas, total_bananas, state_t;
 static float px, py, pvx, pvy, camx, camy;
+static int hp = 3;   // health: three hits and he is out
 static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 // walking speed, top sprinting speed (built up over RUN_RAMP ticks of holding a back trigger), gravity while jump is held
 #ifndef WALK_V
 #define WALK_V 1.7f
 #endif
-#define RUN_V 3.0f
+#define RUN_V 2.7f
 #define RUN_RAMP 90
 #define G_HOLD 0.22f
 #define TWIRL_T 18   // 0.3 seconds
@@ -507,6 +509,7 @@ static char tile(int tx, int ty) {
   if (FAKE[ty][tx]) return tile_raw == 1 ? (char)FAKE[ty][tx] : G[ty][tx] == FAKE[ty][tx] ? ' ' : G[ty][tx];
   return G[ty][tx];
 }
+static int wet(int tx, int ty) { return tile(tx, ty) == 'w' || (tx >= 0 && tx < LW && ty >= 0 && ty < LH && WET[ty][tx]); }
 static int solid_c(char c) { return c == '#' || c == 'X' || c == '?' || c == 'u' || c == 'I' || c == 'k' || c == 'D'; }
 #include "hd.h"
 #include "anim.h"
@@ -541,6 +544,7 @@ static Ent* add_ent(int type, int tx, int ty) {
   e->type = type; e->alive = 1;
   e->x = e->x0 = tx * T + 2; e->y = (type == E_BEETLE || type == E_FROG || type == E_SPINY || type == E_CRAB || type == E_ROLL || type == E_PENGUIN || type == E_MOLE) ? ty * T + 6 : (type == E_PLANT || type == E_SNOWMAN) ? ty * T + 2 : ty * T; e->by = e->y;
   e->vx = type == E_SPINY ? -0.4f : -0.5f; e->t = tx * 13;
+  e->ox = e->x; e->oy = e->y; e->ovx = e->vx;
   return e;
 }
 static const char* const BOSS_NAME[7] = { "KING BEETLE", "FROST KING", "QUEEN BEE", "JUNGLE KING", "SNOW QUEEN", "KING CROAK", "BAT BARON" };
@@ -555,11 +559,11 @@ static void SET(int x, int y, char c) { if (x >= 0 && x < MAXW && y >= 0 && y < 
 static char GET(int x, int y) { return (x >= 0 && x < MAXW && y >= 0 && y < LH) ? G[y][x] : 'X'; }
 static void colm(int x, int top) { for (int y = top < 0 ? 0 : top; y < LH; y++) SET(x, y, GC); }
 static void flat(int w) { for (int i = 0; i < w; i++) colm(GX + i, GY); GX += w; }
-static void coin(int x, int y) { if (GET(x, y) == ' ' || GET(x, y) == 'w') SET(x, y, 'o'); }
+static void coin(int x, int y) { if (GET(x, y) == 'w') WET[y][x] = 1; if (GET(x, y) == ' ' || GET(x, y) == 'w') SET(x, y, 'o'); }
 static void coin_row(int x, int y, int n) { for (int i = 0; i < n; i++) coin(x + i, y); }
 static void coin_arc(int x, int y, int n) { for (int i = 0; i < n; i++) coin(x + i, y - (int)lroundf(sinf(3.14159f * (i + 0.5f) / n) * 2)); }
 static void box(int x, int y, int kind) { SET(x, y, '?'); if (x >= 0 && x < MAXW && y >= 0 && y < MAXH) BOXK[y][x] = (char)kind; }
-static void key_at(int x, int y, int piece) { SET(x, y, 'K'); if (x >= 0 && x < MAXW && y >= 0 && y < MAXH) BOXK[y][x] = (char)piece; }
+static void key_at(int x, int y, int piece) { if (GET(x, y) == 'w') WET[y][x] = 1; SET(x, y, 'K'); if (x >= 0 && x < MAXW && y >= 0 && y < MAXH) BOXK[y][x] = (char)piece; }
 static Ent* plat_at(int x, int y, int kind, int travel) {
   Ent* e = add_ent(E_PLAT, x, y);
   if (e) { e->x = e->x0 = x * T; e->y = e->by = y * T; e->vx = travel * T; e->k = kind; e->t = 0; }
@@ -1033,7 +1037,7 @@ static void build_level(int n) {
 
 static void load_level(int n) {
   lvl = n; L = &LEVELS[n];
-  memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK); memset(FAKE, 0, sizeof FAKE); ride_i = -1;
+  memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK); memset(FAKE, 0, sizeof FAKE); memset(WET, 0, sizeof WET); ride_i = -1;
   nents = 0; nsigns = 0; ncheck = 0;
   memset(parts, 0, sizeof parts); memset(bubbles, 0, sizeof bubbles);
   keyp = 0; door_msg_t = key_msg_t = 0;
@@ -1070,12 +1074,13 @@ static void load_level(int n) {
 }
 
 static void respawn(void) {
-  px = check_x; py = check_y; pvx = pvy = 0; face = 1; dead_t = 0; wall_lock = 0; jbuf = 0; atk_t = 0; inv_t = 0;
+  px = check_x; py = check_y; pvx = pvy = 0; face = 1; dead_t = 0; wall_lock = 0; jbuf = 0; atk_t = 0; inv_t = 120; hp = 3;
   camx = px - SCR_W / 2; camy = py - SCR_H / 2;
   // beetles and bees come back when you respawn
   for (int i = 0; i < nents; i++) {
     Ent* e = &ents[i];
     if (e->type == E_POW) continue;
+    if (IS_FOE(e->type)) { e->x = e->x0 = e->ox; e->y = e->by = e->oy; e->vx = e->ovx; e->vy = 0; e->k = 0; e->t = (int)(e->ox / T) * 13; }
     if (e->type == E_BOSS) { if (!boss_dead) { e->alive = 1; e->dying = 0; e->x = e->x0; e->y = e->by; e->vy = 0; e->vx = -0.5f; boss_hp = boss_max; boss_inv = 0; boss_awake = 0; g_boss_music = 0; } continue; }
     if (e->type == E_ICE) { e->alive = 1; e->k = 0; e->y = e->by; e->vy = 0; continue; }
     if (e->type == E_SHOT) { e->alive = 0; continue; }
@@ -1109,17 +1114,18 @@ void game_init(void) {
 static void hurt_ex(int pit) {
   if (dead_t) return;
   if (!pit && inv_t) return;
-  if (!pit && power) {
-    // losing the power-up instead of a life
+  if (!pit && hp > 1) {
+    // a hit takes one slot of health
+    hp--;
 #ifdef TRACE
     printf("lost power at x=%.0f\n", px / 16);
 #endif
-    power = 0; inv_t = 100; pvy = -3.5f; pvx = -face * 2.0f; wall_lock = 10;
+    inv_t = 100; pvy = -3.5f; pvx = -face * 2.0f; wall_lock = 10;
     plat_sfx(SFX_HURT);
     spawn_parts(px + PW / 2, py + 4, 12, 0xFFFFFFFF, 1.8f, 0.4f);
     return;
   }
-  dead_t = 1; pvy = -5.0f; pvx = 0; power = 0;
+  dead_t = 1; pvy = -5.0f; pvx = 0; power = 0; hp = 0;
   plat_sfx(SFX_HURT);
 }
 static void hurt(void) { hurt_ex(0); }
@@ -1177,7 +1183,7 @@ static int attack_box(float* ax, float* ay, float* aw, float* ah) {
 }
 
 static void collect(int tx, int ty) {
-  G[ty][tx] = ' ';
+  G[ty][tx] = WET[ty][tx] ? 'w' : ' ';
   bananas++; total_bananas++;
   spawn_parts(tx * T + 8, ty * T + 8, 6, 0xFFF7D038, 1.5f, 0.5f);
   if (bananas >= 50) { bananas -= 50; lives++; plat_sfx(SFX_LIFE); }
@@ -1233,10 +1239,10 @@ static void update_player(const Input* in) {
   }
   {   // is Dino in water? (water levels are water all through)
     int cx = (int)floorf((px + PW / 2) / T), cy = (int)floorf((py + PH / 2) / T);
-    in_water = L->theme == 9 || tile(cx, cy) == 'w';
+    in_water = L->theme == 9 || wet(cx, cy);
   }
   // sprinting: hold a back trigger and Dino speeds up bit by bit, reaching top speed after 1.5 seconds
-  if (in->run && dir && !in_water) { if (run_ramp < RUN_RAMP) run_ramp++; }
+  if (in->run && dir && !in_water) run_ramp = RUN_RAMP;   // straight to sprinting speed
   else if (on_ground || in_water) { run_ramp -= 3; if (run_ramp < 0) run_ramp = 0; }
   float acc = on_ice ? 0.07f : on_ground ? 0.3f : 0.2f, maxv = WALK_V + (RUN_V - WALK_V) * run_ramp / (float)RUN_RAMP;
   if (in_water) { acc = on_ground ? 0.2f : 0.13f; maxv = 1.5f; }
@@ -1269,7 +1275,7 @@ static void update_player(const Input* in) {
   if (in_water) {
     // swimming: each press of jump is a stroke up; at the top of a pool it leaps out
     if (jp) {
-      int surf = L->theme != 9 && tile((int)floorf((px + PW / 2) / T), (int)floorf((py - 4) / T)) != 'w';
+      int surf = L->theme != 9 && !wet((int)floorf((px + PW / 2) / T), (int)floorf((py - 4) / T));
       pvy = surf ? -5.2f : -2.5f; jbuf = 0; coyote = 0; on_ground = 0;
       plat_sfx(SFX_JUMP2);
       add_bubble(px + PW / 2 + face * 4, py + 2); add_bubble(px + PW / 2, py + 6);
@@ -1345,7 +1351,7 @@ static void update_player(const Input* in) {
     char c = tile(tx, ty);
     if (c == 'o') collect(tx, ty);
     else if (c == 'K') {
-      G[ty][tx] = ' '; keyp |= 1 << BOXK[ty][tx];
+      G[ty][tx] = WET[ty][tx] ? 'w' : ' '; keyp |= 1 << BOXK[ty][tx];
       plat_sfx(SFX_LIFE); spawn_parts(tx * T + 8, ty * T + 8, 16, 0xFFFFD84A, 2.2f, 0.6f);
       if (keyp == 7) key_msg_t = 150;
     }
@@ -1439,12 +1445,23 @@ static void update_boss(Ent* e) {
 }
 
 // walk along the ground at spd, turning round at walls and at the edge of a drop
+// is another creature on the ground in the way? (creatures turn round when they bump)
+static int ground_foe(int t) { return t == E_BEETLE || t == E_SPINY || t == E_CRAB || t == E_ROLL || t == E_PENGUIN || t == E_FROG || t == E_MOLE || t == E_PLANT || t == E_SNOWMAN; }
+static int foe_block(const Ent* e, float nx, float ew, float eh) {
+  for (int i = 0; i < nents; i++) {
+    const Ent* o = &ents[i];
+    if (o == e || !o->alive || o->dying || !ground_foe(o->type)) continue;
+    if ((o->x - e->x) * (nx - e->x) <= 0) continue;   // only what is ahead
+    if (nx + ew > o->x && nx < o->x + 12 && e->y + eh > o->y + 2 && e->y < o->y + 12) return 1;
+  }
+  return 0;
+}
 static void walker_step(Ent* e, float spd, float ew, float eh) {
   float v = e->vx > 0 ? spd : -spd, nx = e->x + v;
   int ahead = v < 0 ? (int)floorf(nx / T) : (int)floorf((nx + ew) / T);
   int below = (int)floorf((e->y + eh + 1) / T);
   char fl = tile(ahead, below);
-  if (box_solid(nx, e->y, ew, eh) || !(solid_c(fl) || fl == '=')) e->vx = -e->vx; else e->x = nx;
+  if (box_solid(nx, e->y, ew, eh) || !(solid_c(fl) || fl == '=') || foe_block(e, nx, ew, eh)) e->vx = -e->vx; else e->x = nx;
 }
 static void update_ents(void) {
   for (int i = 0; i < nents; i++) {
@@ -1488,7 +1505,7 @@ static void update_ents(void) {
       }
       if (!dead_t && state == ST_PLAY && px + PW > e->x && px < e->x + 12 && py + PH > e->y && py < e->y + 12) {
         if (power && power != e->k) slot = power;   // the one he had goes into the slot
-        power = e->k; e->alive = 0; air_jumps = 1;
+        power = e->k; e->alive = 0; air_jumps = 1; if (inv_t < 60) inv_t = 60;
 #ifdef TRACE
         printf("got power %d at x=%.0f\n", power, px / 16);
 #endif
@@ -1527,7 +1544,11 @@ static void update_ents(void) {
       } else if (e->k != 1 && !gone && !dead_t && state == ST_PLAY) {
         float ax, ay, aw, ah;
         if (attack_box(&ax, &ay, &aw, &ah) && ax + aw > e->x && ax < e->x + 6 && ay + ah > e->y && ay < e->y + 6) gone = 1;
-        else if (px + PW > e->x + 1 && px < e->x + 5 && py + PH > e->y + 1 && py < e->y + 5) { hurt(); gone = 1; }
+        else if (px + PW > e->x + 1 && px < e->x + 5 && py + PH > e->y + 1 && py < e->y + 5) {
+          if (e->k == 0 && pvy > 0.3f && py + PH - e->y < 6) { pvy = -4.6f; plat_sfx(SFX_STOMP); }   // jump on a flower's seed: bounce off it
+          else hurt();
+          gone = 1;
+        }
       }
       if (gone) { e->alive = 0; spawn_parts(e->x + 3, e->y + 3, 5, e->k == 1 ? 0xFFFFF2A0 : e->k == 3 ? 0xFFFFFFFF : 0xFF6A4A2A, 1.2f, 0.2f); }
       continue;
@@ -1616,7 +1637,14 @@ static void update_ents(void) {
         if (fabsf(e->x - e->x0) > 70) { e->x -= e->vx > 0 ? 0.8f : -0.8f; e->vx = -e->vx; }
         e->y = e->by + sinf(e->t * 0.06f) * 5;
         float dx = px - e->x, dy = py - e->y;
-        if (!dead_t && e->t > 80 && fabsf(dx) < 56 && dy > 16 && dy < 150) { float d = sqrtf(dx * dx + dy * dy); e->k = 1; e->t = 0; e->vx = dx / d * 2.6f; e->vy = dy / d * 2.6f; if (fabsf(e->vx) < 0.1f) e->vx = 0.1f; }
+        if (!dead_t && e->t > 80 && fabsf(dx) < 110 && dy > 16 && dy < 150) { e->k = 3; e->t = 0; plat_sfx(SFX_WALL); }   // spotted him
+      } else if (e->k == 3) {   // hovers, watching Dino, for 1.2 seconds, then dives at where he is
+        float dx = px - e->x, dy = py - e->y;
+        e->vx = dx > 0 ? 0.01f : -0.01f; e->y = e->by + sinf(e->t * 0.3f) * 2;
+        if (e->t >= 72) {
+          if (dead_t || dy < 4) { e->k = 0; e->t = 40; e->vx = dx > 0 ? 0.5f : -0.5f; }
+          else { float d = sqrtf(dx * dx + dy * dy); e->k = 1; e->t = 0; e->vx = dx / d * 2.8f; e->vy = dy / d * 2.8f; if (fabsf(e->vx) < 0.1f) e->vx = 0.1f; }
+        }
       } else if (e->k == 1) {
         e->x += e->vx; e->y += e->vy;
         if (box_solid(e->x, e->y, ew, eh) || e->t > 70) { e->k = 2; e->t = 0; }
@@ -1638,7 +1666,7 @@ static void update_ents(void) {
       int wall = box_solid(nx, e->y, ew, eh);
       char fl = tile(ahead, below);
       int ledge = !(solid_c(fl) || fl == '=');
-      if (wall || ledge) e->vx = -e->vx; else e->x = nx;
+      if (wall || ledge || foe_block(e, nx, ew, eh)) e->vx = -e->vx; else e->x = nx;
     } else {
       // bees bob up and down and patrol a few tiles each way
       e->vx = ((e->t / 110) % 2) ? 0.6f : -0.6f;
@@ -1675,7 +1703,7 @@ static void update_parts(void) {
   for (int i = 0; i < 32; i++) if (bubbles[i].life > 0) {
     bubbles[i].life--; bubbles[i].y -= 0.55f; bubbles[i].x += sinf((bubbles[i].life + i * 7) * 0.15f) * 0.25f;
     int tx = (int)floorf(bubbles[i].x / T), ty = (int)floorf(bubbles[i].y / T);
-    if (L->theme != 9 && tile(tx, ty) != 'w') bubbles[i].life = 0;
+    if (L->theme != 9 && !wet(tx, ty)) bubbles[i].life = 0;
     if (bubbles[i].y < 2 || solid_c(tile(tx, ty))) bubbles[i].life = 0;
   }
   for (int i = 0; i < 160; i++) if (parts[i].life > 0) {
@@ -2079,8 +2107,8 @@ static void draw_world(void) {
     fb_dot(parts[i].x * 2 - CX, parts[i].y * 2 - CY, parts[i].life > 10 ? 2.8f : 1.2f + parts[i].life * 0.15f, parts[i].c, parts[i].life > 8 ? 1 : parts[i].life / 8.0f);
   // water in pools: see-through blue in front, with a bright wavy top
   if (L->theme != 9) for (int ty = ty0; ty <= ty0 + FB_H / HT + 1; ty++) for (int tx = tx0; tx <= tx0 + FB_W / HT + 1; tx++) {
-    if (tile(tx, ty) != 'w') continue;
-    int X = tx * HT - CX, Y = ty * HT - CY, top = tile(tx, ty - 1) != 'w';
+    if (!wet(tx, ty)) continue;
+    int X = tx * HT - CX, Y = ty * HT - CY, top = !wet(tx, ty - 1);
     for (int v = 0; v < HT; v++) for (int u = 0; u < HT; u++) {
       float wave = top ? 3 + sinf((tx * HT + u) * 0.12f + frame * 0.08f) * 2 : -1;
       if (v < wave) continue;
@@ -2117,12 +2145,30 @@ static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
 
 static const Bmp* pow_icon(int k) { return k == 2 ? &HD_SWORDI : k == 3 ? &HD_HELMI : k == 4 ? &HD_STARI : &HD_WINGI; }
 int g_pad_screen;   // the platform sets this when it shows game_draw_pad on a second screen
+// the health circle: three slots round a ring, lit for each hit Dino can still take
+static void health_ring(int cx, int cy, float r) {
+  int show = state == ST_PLAY && dead_t ? 0 : hp;
+  uint32_t lit = show == 3 ? 0xFF6CD84A : show == 2 ? 0xFFF7C830 : 0xFFF0584A;
+  int flash = inv_t > 0 && (frame / 4) % 2;
+  for (int y = (int)(cy - r - 3); y <= (int)(cy + r + 3); y++) for (int x = (int)(cx - r - 3); x <= (int)(cx + r + 3); x++) {
+    float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = sqrtf(dx * dx + dy * dy);
+    fb_over(x, y, 0xFF1B1020, cov(d - r - 2.2f));                     // dark disc behind
+    float a = atan2f(dx, -dy); if (a < 0) a += 6.28318f;               // clockwise from the top
+    int seg = (int)(a / 2.0944f); float within = a - seg * 2.0944f;
+    float gap = minf(within, 2.0944f - within) * d;                     // distance to the gap between slots, in pixels
+    float ring = maxf(fabsf(d - r * 0.64f) - r * 0.3f, 1.6f - gap);     // a thick ring cut into three
+    uint32_t c = seg < show ? (flash ? 0xFFFFFFFF : lit) : 0xFF4A4458;
+    fb_over(x, y, c, cov(ring));
+    if (seg < show) fb_over(x, y, 0xFFFFFFFF, cov(maxf(ring + r * 0.22f, fabsf(d - r * 0.82f) - 1.2f)) * 0.45f);   // shine along the outer edge
+  }
+}
 static int hud_cx, hud_cy, hud_lx, hud_ly;   // how far the coin and lives counters are from their usual places
 static void draw_hud(void) {
   char buf[64];
-  hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 6 + hud_cx * 2, 3 + hud_cy * 2, 0);
+  health_ring(26 + hud_cx * 2, 26 + hud_cy * 2, 20);
+  hblit(&HD_COIN[(frame / 3) % COIN_FRAMES], 54 + hud_cx * 2, 3 + hud_cy * 2, 0);
   snprintf(buf, sizeof buf, "%02d", bananas);
-  text(buf, 21 + hud_cx, 6 + hud_cy, 2, 0xFFFFF4C2);
+  text(buf, 45 + hud_cx, 6 + hud_cy, 2, 0xFFFFF4C2);
   static Bmp hud_dino;   // the little Dino by the lives count is drawn once and kept
   if (!hud_dino.px) { DinoPose p; dino_idle_pose(&p, 50); dino3d(&hud_dino, &p, 0.5f, 0.72f); }
   hblit(&hud_dino, FB_W - 94 - (int)(36 * 0.72f) + hud_lx * 2, 34 - (int)(64 * 0.72f) + hud_ly * 2, 0);
@@ -2132,9 +2178,9 @@ static void draw_hud(void) {
   if (level_keys) {   // the three pieces of the key; together they make one key
     for (int k = 0; k < 3; k++) {
       static const float KX[3] = { 18, 34, 49 };
-      key_part(KX[k], 50, k, (keyp >> k) & 1 ? 0xFFFFD84A : 0xFF5A5468, 1.0f);
+      key_part(KX[k] + 2, 66, k, (keyp >> k) & 1 ? 0xFFFFD84A : 0xFF5A5468, 1.0f);
     }
-    if (keyp == 7 && (frame / 20) % 2) fb_dot(34, 50, 26, 0xFFFFF2A0, 0.15f);
+    if (keyp == 7 && (frame / 20) % 2) fb_dot(36, 66, 26, 0xFFFFF2A0, 0.15f);
   }
   if (door_msg_t) text_c("FIND ALL 3 KEY PIECES TO OPEN THE DOOR", 32, 1, 0xFFFFF4C2);
   else if (key_msg_t) text_c("YOU MADE THE KEY! NOW OPEN THE DOOR", 32, 1, 0xFFFFD84A);

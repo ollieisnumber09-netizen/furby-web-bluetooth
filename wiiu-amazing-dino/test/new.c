@@ -4,7 +4,7 @@
 void plat_sfx(int id) {}
 static Input I0;
 static void ticks(Input in, int n) { for (int i = 0; i < n; i++) { Input k = in; game_update(&k); } }
-static void go(int n) { start_level(n); intro_t = 0; lives = 9; }
+static void go(int n) { start_level(n); intro_t = 0; lives = 9; inv_t = 0; }
 static Ent* find(int type) { for (int i = 0; i < nents; i++) if (ents[i].type == type && ents[i].alive) return &ents[i]; return NULL; }
 static void stand_near(Ent* e, float dx) { px = e->x + dx; py = e->y + (e->type == E_BIRD || e->type == E_FISH || e->type == E_JELLY ? 60 : 10) - PH + 6; pvx = pvy = 0; update_camera(1); }
 int main(void) {

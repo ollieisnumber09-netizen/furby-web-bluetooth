@@ -136,8 +136,10 @@ int main(int argc, char** argv) {
   SDL_Renderer* r = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_RenderSetLogicalSize(r, 1280, 720);
   SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
+  SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);   // smooth when stretched to the TV, not blocky
   SDL_Renderer* pr = pwin ? SDL_CreateRenderer(pwin, -1, SDL_RENDERER_ACCELERATED) : NULL;
   SDL_Texture* ptex = pr ? SDL_CreateTexture(pr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H) : NULL;
+  if (ptex) SDL_SetTextureScaleMode(ptex, SDL_ScaleModeLinear);
   static uint32_t pfb[FB_W * FB_H];
   int pad_n = 0;
   if (!ptex) {   // no second screen after all: show the game on both, as before
@@ -211,15 +213,19 @@ int main(int argc, char** argv) {
     Uint64 d0 = SDL_GetPerformanceCounter();
     game_draw(fb);
     // if drawing keeps taking longer than a 60th of a second, ask the game to draw more simply
+    // (one long frame, such as loading a level, is not counted, and it switches back once things speed up again,
+    // so Dino isn't left drawn the rough way for the rest of the game)
     static double slow_avg; static int slow_n;
-    slow_avg = slow_avg * 0.95 + ((double)(SDL_GetPerformanceCounter() - d0) / freq) * 0.05;
-    if (++slow_n > 120 && slow_avg > 0.014) g_lowq = 1;
+    double dt = (double)(SDL_GetPerformanceCounter() - d0) / freq;
+    if (dt > 0.03) dt = 0.03;
+    slow_avg = slow_avg * 0.97 + dt * 0.03;
+    if (++slow_n > 180) { if (slow_avg > 0.014) g_lowq = 1; else if (slow_avg < 0.010) g_lowq = 0; }
     SDL_UpdateTexture(tex, NULL, fb, FB_W * 4);
     SDL_RenderClear(r);
     SDL_RenderCopy(r, tex, NULL, NULL);
     SDL_RenderPresent(r);
-    // the GamePad screen changes slowly, so it is drawn every other frame (every fourth if the game is struggling)
-    if (ptex && ++pad_n % (g_lowq ? 4 : 2) == 0) {
+    // the GamePad screen changes slowly, so it is only drawn every fourth frame, leaving the time for the TV
+    if (ptex && ++pad_n % (g_lowq ? 8 : 4) == 0) {
       game_draw_pad(pfb);
       SDL_UpdateTexture(ptex, NULL, pfb, FB_W * 4);
       SDL_RenderClear(pr);
