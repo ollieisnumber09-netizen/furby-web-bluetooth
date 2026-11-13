@@ -20,6 +20,7 @@
         <li><a href='#actions'>Actions</a></li>
         <li><a href='#misc'>Misc</a></li>
         <li><a href='#dlc'>DLC Upload</a></li>
+        <li><a href='#slots'>Slots</a></li>
         <li><a href='#sensors'>Sensors</a></li>
         <li><a href='#debug'>Debug</a></li>
     </ul>
@@ -114,6 +115,15 @@
         <progress id='dlcprogress'></progress>
     </section>
 
+    <section id='slots'>
+        <h2>DLC Slots</h2>
+        <p class='hint'>The Furby holds up to 14 DLCs in numbered slots. Here you can switch any one on or off yourself, or clear a slot. Applies to whichever Furby is selected in the top bar.</p>
+        <div class='row'>
+            <button onclick='slotsRefresh()'>Refresh slots</button>
+        </div>
+        <div id='slot-list'><p class='hint'>Press "Refresh slots" once a Furby is connected.</p></div>
+    </section>
+
     <section id='sensors'>
         <h2>Sensors</h2>
         <!--<div class='row'>
@@ -201,6 +211,7 @@ function showSection(section) {
     document.querySelector('section#' + currentSection).classList.add('current');
     document.querySelector(`a[href="#${currentSection}`).classList.add('current');
     if (section == 'partner' && typeof partnerRefresh == 'function') partnerRefresh();
+    if (section == 'slots' && typeof slotsRefresh == 'function') slotsRefresh();
 }
 
 async function loadDLCIndex() {
@@ -371,6 +382,102 @@ function setupDLCButtons(dlcParams) {
         };
         container.appendChild(button);
     });
+}
+
+// ---- Manual DLC slot control ----
+// Reads the Furby's 14 DLC slots and lets you switch any one on or off,
+// or clear it, by hand. Uses the standard DLC commands (load 0x60,
+// activate 0x61, deactivate 0x62, delete 0x74) that the rest of the app
+// already uses for normal content DLCs.
+let slotsBusy = false;
+
+async function slotsRefresh() {
+    let box = document.getElementById('slot-list');
+    if (!box) return;
+    let list = targets().filter(f => f.ready);
+    if (list.length == 0) {
+        box.innerHTML = "<p class='hint'>No Furby connected. Connect one, then press Refresh slots.</p>";
+        return;
+    }
+    let f = list[0];
+    box.innerHTML = "<p class='hint'>Reading slots from " + f.name + "...</p>";
+    let prevT = sendTarget, prevC = furby_chars;
+    sendTarget = f.id; furby_chars = f.chars;
+    try {
+        let states = await getDLCInfo();
+        let rows = '';
+        for (let i = 0; i < states.length; i++) {
+            let st = states[i];
+            let label, cls;
+            if (st == SLOT_ACTIVE) { label = 'active'; cls = 'slot-active'; }
+            else if (st == SLOT_EMPTY) { label = 'empty'; cls = 'slot-empty'; }
+            else { label = 'filled'; cls = 'slot-filled'; }
+            let name = '';
+            if (st != SLOT_EMPTY) {
+                try {
+                    let info = await getDLCSlotInfo(i);
+                    if (info && info.name) name = ' — ' + info.name.replace(/^_+/, '');
+                } catch (e) {}
+            }
+            let btns = '';
+            if (st == SLOT_EMPTY) {
+                btns = "<span class='hint'>nothing loaded</span>";
+            } else if (st == SLOT_ACTIVE) {
+                btns = "<button onclick='slotDeactivate(" + i + ")'>Turn off</button>" +
+                       "<button onclick='slotDelete(" + i + ")'>Clear</button>";
+            } else {
+                btns = "<button onclick='slotActivate(" + i + ")'>Turn on</button>" +
+                       "<button onclick='slotDelete(" + i + ")'>Clear</button>";
+            }
+            rows += "<div class='row slot-row'><span class='slot-no'>Slot " + i + "</span>" +
+                    "<span class='" + cls + "'>" + label + "</span>" +
+                    "<span class='slot-name'>" + name + "</span>" + btns + "</div>";
+        }
+        let note = list.length > 1
+            ? "<p class='hint'>Showing " + f.name + "'s slots. Turn on / off / clear apply to all " + list.length + " selected Furbys.</p>"
+            : '';
+        box.innerHTML = note + rows;
+    } catch (e) {
+        box.innerHTML = "<p class='hint'>Couldn't read slots: " + (e && e.message ? e.message : e) + "</p>";
+    } finally {
+        sendTarget = prevT;
+        if (furbies.length) furby_chars = furbies[0].chars; else furby_chars = prevC;
+    }
+}
+
+async function slotAction(fn, busyMsg) {
+    if (slotsBusy || dlcUploading) { msg.error('Hang on, something is already running'); return; }
+    slotsBusy = true;
+    try {
+        msg.ok(busyMsg);
+        await forEachTarget(async (f) => { await fn(f); });
+        await slotsRefresh();
+    } catch (e) {
+        msg.error('Slot command failed: ' + (e && e.message ? e.message : e));
+    } finally {
+        slotsBusy = false;
+    }
+}
+
+function slotActivate(n) {
+    slotAction(async () => {
+        // Turn off any other active slot first so only this one is on.
+        let states = await getDLCInfo();
+        for (let i = 0; i < states.length; i++)
+            if (states[i] == SLOT_ACTIVE && i != n) { try { await deactivateDLC(i); } catch (e) {} }
+        await loadAndActivateDLC(n);
+    }, 'Turning on slot ' + n + '... (big DLCs can take up to a minute)');
+}
+
+function slotDeactivate(n) {
+    slotAction(async () => { await deactivateDLC(n); }, 'Turning off slot ' + n + '...');
+}
+
+function slotDelete(n) {
+    slotAction(async () => {
+        try { await deactivateDLC(n); } catch (e) {}
+        await deleteDLC(n);
+    }, 'Clearing slot ' + n + '...');
 }
 
 // ---- Partner Mode: two Furbies have a conversation ----

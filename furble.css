@@ -12,6 +12,15 @@ input[type=number] { font-size: 20pt }
 .row button, .row input, .row select { flex-grow: 1; margin: .2em; height: 3em}
 body *  { user-select: none }
 
+.hint { color: #666; font-size: 12pt; margin: .4em 0 }
+.slot-row { gap: .3em }
+.slot-no { font-weight: bold; min-width: 4.5em }
+.slot-name { flex-grow: 1; color: #444; font-size: 12pt }
+.slot-active { color: #0a7d00; font-weight: bold }
+.slot-filled { color: #b06a00 }
+.slot-empty { color: #999 }
+.slot-row button { flex-grow: 0; min-width: 5em; height: 2.4em }
+
 #console { 
     position: fixed; 
     bottom: 0; left: 0; 
