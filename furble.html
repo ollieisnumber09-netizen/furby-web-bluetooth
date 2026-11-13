@@ -445,17 +445,36 @@ async function slotsRefresh() {
     }
 }
 
-async function slotAction(fn, busyMsg) {
+async function slotAction(fn, busyMsg, after) {
     if (slotsBusy || dlcUploading) { msg.error('Hang on, something is already running'); return; }
     slotsBusy = true;
     try {
         msg.ok(busyMsg);
         await forEachTarget(async (f) => { await fn(f); });
         await slotsRefresh();
+        if (after) after();
     } catch (e) {
         msg.error('Slot command failed: ' + (e && e.message ? e.message : e));
     } finally {
         slotsBusy = false;
+    }
+}
+
+// Builds generic trigger buttons for a DLC that isn't in our library, so
+// we don't know its real action names. "DLC" fires its first sequence;
+// the extra buttons step through the next ones (75, k, 0, 0).
+function setupGenericDLCButtons(count) {
+    let container = document.getElementById('dlc-actions');
+    if (!container) return;
+    while (container.firstChild) container.removeChild(container.firstChild);
+    for (let k = 0; k < count; k++) {
+        let button = document.createElement('button');
+        button.textContent = k == 0 ? 'DLC' : 'DLC ' + (k + 1);
+        button.onclick = () => {
+            log('Triggering generic DLC action 75,' + k + ',0,0');
+            triggerAction(75, k, 0, 0);
+        };
+        container.appendChild(button);
     }
 }
 
@@ -466,7 +485,11 @@ function slotActivate(n) {
         for (let i = 0; i < states.length; i++)
             if (states[i] == SLOT_ACTIVE && i != n) { try { await deactivateDLC(i); } catch (e) {} }
         await loadAndActivateDLC(n);
-    }, 'Turning on slot ' + n + '... (big DLCs can take up to a minute)');
+    }, 'Turning on slot ' + n + '... (big DLCs can take up to a minute)', () => {
+        // Give him trigger buttons even if this DLC isn't in our library.
+        setupGenericDLCButtons(6);
+        showSection('actions');
+    });
 }
 
 function slotDeactivate(n) {
