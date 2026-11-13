@@ -14,6 +14,7 @@ int main(void) {
   in.right = 1; for (int i = 0; i < 60; i++) game_update(&in);
   printf("walked in: show %.2f, Dino at column %.0f (room %d..%d)\n", ROOM[r].show, px / T, ROOM[r].x0, ROOM[r].x1);
   in.right = 0; for (int i = 0; i < 10; i++) game_update(&in);
+  inv_t = 0;
   update_camera(1); game_draw(fb); memcpy(img + FB_W * FB_H, fb, sizeof fb);
   FILE* f = fopen("out/secret.ppm", "wb"); fprintf(f, "P6 %d %d 255\n", FB_W, FB_H * 2); for (int i = 0; i < FB_W * FB_H * 2; i++) { unsigned char c[3] = { img[i] >> 16, img[i] >> 8, img[i] }; fwrite(c, 1, 3, f); } fclose(f);
 }

@@ -16,8 +16,10 @@ spiky balls) or a star (X/Y throws bouncing stars). The sword, helmet and star a
 Picking up a new power-up while wearing one puts the old one in the slot on the GamePad; tap the slot
 (or press -) to drop it back down. Hold ZL or ZR to sprint, press
 L or R in the air to twirl (one spin that hangs for 0.3 seconds), and hold jump to jump higher.
-The circle in the top corner is Dino's health: each hit takes one of its three slots, and losing
-the last one costs a life. Dino is safe for a moment after respawning and after grabbing a power-up. Each kind of area has its own song (14 in all).
+The circle in the top corner is Dino's health: a hit knocks off his power-up if he has one, otherwise
+it takes one of the three slots, and losing the last one costs a life. Grabbing the power-up he already
+has gives one slot back. Leaving a level any way but the flag leaves behind the coins, lives and
+power-ups found in it. Green bubbles with a little Dino inside are 1-ups. Dino is safe for a moment after respawning and after grabbing a power-up. Each kind of area has its own song (14 in all).
 Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).
 
 ## Put it on the Wii U (Aroma)

@@ -419,7 +419,8 @@ static int goal_x, goal_y;
 
 static int state, frame, lives, bananas, total_bananas, state_t;
 static float px, py, pvx, pvy, camx, camy;
-static int hp = 3;   // health: three hits and he is out
+static int hp = 3, oneup_t; static float oneup_x, oneup_y;
+static int entry_lives, entry_coins, entry_total, entry_power, entry_slot;   // what Dino had when he went into the level   // health: three hits and he is out
 static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 // walking speed, top sprinting speed (built up over RUN_RAMP ticks of holding a back trigger), gravity while jump is held
 #ifndef WALK_V
@@ -838,7 +839,7 @@ static void land_piece(int k) {
       for (int i = 0; i < 10; i++) colm(x + i, GY - 2);
       for (int i = 1; i < 9; i++) { SET(x + i, GY - 1, ' '); FAKE[GY - 1][x + i] = GC; }
       SET(x, GY - 1, GC); FAKE[GY - 1][x] = GC;
-      coin_row(x + 1, GY - 1, 8);
+      coin_row(x + 1, GY - 1, 7); SET(x + 8, GY - 1, '1');   // a 1-up at the back of the room
       GX += 10; flat(3);
       if (grnd(2)) box(x + 4, GY - 6, power_kind());
       break;
@@ -1033,6 +1034,17 @@ static void build_level(int n) {
   int x = GX; flat(12);
   goal_x = x + 6; goal_y = GY - 1;
   LW = GX;
+  // every level that has no hidden room still gets a 1-up: high on a plank, or out in open water
+  int n1 = 0; for (int y = 0; y < LH; y++) for (int x2 = 0; x2 < LW; x2++) n1 += G[y][x2] == '1';
+  if (!n1 && bk < 0) {
+    int best = -1, by = 0, cnt = 0;
+    for (int x2 = LW / 3; x2 < LW - 20; x2++) for (int y = 2; y < LH - 1; y++) {
+      int ok = water ? G[y][x2] == ' ' && y > 3 && y < 12 && G[y + 1][x2] == ' ' && G[y - 1][x2] == ' '
+                     : G[y + 1][x2] == '=' && G[y][x2] == ' ' && G[y - 1][x2] == ' ';
+      if (ok && grnd(++cnt) == 0) { best = x2; by = y; }
+    }
+    if (best >= 0) SET(best, by, '1');
+  }
 }
 
 static void load_level(int n) {
@@ -1094,6 +1106,7 @@ static void respawn(void) {
 }
 
 static void start_level(int n) {
+  entry_lives = lives; entry_coins = bananas; entry_total = total_bananas; entry_power = power; entry_slot = slot;
   load_level(n);
   // reset enemy spawn positions to the level's original ones
   respawn();
@@ -1114,9 +1127,9 @@ void game_init(void) {
 static void hurt_ex(int pit) {
   if (dead_t) return;
   if (!pit && inv_t) return;
-  if (!pit && hp > 1) {
-    // a hit takes one slot of health
-    hp--;
+  if (!pit && (power || hp > 1)) {
+    // a hit knocks off the power-up if he has one, otherwise it takes one slot of health
+    if (power) power = 0; else hp--;
 #ifdef TRACE
     printf("lost power at x=%.0f\n", px / 16);
 #endif
@@ -1350,6 +1363,10 @@ static void update_player(const Input* in) {
   for (int ty = y0; ty <= y1; ty++) for (int tx = x0; tx <= x1; tx++) {
     char c = tile(tx, ty);
     if (c == 'o') collect(tx, ty);
+    else if (c == '1') {   // a 1-up
+      G[ty][tx] = WET[ty][tx] ? 'w' : ' '; lives++; oneup_t = 70; oneup_x = tx * T; oneup_y = ty * T;
+      plat_sfx(SFX_LIFE); spawn_parts(tx * T + 8, ty * T + 8, 18, 0xFF7FE06A, 2.2f, 0.6f);
+    }
     else if (c == 'K') {
       G[ty][tx] = WET[ty][tx] ? 'w' : ' '; keyp |= 1 << BOXK[ty][tx];
       plat_sfx(SFX_LIFE); spawn_parts(tx * T + 8, ty * T + 8, 16, 0xFFFFD84A, 2.2f, 0.6f);
@@ -1384,10 +1401,11 @@ static void update_player(const Input* in) {
       ROOM[r].show = clampf(ROOM[r].show, 0, 1);
     }
   }
+  if (oneup_t) oneup_t--;
   if (door_msg_t) door_msg_t--;
   if (key_msg_t) key_msg_t--;
   // goal: a flag on a pole, touch anywhere on the pole
-  if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5) {
+  if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5 && py + PH > goal_y * T - 50 && py < goal_y * T + T) {   // touching the pole, not passing under or over it
     state = ST_CLEAR; state_t = 0; plat_sfx(SFX_CLEAR);
     spawn_parts(goal_x * T + 8, goal_y * T - 32, 24, 0xFFF7D038, 2.5f, 0.5f);
   }
@@ -1505,6 +1523,7 @@ static void update_ents(void) {
       }
       if (!dead_t && state == ST_PLAY && px + PW > e->x && px < e->x + 12 && py + PH > e->y && py < e->y + 12) {
         if (power && power != e->k) slot = power;   // the one he had goes into the slot
+        if (power == e->k && hp < 3) hp++;          // the same one again: one slot of health back
         power = e->k; e->alive = 0; air_jumps = 1; if (inv_t < 60) inv_t = 60;
 #ifdef TRACE
         printf("got power %d at x=%.0f\n", power, px / 16);
@@ -1750,7 +1769,11 @@ void game_update(const Input* in) {
       break;
     case ST_PAUSE:
       if (sp) { state = ST_PLAY; plat_sfx(SFX_SELECT); }
-      else if (in->down && !prev_down) { state = ST_MAP; state_t = 0; map_t = 99; }
+      else if (in->down && !prev_down) {   // leaving without the flag: anything picked up in there is left behind
+        if (lives > entry_lives) lives = entry_lives;
+        bananas = entry_coins; total_bananas = entry_total; power = entry_power; slot = entry_slot;
+        state = ST_MAP; state_t = 0; map_t = 99;
+      }
       break;
     case ST_CLEAR:
       update_parts(); dino_tick();
@@ -1770,7 +1793,7 @@ void game_update(const Input* in) {
         if ((in->left && !prev_left) || (in->right && !prev_right) || (in->up && !prev_up) || (in->down && !prev_down)) { over_sel ^= 1; plat_sfx(SFX_WALL); }
         if (jp || sp) {
           plat_sfx(SFX_SELECT);
-          if (over_sel == 0) { lives = 3; start_level(lvl); update_camera(1); }
+          if (over_sel == 0) { lives = 3; bananas = entry_coins; total_bananas = entry_total; slot = entry_slot; start_level(lvl); update_camera(1); }
           else { state = ST_TITLE; state_t = 0; }
         }
       }
@@ -1948,6 +1971,13 @@ static void draw_world(void) {
       if (c == ' ' || c == '#' || c == 'X' || tx < 0 || tx >= LW) continue;
       int X = tx * HT - CX, Y = ty * HT - CY;
       if (c == 'o') hblit(&HD_COIN[(frame / 2 + tx * 5) % COIN_FRAMES], X, Y + (int)lroundf(sinf((frame + tx * 9) * 0.08f) * 2), 0);
+      else if (c == '1') {   // a 1-up: a little Dino in a green bubble
+        static Bmp up_dino;
+        if (!up_dino.px) { DinoPose p; dino_idle_pose(&p, 50); p.mood = 4; p.mouth = 1; dino3d(&up_dino, &p, 0.3f, 0.62f); }
+        float bob = sinf((frame + tx * 9) * 0.08f) * 3, cx = X + 16, cy = Y + 14 + bob;
+        fb_dot(cx, cy, 18, 0xFF2A7A2E, 0.5f); fb_dot(cx, cy, 16, 0xFF9BE37A, 0.3f); fb_dot(cx - 6, cy - 7, 3.5f, 0xFFFFFFFF, 0.7f);
+        hblit(&up_dino, (int)cx - (int)(36 * 0.62f), (int)(cy + 17) - (int)(64 * 0.62f), 0);
+      }
       else if (c == '?') hblit(&HD_QBOX[0], X - 4, Y - 6, 0);
       else if (c == 'u') hblit(&HD_QBOX[1], X - 4, Y - 6, 0);
       else if (c == 'k') hblit(&HD_CRACK, X, Y, 0);
@@ -2182,6 +2212,7 @@ static void draw_hud(void) {
     }
     if (keyp == 7 && (frame / 20) % 2) fb_dot(36, 66, 26, 0xFFFFF2A0, 0.15f);
   }
+  if (oneup_t) { float k = (70 - oneup_t) * 0.5f; text("1UP", (int)(oneup_x - camx) - 2, (int)(oneup_y - camy - 6 - k), 2, (oneup_t / 4) % 2 ? 0xFF9BE37A : 0xFFFFFFFF); }
   if (door_msg_t) text_c("FIND ALL 3 KEY PIECES TO OPEN THE DOOR", 32, 1, 0xFFFFF4C2);
   else if (key_msg_t) text_c("YOU MADE THE KEY! NOW OPEN THE DOOR", 32, 1, 0xFFFFD84A);
   if (boss_awake && boss_i >= 0) {

@@ -114,6 +114,7 @@ static int analyse(int door_open, int* keys_out) {
 int main(int argc, char** argv) {
   game_init();
   if (getenv("SPRINT")) VMAX = RUN_V;
+  int tot1 = 0;
   int bad = 0, from = argc > 1 ? atoi(argv[1]) - 1 : 0, to = argc > 2 ? atoi(argv[2]) : NLEVELS;
   for (int n = from; n < to; n++) {
     start_level(n);
@@ -128,7 +129,11 @@ int main(int argc, char** argv) {
     if (!fine) bad++;
     // the furthest place reached, to show where it gets stuck
     int far = 0; for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (got[y][x] && x > far) far = x;
-    printf("%-26s keys %d/%d  %s%s  (got to column %d of %d)\n", L->name, keys, nk, fine ? "OK" : "STUCK", note, far, LW);
+    int n1 = 0, g1 = 0; for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (G[y][x] == '1') { n1++; g1 += got[y][x]; }
+    if (g1 < n1) { bad++; note = " (1-UP OUT OF REACH)"; }
+    tot1 += n1;
+    printf("%-26s keys %d/%d  1-ups %d  %s%s  (got to column %d of %d)\n", L->name, keys, nk, n1, fine ? "OK" : "STUCK", note, far, LW);
   }
+  printf("%d 1-ups in all\n", tot1);
   printf("%d levels with problems\n", bad);
 }
