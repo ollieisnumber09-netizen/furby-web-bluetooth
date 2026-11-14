@@ -1,5 +1,10 @@
 [
     {
+        "file": "MEEPS.DLC",
+        "title": "Meep on every sound (like test S: can lock up in wake-up until reset)",
+        "buttons": []
+    },
+    {
         "file": "SCREAMS.DLC",
         "title": "Scream on every sound (test S: gets stuck in wake-up until reset)",
         "buttons": []
