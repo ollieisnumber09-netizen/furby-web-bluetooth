@@ -6,13 +6,6 @@
             {
                 "title": "Pocket Robin",
                 "action": [
-                    75,
-                    0,
-                    0,
-                    0
-                ]
-            }
-        ]
     },
     {
         "file": "ORNGEYES.DLC",
