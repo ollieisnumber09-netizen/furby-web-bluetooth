@@ -1,5 +1,20 @@
 [
     {
+        "file": "POCKROB.DLC",
+        "title": "Pocket Robin (plays + beak move on his reactions)",
+        "buttons": [
+            {
+                "title": "Pocket Robin",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
+        ]
+    },
+    {
         "file": "ORNGEYES.DLC",
         "title": "Orange eyes (code DLC: WARNING DO NOT ACTIVATE TEST ONLY)",
         "buttons": []
@@ -8,21 +23,45 @@
         "file": "BADAPL.DLC",
         "title": "Bad Apple (silhouette eyes + song)",
         "buttons": [
-            { "title": "Bad Apple", "action": [75, 0, 0, 0] }
+            {
+                "title": "Bad Apple",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "P1CHAT.DLC",
         "title": "Partner chat \u2014 Person 1",
         "buttons": [
-            { "title": "person 1 line", "action": [75, 0, 0, 0] }
+            {
+                "title": "person 1 line",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "P2CHAT.DLC",
         "title": "Partner chat \u2014 Person 2",
         "buttons": [
-            { "title": "person 2 line", "action": [75, 0, 0, 0] }
+            {
+                "title": "person 2 line",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
@@ -34,155 +73,339 @@
         "file": "djintr2.dlc",
         "title": "DJ intro v2 (full frames, orange idle)",
         "buttons": [
-            { "title": "dj intro", "action": [75, 0, 0, 0] }
+            {
+                "title": "dj intro",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "djintro.dlc",
         "title": "DJ intro (orange)",
         "buttons": [
-            { "title": "dj intro", "action": [75, 0, 0, 0] }
+            {
+                "title": "dj intro",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "stickpr3.dlc",
         "title": "Stick man personality v3",
         "buttons": [
-            { "title": "stick man intro", "action": [75, 0, 0, 0] }
+            {
+                "title": "stick man intro",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "orngbig.dlc",
         "title": "Orange eyes on his reactions BIG",
         "buttons": [
-            { "title": "Test: orange eyes", "action": [75, 0, 0, 1] }
+            {
+                "title": "Test: orange eyes",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    1
+                ]
+            }
         ]
     },
     {
         "file": "orngmid.dlc",
         "title": "Orange eyes on his reactions MEDIUM",
         "buttons": [
-            { "title": "Test: orange eyes", "action": [75, 0, 0, 1] }
+            {
+                "title": "Test: orange eyes",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    1
+                ]
+            }
         ]
     },
     {
         "file": "orange4.dlc",
         "title": "Orange eyes on his reactions v4",
         "buttons": [
-            { "title": "Test: orange eyes", "action": [75, 0, 0, 1] }
+            {
+                "title": "Test: orange eyes",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    1
+                ]
+            }
         ]
     },
     {
         "file": "basetest.dlc",
         "title": "TEST: built-in reaction",
         "buttons": [
-            { "title": "1: his own reaction", "action": [75, 0, 0, 0] },
-            { "title": "2: his own voice + orange eyes", "action": [75, 0, 0, 1] }
+            {
+                "title": "1: his own reaction",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            {
+                "title": "2: his own voice + orange eyes",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    1
+                ]
+            }
         ]
     },
     {
         "file": "eyepink.dlc",
         "title": "Pink eyes (20 s)",
         "buttons": [
-            { "title": "pink eyes", "action": [75, 0, 0, 0] }
+            {
+                "title": "pink eyes",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "spidey.dlc",
         "title": "Spider-Man polyester edit",
         "buttons": [
-            { "title": "spidey", "action": [75, 0, 0, 0] }
+            {
+                "title": "spidey",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "loki.dlc",
         "title": "Loki edit",
         "buttons": [
-            { "title": "loki", "action": [75, 0, 0, 0] }
+            {
+                "title": "loki",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "rickqr.dlc",
         "title": "Rickroll QR v2",
         "buttons": [
-            { "title": "rickroll", "action": [75, 0, 0, 0] }
+            {
+                "title": "rickroll",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "bird.dlc",
         "title": "Meep meep bird",
         "buttons": [
-            { "title": "meep meep", "action": [75, 0, 0, 0] }
+            {
+                "title": "meep meep",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "hands.dlc",
         "title": "Sissy boy hands",
         "buttons": [
-            { "title": "sissy boy hands", "action": [75, 0, 0, 0] }
+            {
+                "title": "sissy boy hands",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "phone.dlc",
         "title": "Phone ringing",
         "buttons": [
-            { "title": "phone ringing", "action": [75, 0, 0, 0] }
+            {
+                "title": "phone ringing",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "catintro.dlc",
         "title": "Cat intro (orange)",
         "buttons": [
-            { "title": "cat intro", "action": [75, 0, 0, 0] }
+            {
+                "title": "cat intro",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "timing.dlc",
         "title": "Timing test",
         "buttons": [
-            { "title": "timing", "action": [75, 0, 0, 0] }
+            {
+                "title": "timing",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "seany.dlc",
         "title": "Seany weeny edit",
         "buttons": [
-            { "title": "seany weeny", "action": [75, 0, 0, 0] }
+            {
+                "title": "seany weeny",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "lapeace.dlc",
         "title": "La peace",
         "buttons": [
-            { "title": "lapeace", "action": [75, 0, 0, 0] }
+            {
+                "title": "lapeace",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "pigeon.dlc",
         "title": "Dancing pigeon",
         "buttons": [
-            { "title": "pigeon", "action": [75, 0, 0, 0] }
+            {
+                "title": "pigeon",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "oiiacat.dlc",
         "title": "OIIA cat",
         "buttons": [
-            { "title": "oiia cat", "action": [75, 0, 0, 0] }
+            {
+                "title": "oiia cat",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "eyestick.dlc",
         "title": "Stick full x2",
         "buttons": [
-            { "title": "stick full", "action": [75, 0, 0, 0] }
+            {
+                "title": "stick full",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     },
     {
         "file": "furby67.dlc",
         "title": "Furby 67",
         "buttons": [
-            { "title": "furby67", "action": [75, 0, 0, 0] }
+            {
+                "title": "furby67",
+                "action": [
+                    75,
+                    0,
+                    0,
+                    0
+                ]
+            }
         ]
     }
 ]
