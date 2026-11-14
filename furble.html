@@ -123,7 +123,11 @@
         <p class='hint'>The Furby holds up to 14 DLCs in numbered slots. Here you can switch any one on or off yourself, or clear a slot. Applies to whichever Furby is selected in the top bar.</p>
         <div class='row'>
             <button onclick='slotsRefresh()'>Refresh slots</button>
+            <button onclick='furbyHealthCheck()'>Health check</button>
+            <button onclick='furbyDeepClean()'>Deep clean</button>
         </div>
+        <p class='hint'>Health check compares what is stored on the Furby with the files in the library. Deep clean wipes all 14 slots, even ones that look empty.</p>
+        <div id='health-report'></div>
         <div id='slot-list'><p class='hint'>Press "Refresh slots" once a Furby is connected.</p></div>
     </section>
 
@@ -497,6 +501,101 @@ function slotActivate(n) {
 
 function slotDeactivate(n) {
     slotAction(async () => { await deactivateDLC(n); }, 'Turning off slot ' + n + '...');
+}
+
+// ---- Health check and deep clean ----
+function healthLine(text, cls) {
+    let box = document.getElementById('health-report');
+    let p = document.createElement('p');
+    p.className = cls || 'hint';
+    p.textContent = text;
+    box.appendChild(p);
+    log('[health] ' + text);
+}
+
+// Reads the firmware version and every slot, then checks each stored DLC's
+// length and checksum against the matching file in the library.
+async function furbyHealthCheck() {
+    if (slotsBusy || dlcUploading) { msg.error('Hang on, something is already running'); return; }
+    let list = targets().filter(f => f.ready);
+    let box = document.getElementById('health-report');
+    box.innerHTML = '';
+    if (list.length == 0) { healthLine('No Furby connected.'); return; }
+    slotsBusy = true;
+    let f = list[0], prevT = sendTarget;
+    sendTarget = f.id; furby_chars = f.chars;
+    let problems = 0;
+    try {
+        healthLine('Checking ' + f.name + '...');
+        try { healthLine('Firmware version: ' + await getFirmwareVersion()); }
+        catch (e) { problems++; healthLine('Could not read firmware version: ' + e.message, 'slot-filled'); }
+        let states = await getDLCInfo();
+        let used = 0, active = 0;
+        for (let i = 0; i < states.length; i++) {
+            if (states[i] == SLOT_EMPTY) continue;
+            used++;
+            if (states[i] == SLOT_ACTIVE) active++;
+            let info;
+            try { info = await getDLCSlotInfo(i); }
+            catch (e) { problems++; healthLine('Slot ' + i + ': Furby did not answer (' + e.message + ')', 'slot-filled'); continue; }
+            let name = (info.name || '').replace(/^_+/, '').replace(/\0/g, '').trim().toUpperCase();
+            let label = 'Slot ' + i + ' (' + (states[i] == SLOT_ACTIVE ? 'active' : 'filled') + ') "' + name + '", ' + (info.len || 0) + ' bytes';
+            if (!info.len) { problems++; healthLine(label + ': marked as used but has no data. Clear it.', 'slot-filled'); continue; }
+            let file = Object.keys(dlcdata).find(k => k.replace(/\.dlc$/i, '').toUpperCase().substr(0, 8) == name);
+            if (!file) { healthLine(label + ': not in the library, cannot compare.'); continue; }
+            try {
+                let buf = await fetchDLC('dlc/' + file);
+                let sum = adler32(buf);
+                if (buf.byteLength != info.len) {
+                    problems++; healthLine(label + ': WRONG SIZE, library file is ' + buf.byteLength + ' bytes. Upload was cut short or it is an older version.', 'slot-filled');
+                } else if (sum != info.checksum) {
+                    problems++; healthLine(label + ': CORRUPT, checksum does not match the library file.', 'slot-filled');
+                } else {
+                    healthLine(label + ': matches the library file.', 'slot-active');
+                }
+            } catch (e) { healthLine(label + ': could not fetch ' + file + ' to compare.'); }
+        }
+        if (used == 0) healthLine('All 14 slots are empty.');
+        if (active > 1) { problems++; healthLine(active + ' slots are active at once, only one should be. Run Deep clean.', 'slot-filled'); }
+        healthLine(problems ? problems + ' problem(s) found. Run Deep clean, then upload again.'
+                            : 'No problems found in what the Furby reports.', problems ? 'slot-filled' : 'slot-active');
+    } catch (e) {
+        healthLine('Health check stopped: ' + (e && e.message ? e.message : e), 'slot-filled');
+    } finally {
+        sendTarget = prevT;
+        if (furbies.length) furby_chars = furbies[0].chars;
+        slotsBusy = false;
+    }
+}
+
+// Deactivates and deletes all 14 slots without trusting the Furby's own
+// report of which ones are in use.
+async function furbyDeepClean() {
+    if (slotsBusy || dlcUploading) { msg.error('Hang on, something is already running'); return; }
+    let box = document.getElementById('health-report');
+    box.innerHTML = '';
+    slotsBusy = true;
+    try {
+        await forEachTarget(async (f) => {
+            healthLine('Deep cleaning ' + f.name + '...');
+            let noReply = 0;
+            for (let i = 0; i < 14; i++) {
+                msg.ok('Deep clean: slot ' + i + ' of 13');
+                try { await deactivateDLC(i); } catch (e) {}
+                try { await deleteDLC(i); } catch (e) { noReply++; }
+            }
+            let states = await getDLCInfo();
+            let left = states.filter(x => x != SLOT_EMPTY).length;
+            healthLine(left == 0 ? f.name + ': all 14 slots are empty now.' + (noReply ? ' (' + noReply + ' gave no reply, which is normal for empty slots)' : '')
+                                 : f.name + ': ' + left + ' slot(s) would not clear.', left == 0 ? 'slot-active' : 'slot-filled');
+        });
+        msg.ok('Deep clean finished');
+    } catch (e) {
+        healthLine('Deep clean stopped: ' + (e && e.message ? e.message : e), 'slot-filled');
+    } finally {
+        slotsBusy = false;
+    }
+    await slotsRefresh();
 }
 
 function slotDelete(n) {
