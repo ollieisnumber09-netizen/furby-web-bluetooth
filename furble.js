@@ -701,8 +701,40 @@ async function checkActiveSlot() {
     }
 }
 
+// ---- Reaction mode ----
+// When on, any new touch/tilt/tail/tongue event fires the active DLC's
+// first sequence (75/0/0/0), so a content DLC's sound plays as his
+// "reaction". Runs in the page, so the phone has to stay connected.
+var reactionMode = false;
+var lastReactionState = {};
+var lastReactionAt = 0;
+const REACTION_COOLDOWN_MS = 1500;
+const REACTION_KEYS = ['tickle_head_back','tickle_tummy','tickle_right_side','tickle_left_side','pull_tail','push_tongue'];
+function setReactionMode(on) {
+    reactionMode = on;
+    lastReactionState = {};
+    log('Reaction mode ' + (on ? 'on' : 'off'));
+    if (typeof msg != 'undefined') msg.ok(on ? 'Reaction mode on: touch him!' : 'Reaction mode off');
+}
+function checkReaction(state) {
+    if (!reactionMode) return;
+    let fired = false;
+    for (let k of REACTION_KEYS)
+        if (state[k] && !lastReactionState[k]) fired = true;
+    if (state.orientation && lastReactionState.orientation !== undefined &&
+        state.orientation != lastReactionState.orientation && state.orientation != 'upright') fired = true;
+    lastReactionState = state;
+    let now = performance.now();
+    if (fired && now - lastReactionAt > REACTION_COOLDOWN_MS) {
+        lastReactionAt = now;
+        log('Reaction mode: playing DLC sound');
+        triggerAction(75, 0, 0, 0).catch(e => log('reaction trigger failed: ' + e));
+    }
+}
+
 function onFurbySensorData(buf) {
     let state = decodeFurbyState(buf);
+    checkReaction(state);
     console.log(state);
     let ul = document.getElementById('sensor-state');
     //ul.outerHTML = '<ul></ul>';
