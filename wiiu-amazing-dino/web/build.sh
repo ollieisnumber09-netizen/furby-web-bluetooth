@@ -2,7 +2,7 @@
 # Builds the phone/browser version: web/out/amazing-dino.html plus music.wav (music.bin with a 44-byte header).
 # Needs Emscripten (emcc) and python3. Run from the wiiu-amazing-dino folder.
 set -e
-F="-O3 -ffast-math -w -DMUSIC_BIN_PATH=\"x\" -DMUSIC_PTR -DSAVE_PATH=\"/save.txt\" src/game.c web/web_main.c -sMODULARIZE=1 -sSINGLE_FILE=1 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS -sEXPORTED_FUNCTIONS=_malloc,_web_init,_web_tick,_web_draw,_web_audio -sENVIRONMENT=web"
+F="-O3 -ffast-math -w -DMUSIC_BIN_PATH=\"x\" -DMUSIC_PTR -DSAVE_PATH=\"/save.txt\" src/game.c web/web_main.c -sMODULARIZE=1 -sSINGLE_FILE=1 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS -sEXPORTED_FUNCTIONS=_malloc,_web_init,_web_tick,_web_draw,_web_audio,_web_layers,_web_layer_px -sENVIRONMENT=web"
 mkdir -p web/out
 emcc $F -sEXPORT_NAME=DinoModule -o web/out/dino.js
 emcc $F -sWASM=0 -sEXPORT_NAME=DinoModuleJS -o web/out/dinojs.js

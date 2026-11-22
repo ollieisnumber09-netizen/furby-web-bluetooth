@@ -192,10 +192,52 @@ canvas {
 
   // ---- picture
   var lowq = 0, drawAvg = 0, frames = 0;
+  // In a level the background and the level picture are canvases the browser draws (on the graphics
+  // chip); the game's own picture goes on top, see-through where they show.
+  var top = document.createElement('canvas'); top.width = 640; top.height = 360; var topx = top.getContext('2d');
+  var L = { bgv: -1, lvv: -1, far: null, near: null, sun: null, lv: [] };
+  function layerCanvas(which, w, h) {
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var p = mod._web_layer_px(which), id = c.getContext('2d').createImageData(w, h);
+    id.data.set(new Uint8ClampedArray(mod.HEAPU8.buffer, p, w * h * 4));
+    c.getContext('2d').putImageData(id, 0, 0);
+    return c;
+  }
+  function strip(c, bgw, scroll, sy, sh, dy, dh) {
+    if (!c || sh <= 0 || dh <= 0) return;
+    var n1 = Math.min(bgw - scroll, 640);
+    ctx2d.drawImage(c, scroll, sy, n1, sh, 0, dy, n1, dh);
+    if (n1 < 640) ctx2d.drawImage(c, 0, sy, 640 - n1, sh, n1, dy, 640 - n1, dh);
+  }
   function draw() {
     var t0 = performance.now(), p = mod._web_draw(lowq);
+    var v = new Int32Array(mod.HEAPU8.buffer, mod._web_layers(), 19);
+    var bg = v[0], lev = v[1];
     img.data.set(new Uint8ClampedArray(mod.HEAPU8.buffer, p, 640 * 360 * 4));
-    ctx2d.putImageData(img, 0, 0);
+    if (!bg && !lev) { ctx2d.putImageData(img, 0, 0); }
+    else {
+      var bgw = v[4], bgh = v[5];
+      if (bg && v[2] !== L.bgv) { L.far = layerCanvas(0, bgw, bgh); L.near = layerCanvas(1, bgw, bgh); L.bgv = v[2]; L.sunk = ''; }
+      if (bg) { var sk = v[10] + ',' + v[13]; if (sk !== L.sunk) { L.sun = v[10] ? layerCanvas(2, v[13], v[14]) : null; L.sunk = sk; } }
+      if (lev && v[3] !== L.lvv) { L.lv = []; for (var x = 0, k = 0; x < v[15]; x += 1024, k++) L.lv.push(layerCanvas(3 + k, Math.min(1024, v[15] - x), v[16])); L.lvv = v[3]; }
+      ctx2d.fillStyle = '#000'; ctx2d.fillRect(0, 0, 640, 360);
+      if (bg) {
+        var fy = v[7], y0 = Math.max(0, fy), y1 = Math.min(360, fy + bgh);
+        if (fy > 0) strip(L.far, bgw, v[6], 0, 1, 0, fy);
+        strip(L.far, bgw, v[6], y0 - fy, y1 - y0, y0, y1 - y0);
+        if (y1 < 360) strip(L.far, bgw, v[6], bgh - 1, 1, y1, 360 - y1);
+        if (L.sun) ctx2d.drawImage(L.sun, v[11], v[12]);
+        var ny = v[9]; y0 = Math.max(0, ny); y1 = Math.min(360, ny + bgh);
+        strip(L.near, bgw, v[8], y0 - ny, y1 - y0, y0, y1 - y0);
+        if (y1 < 360) strip(L.near, bgw, v[8], bgh - 1, 1, y1, 360 - y1);
+      }
+      if (lev) for (var i = 0; i < L.lv.length; i++) {
+        var dx = i * 1024 - v[17];
+        if (dx < 640 && dx + L.lv[i].width > 0) ctx2d.drawImage(L.lv[i], dx, -v[18]);
+      }
+      topx.putImageData(img, 0, 0);
+      ctx2d.drawImage(top, 0, 0);
+    }
     drawAvg = drawAvg * 0.95 + (performance.now() - t0) * 0.05;
     if (++frames > 120 && drawAvg > 12) lowq = 1;
   }
