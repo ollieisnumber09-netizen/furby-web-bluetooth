@@ -407,6 +407,20 @@ static Bmp CRIT_C[NCRIT][2][8], HD_FPLAT, HD_DOOR, HD_KEYP, HD_PLAT, HD_CRACK, H
 static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
 static int LW, LH, lvl;
 static const Level* L;
+// ---- stages: a level can have two, side by side in the same map. In some land levels there is a
+// back stage, far off behind the front one; in a water level, the grassy shore and then the water.
+// A cannon shoots Dino from one to the other.
+typedef struct { int x0, x1, back, lake; const Level* lv; } Stage;
+static Stage STG[2]; static int nstg = 1, cur_stg;
+static Level STG_LV[2];
+typedef struct { int tx, ty, dx, dy; } Cannon;   // stands on columns tx, tx+1 with its foot in row ty; lands Dino at column dx, row dy
+#define MAXCAN 4
+static Cannon CAN[MAXCAN]; static int ncan, can_t, can_i;   // can_t counts through a cannon ride
+static float can_fx, can_fy;   // where Dino starts falling in at the end of the ride
+int bg_lake;
+static int stage_of(float x) { for (int i = nstg - 1; i > 0; i--) if (x >= STG[i].x0 * T) return i; return 0; }
+static void set_stage(int s) { cur_stg = s; L = STG[s].lv; bg_lake = STG[s].lake; }
+static int stage_water(int tx) { return STG[stage_of(tx * (float)T + 1)].lv->theme == 9; }
 #define MAXENT 420
 static Bmp FLAKE[3];
 int g_lowq;   // set by the platform when frames are taking too long: draw Dino the quick way
@@ -422,6 +436,7 @@ static int state, frame, lives, bananas, total_bananas, state_t;
 static float px, py, pvx, pvy, camx, camy;
 static int hp = 3, oneup_t; static float oneup_x, oneup_y;
 static int entry_lives, entry_coins, entry_total, entry_power, entry_slot;   // what Dino had when he went into the level   // health: three hits and he is out
+static int ouch_t;   // how long Dino still pulls his hurt face
 static int spring_up, power, inv_t, atk_t, atk_cd, air_jumps, prev_atk;
 // walking speed, top sprinting speed (built up over RUN_RAMP ticks of holding a back trigger), gravity while jump is held
 #ifndef WALK_V
@@ -1036,6 +1051,8 @@ static void more_foes(int x0, int x1, int water) {
     if (y < 0) continue;
     while (run < 9 && x + run < x1 && surface(x + run) == y) run++;
     if (run < 9 || x - last < (water ? 26 : 16) || foe_near(x + 4, 7)) continue;
+    for (int i = 0; i < ncan; i++) if (CAN[i].tx > x - 8 && CAN[i].tx < x + 16) run = 0;
+    if (!run) continue;
     for (int c = x; c < x + 9; c++) if (G[y - 1][c] == 'c' || G[y - 1][c] == 's' || G[y - 1][c] == '^') { run = 0; break; }
     if (!run) continue;
     int t = water ? (grnd(2) ? E_CRAB : E_FISH) : POOL_G[g_world][grnd(6)];
@@ -1051,68 +1068,160 @@ static void more_foes(int x0, int x1, int water) {
   }
 }
 
+static void wall_cols(int n) { for (int i = 0; i < n; i++) { for (int y = 0; y < LH; y++) SET(GX, y, 'X'); GX++; } }
+static void add_cannon(int tx, int ty) { if (ncan < MAXCAN) { CAN[ncan].tx = tx; CAN[ncan].ty = ty; CAN[ncan].dx = CAN[ncan].dy = 0; ncan++; } }
+static void pick_piece(int* last, int* last2, int back) {
+  int tot = 0, k = 0;
+  #define PW_OK(i) ((i) != *last && (i) != *last2 && !(back && ((i) == P_HELMET || (i) == P_SECRET)))
+  for (int i = 0; i < NPIECE; i++) if (PW_OK(i)) tot += piece_weight(i);
+  int r = grnd(tot > 0 ? tot : 1);
+  for (k = 0; k < NPIECE; k++) { if (!PW_OK(k)) continue; r -= piece_weight(k); if (r < 0) break; }
+  #undef PW_OK
+  if (k >= NPIECE) k = P_RUN;
+  *last2 = *last; *last = k;
+  land_piece(k);
+}
 static void build_level(int n) {
   boss_i = -1; boss_awake = boss_dead = 0; g_boss_music = 0;
+  const Level* B = L;
   int water = L->theme == 9, bk = boss_kind(n);
   g_world = n / 8; g_n = n; g_diff = n / 55.0f;
-  LH = water ? 20 : 24;
-  g_top = water ? 9 : 7; g_bot = water ? 17 : 20;
-  GC = cave_theme() ? 'X' : '#';
   gen_seed = 2654435761u ^ (uint32_t)(n * 7919 + 17);
-  GX = 0; GY = water ? 16 : 18;
+  int th0 = L->theme;
+  int has_back = bk < 0 && !water && n >= 1 && th0 != 1 && th0 != 2 && th0 != 6 && n % 3 != 1;
+  nstg = 1; STG[0].x0 = 0; STG[0].x1 = MAXW; STG[0].back = STG[0].lake = 0; STG[0].lv = B; ncan = 0;
+  LH = water ? 20 : 24;
+  GX = 0;
+  if (water) {   // a water level starts on a grassy shore, with the lake behind
+    STG_LV[0] = LEVELS[g_world * 8];
+    STG_LV[0].name = B->name; for (int i = 0; i < 4; i++) STG_LV[0].signs[i] = B->signs[i];
+    STG[0].lv = L = &STG_LV[0]; STG[0].lake = 1;
+    g_top = 10; g_bot = 17; GY = 16;
+  } else { g_top = 7; g_bot = 20; GY = 18; }
+  GC = cave_theme() ? 'X' : '#';
   // the start, with any signs
   int start_w = 10 + (L->signs[0] ? 6 : 0) + (L->signs[1] ? 5 : 0) + (L->signs[2] ? 5 : 0);
   flat(start_w);
   start_x = 3 * T + 3; start_y = (GY - 1) * T + T - PH;
   for (int i = 0; i < 3 && L->signs[i]; i++) { sign_x[i] = 7 + i * 5; sign_y[i] = GY - 1; nsigns = i + 1; }
-  int len = bk >= 0 ? 300 : water ? 380 + (int)(g_diff * 50) : 470 + (int)(g_diff * 70);
+  int last = -1, last2 = -1, x;
+  if (water) {
+    static const signed char SHORE[5] = { P_RUN, P_BOXES, P_STEP, P_GAP, P_STONE };
+    while (GX < start_w + 46) { int k = SHORE[grnd(5)]; if (k == last) k = P_RUN; last = k; land_piece(k); }
+    while (GY < 15) { flat(3); ground_step(1); }
+    while (GY > 17) { flat(3); ground_step(-1); }
+    x = GX; flat(13);
+    add_cannon(x + 6, GY - 1); coin_arc(x + 1, GY - 3, 4);
+    STG[0].x1 = GX; wall_cols(2);
+    nstg = 2; STG[1].x0 = GX; STG[1].x1 = MAXW; STG[1].back = STG[1].lake = 0; STG[1].lv = L = B;
+    GC = '#'; g_top = 9; g_bot = 17; GY = 16;
+    x = GX; flat(8);
+    CAN[0].dx = x + 4; CAN[0].dy = GY - 1;
+    last = -1;
+  }
+  int len = bk >= 0 ? 300 : water ? GX + 380 + (int)(g_diff * 50) : 470 + (int)(g_diff * 70) - (has_back ? 40 : 0);
+  int kx0 = GX;
   level_keys = bk < 0 && (n == 0 || ((uint32_t)(n * 2654435761u) >> 13) % 2 == 0);   // only some levels have a locked door
-  int last_cp = GX, keys_done = 0, last = -1, last2 = -1;
+  int last_cp = GX, keys_done = 0, can_done = 0, land_x = 0, land_y = 0;
   while (GX < len) {
     if (GX - last_cp > 80) {   // a checkpoint every so often
-      int x = GX; flat(6); SET(x + 2, GY - 1, 'c'); last_cp = GX;
+      x = GX; flat(6); SET(x + 2, GY - 1, 'c'); last_cp = GX;
       continue;
     }
-    if (level_keys && keys_done < 3 && GX > len * (keys_done * 0.27f + 0.2f)) { key_piece(keys_done++); continue; }
+    if (level_keys && keys_done < 3 && GX > kx0 + (len - kx0) * (keys_done * 0.27f + 0.2f)) { key_piece(keys_done++); continue; }
+    if (has_back && can_done == 0 && GX > len * 0.3f) {   // a cannon to the back of the level
+      flat(2); x = GX; flat(11);
+      add_cannon(x + 5, GY - 1); coin_row(x + 2, GY - 6, 2); coin_row(x + 8, GY - 6, 2);
+      can_done = 1; continue;
+    }
+    if (has_back && can_done == 1 && GX > len * 0.62f) {   // and where the cannon back lands you
+      x = GX; flat(10); land_x = x + 5; land_y = GY - 1; coin_arc(x + 2, GY - 4, 6);
+      can_done = 2; continue;
+    }
     if (water) { int k = grnd(8); if (k == last) k = (k + 3) % 8; last = k; water_piece(k); continue; }
-    int tot = 0, k = 0;
-    for (int i = 0; i < NPIECE; i++) if (i != last && i != last2) tot += piece_weight(i);
-    int r = grnd(tot > 0 ? tot : 1);
-    for (k = 0; k < NPIECE; k++) { if (k == last || k == last2) continue; r -= piece_weight(k); if (r < 0) break; }
-    if (k >= NPIECE) k = P_RUN;
-    last2 = last; last = k;
-    land_piece(k);
+    pick_piece(&last, &last2, 0);
   }
   // the end: bring the ground back to a comfortable height
   while (GY < (water ? 15 : 16)) { flat(3); ground_step(1); }
   while (GY > (water ? 17 : 19)) { flat(3); ground_step(-1); }
   flat(4);
+  if (has_back && can_done == 1) { x = GX; flat(10); land_x = x + 5; land_y = GY - 1; can_done = 2; }
   if (bk >= 0) boss_arena(bk);
   else if (level_keys) {   // the locked door in a wall that goes all the way up
-    int x = GX;
+    x = GX;
     for (int y = 0; y < GY - 3; y++) SET(x, y, 'X');
     for (int y = GY - 3; y < GY; y++) SET(x, y, 'D');
     colm(x, GY); GX++;
   }
-  int x = GX; flat(12);
+  x = GX; flat(12);
   goal_x = x + 6; goal_y = GY - 1;
+  int gs = nstg - 1;   // the stage the flag is in
+  STG[gs].x1 = GX;
+  if (has_back) {   // the back stage: far off behind the front, hazy, full of coins, and a cannon back
+    wall_cols(2);
+    STG_LV[1] = *B;
+    STG_LV[1].far = mixc(B->far, B->sky1, 0.4f); STG_LV[1].nearc = mixc(B->nearc, B->sky1, 0.35f); STG_LV[1].sky0 = mixc(B->sky0, 0xFF203060, 0.12f);
+    nstg = 2; STG[1].x0 = GX; STG[1].back = 1; STG[1].lake = 0; STG[1].lv = L = &STG_LV[1];
+    int sy = GY; GY = 17;
+    x = GX; flat(9);
+    CAN[0].dx = x + 4; CAN[0].dy = GY - 1;
+    coin_row(x + 3, GY - 3, 4);
+    int bl = -1, bl2 = -1;
+    while (GX < STG[1].x0 + 100) {
+      pick_piece(&bl, &bl2, 1);
+      x = GX; flat(3); coin_arc(x, GY - 3, 3);
+    }
+    while (GY < 15) { flat(3); ground_step(1); }
+    while (GY > 18) { flat(3); ground_step(-1); }
+    x = GX; flat(13);
+    add_cannon(x + 6, GY - 1); CAN[1].dx = land_x; CAN[1].dy = land_y;
+    STG[1].x1 = GX; wall_cols(2);
+    GY = sy; L = B;
+  }
   LW = GX;
-  more_foes(start_w + 6, goal_x - 14, water);
+  if (nstg == 1) STG[0].x1 = LW;
+  for (int st = 0; st < nstg; st++) {
+    L = STG[st].lv;
+    int a = st == 0 ? start_w + 6 : STG[st].x0 + 10, b2 = st == gs ? goal_x - 14 : STG[st].x1 - 16;
+    more_foes(a, b2, L->theme == 9);
+  }
+  L = B;
   // every level that has no hidden room still gets a 1-up: high on a plank, or out in open water
   int n1 = 0; for (int y = 0; y < LH; y++) for (int x2 = 0; x2 < LW; x2++) n1 += G[y][x2] == '1';
   if (!n1 && bk < 0) {
     int best = -1, by = 0, cnt = 0;
-    for (int x2 = LW / 3; x2 < LW - 20; x2++) for (int y = 2; y < LH - 1; y++) {
+    int a = STG[gs].x0 + (STG[gs].x1 - STG[gs].x0) / 3;
+    for (int x2 = a; x2 < STG[gs].x1 - 20; x2++) for (int y = 2; y < LH - 1; y++) {
       int ok = water ? G[y][x2] == ' ' && y > 3 && y < 12 && G[y + 1][x2] == ' ' && G[y - 1][x2] == ' '
                      : G[y + 1][x2] == '=' && G[y][x2] == ' ' && G[y - 1][x2] == ' ';
       if (ok && grnd(++cnt) == 0) { best = x2; by = y; }
     }
     if (best >= 0) SET(best, by, '1');
   }
+  set_stage(0);
+}
+
+// the level picture, a stage at a time (each has its own look); the back stage is hazy, far away
+static void render_staged(int ax, int ay, int bx, int by) {
+  for (int st = 0; st < nstg; st++) {
+    int a = st ? STG[st].x0 : 0, b = st + 1 < nstg ? STG[st + 1].x0 : LW;
+    if (a < ax) a = ax; if (b > bx) b = bx;
+    if (a >= b) continue;
+    L = STG[st].lv;
+    hd_render_tiles(a, ay, b, by);
+    if (STG[st].back) {
+      uint32_t hz = STG[st].lv->sky1;
+      for (int y = ay * HT; y < by * HT; y++) for (int x = a * HT; x < b * HT; x++) {
+        uint32_t* d = &LVB.px[y * LVB.w + x];
+        if (*d >> 24) *d = (*d & 0xFF000000) | (mixc(*d | 0xFF000000, hz, 0.28f) & 0xFFFFFF);
+      }
+    }
+  }
+  L = STG[cur_stg].lv;
 }
 
 static void load_level(int n) {
-  lvl = n; L = &LEVELS[n];
+  lvl = n; L = &LEVELS[n]; nstg = 1; cur_stg = 0; can_t = 0; ncan = 0;
   memset(G, ' ', sizeof G); memset(BOXK, 0, sizeof BOXK); memset(FAKE, 0, sizeof FAKE); memset(WET, 0, sizeof WET); ride_i = -1;
   nents = 0; nsigns = 0; ncheck = 0;
   memset(parts, 0, sizeof parts); memset(bubbles, 0, sizeof bubbles);
@@ -1142,7 +1251,7 @@ static void load_level(int n) {
       Bmp c = bmp_new((bx - ax + 1) * HT, (by - ay + 1) * HT);
       for (int v = 0; v < c.h; v++) memcpy(c.px + v * c.w, LVB.px + (ay * HT + v) * LVB.w + ax * HT, (size_t)c.w * 4);
       ROOM[nrooms].cover = c;
-      hd_render_tiles(ax, ay, bx + 1, by + 1);
+      render_staged(ax, ay, bx + 1, by + 1);
       nrooms++;
     }
   }
@@ -1151,6 +1260,7 @@ static void load_level(int n) {
 
 static void respawn(void) {
   px = check_x; py = check_y; pvx = pvy = 0; face = 1; dead_t = 0; wall_lock = 0; jbuf = 0; atk_t = 0; inv_t = 120; hp = 3;
+  can_t = 0; set_stage(stage_of(px));
   camx = px - SCR_W / 2; camy = py - SCR_H / 2;
   // beetles and bees come back when you respawn
   for (int i = 0; i < nents; i++) {
@@ -1194,6 +1304,7 @@ static void hurt_ex(int pit) {
   if (!pit && (power || hp > 1)) {
     // a hit knocks off the power-up if he has one, otherwise it takes one slot of health
     if (power) power = 0; else hp--;
+    ouch_t = 30;
 #ifdef TRACE
     printf("lost power at x=%.0f\n", px / 16);
 #endif
@@ -1273,6 +1384,49 @@ static void open_door(int tx) {
 }
 
 // ============================================================ player
+static void update_camera(int snap);
+// ---- the cannon ride: in, BOOM, off into the distance, then dropping in on the other stage
+static float can_mx(const Cannon* c) { return c->tx * T + T + 5; }
+static float can_my(const Cannon* c) { return (c->ty - 1) * T - 6; }
+static void cannon_ride(void) {
+  Cannon* c = &CAN[can_i];
+  can_t++;
+  float mx = can_mx(c), my = can_my(c);
+  if (can_t < 22) { px += (mx - PW / 2 - px) * 0.22f; py += (my - PH - py) * 0.22f; }   // hop up and in
+  if (can_t == 26) {
+    plat_sfx(SFX_STOMP); plat_sfx(SFX_DASH);
+    spawn_parts(mx, my - 2, 16, 0xFFEDEDED, 2.4f, -0.3f); spawn_parts(mx, my - 2, 8, 0xFFFFB040, 1.8f, 0);
+  }
+  if (can_t == 72) {   // arrive on the other stage, high up
+    set_stage(stage_of(c->dx * T + 1));
+    float gy = L->theme == 9 ? 6 * T : c->dy * T + T - PH;
+    px = c->dx * T + 3; py = gy; face = 1; pvx = pvy = 0;
+    update_camera(1);
+    can_fx = px; can_fy = gy; py = gy - 150;
+    check_x = (int)px; check_y = (int)gy;   // the landing place counts as a checkpoint
+  }
+  if (can_t > 72) { float e = (can_t - 72) / 30.0f; py = can_fy - 150 * (1 - e) * (1 - e); }
+  if (can_t >= 102) { can_t = 0; py = can_fy; pvy = 0; inv_t = 60; on_ground = L->theme != 9; plat_sfx(SFX_STOMP); spawn_parts(px + PW / 2, py + PH, 8, 0xFFE8E0D0, 1.2f, -0.1f); }
+}
+// where to draw Dino during a ride (level pixels, his feet) and how big; 0 while he is inside the cannon
+static int ride_pose(float* X, float* Y, float* S) {
+  const Cannon* c = &CAN[can_i];
+  float mx = can_mx(c), my = can_my(c);
+  if (can_t < 22) { *X = px + PW / 2; *Y = py + PH; *S = 1 - can_t / 22.0f * 0.45f; return 1; }
+  if (can_t < 27) return 0;
+  if (can_t < 72) { float e = (can_t - 27) / 45.0f; *X = mx + e * 70; *Y = my - e * 190 + e * e * 50; *S = 0.55f * (1 - e) + 0.06f; return 1; }
+  float e = (can_t - 72) / 30.0f; *X = px + PW / 2; *Y = py + PH; *S = 0.3f + 0.7f * e; return 1;
+}
+static void try_cannon(const Input* in) {
+  for (int i = 0; i < ncan; i++) {
+    const Cannon* c = &CAN[i];
+    if (!c->dx) continue;
+    float x0 = c->tx * T - 2, x1 = c->tx * T + 2 * T + 2, y0 = (c->ty - 1) * T - 6, y1 = c->ty * T + T;
+    if (px + PW < x0 || px > x1 || py + PH < y0 || py > y1) continue;
+    if ((in->down && !prev_down) || (pvy > 0.5f && py + PH < y0 + 10)) { can_t = 1; can_i = i; pvx = pvy = 0; atk_t = 0; twirl_t = 0; plat_sfx(SFX_SPRING); return; }
+  }
+}
+
 static void update_player(const Input* in) {
   int jp = in->jump && !prev_jump;
   if (dead_t) {
@@ -1289,6 +1443,7 @@ static void update_player(const Input* in) {
   int dir = (in->right ? 1 : 0) - (in->left ? 1 : 0);
   if (wall_lock > 0) { wall_lock--; dir = 0; }
   if (inv_t > 0) inv_t--;
+  if (ouch_t > 0) ouch_t--;
   if (atk_cd > 0) atk_cd--;
   int ap = in->attack && !prev_atk;
   prev_atk = in->attack;
@@ -1465,11 +1620,12 @@ static void update_player(const Input* in) {
       ROOM[r].show = clampf(ROOM[r].show, 0, 1);
     }
   }
+  if (!dead_t) try_cannon(in);
   if (oneup_t) oneup_t--;
   if (door_msg_t) door_msg_t--;
   if (key_msg_t) key_msg_t--;
   // goal: a flag on a pole, touch anywhere on the pole
-  if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5 && py + PH > goal_y * T - 50 && py < goal_y * T + T) {   // touching the pole, not passing under or over it
+  if (!(boss_i >= 0 && !boss_dead) && px + PW > goal_x * T + 5 && px < goal_x * T + 3 * T && py + PH > goal_y * T - 50 && py < goal_y * T + T) {   // touching the pole, not passing under or over it
     state = ST_CLEAR; state_t = 0; plat_sfx(SFX_CLEAR);
     spawn_parts(goal_x * T + 8, goal_y * T - 32, 24, 0xFFF7D038, 2.5f, 0.5f);
   }
@@ -1797,8 +1953,9 @@ static void update_parts(void) {
 
 static void update_camera(int snap) {
   float tx = px + PW / 2 - SCR_W / 2 + face * 28, ty = py + PH / 2 - SCR_H / 2 - 10;
-  if (tx < 0) tx = 0;
-  if (tx > LW * T - SCR_W) tx = LW * T - SCR_W;
+  float lo = STG[cur_stg].x0 * T, hi = (cur_stg + 1 < nstg || nstg > 1 ? STG[cur_stg].x1 : LW) * T - SCR_W;
+  if (tx > hi) tx = hi;
+  if (tx < lo) tx = lo;
   if (ty > LH * T - SCR_H) ty = LH * T - SCR_H;
   if (ty < 0) ty = 0;
   if (snap) { camx = tx; camy = ty; }
@@ -1820,7 +1977,10 @@ void game_update(const Input* in) {
       }
       if (sp) { state = ST_PAUSE; plat_sfx(SFX_SELECT); break; }
       lvl_frames++;
+      if (can_t) { cannon_ride(); update_parts(); break; }
       update_player(in);
+      if (can_t) break;
+      { int st = stage_of(px); if (st != cur_stg) set_stage(st); }
       dino_tick();
       if (state == ST_PLAY || state == ST_CLEAR) update_ents();
       update_parts();
@@ -2069,6 +2229,24 @@ static void draw_world(void) {
         fb_flag(X + 18, Y + 3, 22, 14, on ? 0xFF7FE06A : 0xFFC4C8D2, on ? 0xFF3FA34D : 0xFF8C8F9C, on ? 1 : 0.15f, 0);
       }
     }
+  // cannons, with a bouncing arrow over one when Dino is close
+  for (int i = 0; i < ncan; i++) {
+    static Bmp CPIC[3];
+    if (!CPIC[0].px) for (int k = 0; k < 3; k++) cannon3d(&CPIC[k], k * 0.5f);
+    const Cannon* c = &CAN[i];
+    int X = c->tx * HT + HT - 40 - CX, Y = (c->ty + 1) * HT - 74 - CY;
+    if (X > FB_W || X + 80 < 0 || Y > FB_H || Y + 80 < 0) continue;
+    int k = can_t && can_i == i && can_t >= 26 && can_t < 40 ? (can_t < 30 ? 2 : 1) : 0;
+    fb_shadow(c->tx * HT + HT - CX, (c->ty + 1) * HT - CY, 30, 4, 0.22f);
+    hblit(&CPIC[k], X, Y, 0);
+    float dx = px + PW / 2 - (c->tx * T + T);
+    if (!can_t && c->dx && fabsf(dx) < 40 && fabsf(py + PH - (c->ty + 1) * T) < 40) {
+      float ax = c->tx * HT + HT - CX, ay = Y - 14 + sinf(frame * 0.15f) * 5;
+      fb_capsule(ax, ay - 14, ax, ay, 5, OUTLINE); fb_capsule(ax, ay - 14, ax, ay, 3.2f, 0xFFFFFFFF);
+      fb_capsule(ax - 9, ay - 4, ax, ay + 7, 3.4f, OUTLINE); fb_capsule(ax + 9, ay - 4, ax, ay + 7, 3.4f, OUTLINE);
+      fb_capsule(ax - 8, ay - 3, ax, ay + 6, 2, 0xFFFFFFFF); fb_capsule(ax + 8, ay - 3, ax, ay + 6, 2, 0xFFFFFFFF);
+    }
+  }
   // hidden rooms stay covered by ground until Dino walks in, then the ground fades away
   for (int r = 0; r < nrooms; r++) {
     float a = 1 - ROOM[r].show; if (a <= 0.01f) continue;
@@ -2178,6 +2356,16 @@ static void draw_world(void) {
     if (on_ground && !dead_t && !intro_t) fb_shadow(X, Y + 1, 12, 2.8f, 0.2f);
     dino_sx = X; dino_sy = Y;
     if (intro_t) show = 0;
+    if (can_t) {   // riding the cannon: smaller and smaller as he flies off, then big again as he drops in
+      float rx, ry, rs;
+      show = 0;
+      if (ride_pose(&rx, &ry, &rs)) {
+        p.bob = 0; p.mood = 4; p.mouth = 1;
+        float yaw = can_t >= 27 && can_t < 72 ? can_t * 0.35f : 0.6f;
+        dino3d(&DSCR, &p, yaw, rs);
+        hblit(&DSCR, (int)(rx * 2) - CX - (int)(36 * rs), (int)(ry * 2) - CY - (int)(64 * rs), 0);
+      }
+    }
     if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
     if (power == 4 && show && !dead_t && frame % 7 == 0) spawn_parts(px + PW / 2 - face * 5 + (frame % 5 - 2), py + 2, 1, 0xFFFFF2A0, 0.5f, 0.3f);   // sparkles off his golden spikes
     if (p.hot && show && frame % 38 == 0) spawn_parts(px + PW / 2 + (frame % 3 - 1) * 3, py - 2, 2, 0xFF9ADCF5, 0.8f, 0.6f);   // drops of sweat
@@ -2439,6 +2627,14 @@ static void draw_map(void) {
       for (int j = -2; j <= 2; j++) fill(x - dir * 2 + (dir > 0 ? 0 : -(2 - abs(j))), y + j, 3 - abs(j) + 1, 1, 0xFF2B1A12);
       continue;
     }
+    if (LEVELS[kind].theme == 9) {   // a water level: the stop sits in a puddle
+      static const float PD[5][3] = { { -9, 3, 9 }, { 8, 4, 8.5f }, { 0, 7, 10 }, { -3, -2, 8 }, { 6, -3, 7 } };
+      float X = x * 2, Y = y * 2;
+      for (int k = 0; k < 5; k++) fb_dot(X + PD[k][0] * 1.4f, Y + PD[k][1] * 1.2f, PD[k][2] * 1.45f + 2.5f, 0xFF1E5A8A, 1);
+      for (int k = 0; k < 5; k++) fb_dot(X + PD[k][0] * 1.4f, Y + PD[k][1] * 1.2f, PD[k][2] * 1.45f, 0xFF4FB8EC, 1);
+      for (int k = 0; k < 3; k++) fb_dot(X + PD[k][0] * 1.4f, Y + PD[k][1] * 1.2f + 2, PD[k][2] * 1.0f, 0xFF7FD4F6, 0.6f);
+      fb_dot(X - 15, Y + 1, 3, 0xFFFFFFFF, 0.8f); fb_dot(X + 14, Y + 8, 2, 0xFFFFFFFF, 0.7f); fb_dot(X - 5, Y + 14, 2.4f, 0xFFFFFFFF, 0.6f);
+    }
     uint32_t c = cleared[kind + 1] ? 0xFFF7D038 : (node_open(n) ? 0xFFD8463C : 0xFF8C8F9C);
     disc(x, y, 6, 0xFF2B1A12); disc(x, y, 5, c); disc(x - 1, y - 2, 2, blend(c, 0xFFFFFFFF, 0.5f));
     snprintf(buf, sizeof buf, "%d", kind + 1);
@@ -2654,6 +2850,11 @@ void game_draw(uint32_t* fb) {
       if (fy < 0) fy += FB_H;
       hblit(&FLAKE[i % 3], (int)fx - 4, (int)fy - 4, 0);
     }
+  }
+  if (can_t >= 52 && can_t < 90) {   // a white flash while the cannon carries Dino across
+    float a = can_t < 72 ? (can_t - 52) / 20.0f : 1 - (can_t - 72) / 18.0f;
+    int k = (int)(clampf(a, 0, 1) * 256);
+    for (int i = 0; i < FB_W * FB_H; i++) FB[i] = lerpc(FB[i], 0xFFFFFFFF, k);
   }
   if (!g_no_hud) draw_hud();
   if (state == ST_PAUSE) {

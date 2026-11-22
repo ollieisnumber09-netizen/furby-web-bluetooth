@@ -328,12 +328,13 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   return 0;
 }
 static void hd_render_tiles(int ax, int ay, int bx, int by);
+static void render_staged(int ax, int ay, int bx, int by);
 static void hd_render_level(void) {
   if (LVB.px) free(LVB.px);
   if (LV_ROW) free(LV_ROW);
   LVB = bmp_new(LW * HT, LH * HT);
   LV_ROW = (unsigned char*)calloc(LH * HT, 1);
-  hd_render_tiles(0, 0, LW, LH);
+  render_staged(0, 0, LW, LH);
 }
 // paint tiles ax..bx-1, ay..by-1 of the level picture (clearing them first)
 static void hd_render_tiles(int ax, int ay, int bx, int by) {
@@ -440,9 +441,9 @@ static int bg_theme = -1;
 static float fx_island(int x) { return (x - 300) * 6.28318f / 260; }
 static void hd_render_bg(void) {
   int th = L->theme;
-  static uint32_t bg_cols[4];
-  if (bg_theme == th && bg_cols[0] == L->sky0 && bg_cols[1] == L->sky1 && bg_cols[2] == L->far && bg_cols[3] == L->nearc) return;
-  bg_theme = th; bg_cols[0] = L->sky0; bg_cols[1] = L->sky1; bg_cols[2] = L->far; bg_cols[3] = L->nearc;
+  static uint32_t bg_cols[4]; static int bg_lk = -1;
+  if (bg_theme == th && bg_lk == bg_lake && bg_cols[0] == L->sky0 && bg_cols[1] == L->sky1 && bg_cols[2] == L->far && bg_cols[3] == L->nearc) return;
+  bg_theme = th; bg_lk = bg_lake; bg_cols[0] = L->sky0; bg_cols[1] = L->sky1; bg_cols[2] = L->far; bg_cols[3] = L->nearc;
   if (!BG_FAR.px) {
     BG_FAR = bmp_new(BGW, FB_H); BG_NEAR = bmp_new(BGW, FB_H);
     HD_SUN = bmp_new(68, 68); HD_MOON = bmp_new(62, 62);
@@ -528,6 +529,20 @@ static void hd_render_bg(void) {
       if (fy > H3[x] - 1) *d = mixc(*d, mixc(mixc(hC, 0xFFFFFFFF, sn ? 0.7f : 0.2f), hC, clampf((fy - H3[x]) / 18, 0, 1)), cov(H3[x] - fy + 0.5f));
     }
   }
+  if (bg_lake && !beach) {   // a big lake behind the shore, out to the hills on the far side
+    uint32_t lk0 = sn ? 0xFFA8DCF0 : th == 8 ? 0xFF4AD0C8 : th == 3 ? 0xFF8AC8FF : 0xFF4AA8E0, lk1 = mixc(lk0, 0xFF0A3A70, 0.55f);
+    const int LY = 212;
+    for (int y = LY; y < FB_H; y++) for (int x = 0; x < BGW; x++) {
+      uint32_t* d = &BG_FAR.px[y * BGW + x];
+      float t = clampf((y - LY) / 130.0f, 0, 1);
+      uint32_t c = mixc(lk0, lk1, t);
+      if (y < LY + 3) c = mixc(c, 0xFFFFFFFF, 0.45f);   // the far shore line catches the light
+      // the sky and hills, upside down in the water
+      int ry = 2 * LY - y; if (ry >= 0 && ry < LY) c = mixc(c, BG_FAR.px[ry * BGW + x], 0.3f * (1 - t));
+      if (hash2(x / 9, y / 3) % 23 == 0 && y > LY + 5) c = mixc(c, 0xFFFFFFFF, 0.5f * (1 - t * 0.6f));   // glints
+      *d = c;
+    }
+  }
   if (water) {
     for (int ki = 0; ki < 10; ki++) {   // tall weed swaying up from the bottom, and lumps of coral
       float cx = ki * 102.4f + 30 + hashf(ki, 3) * 50, hgt = 120 + hashf(ki, 4) * 120, base = FB_H + 4;
@@ -585,9 +600,9 @@ static void hd_render_bg(void) {
         }
       }
     }
-  } else if (!sky) {
+  } else if (!sky || bg_lake) {
     uint32_t tl = mixc(L->nearc, 0xFFFFFFFF, 0.30f), td = mixc(L->nearc, 0xFF000000, 0.25f);
-    for (int ki = 0; ki < 8; ki++) {
+    for (int ki = 0; ki < (bg_lake ? 0 : 8); ki++) {
       float cx = ki * 128 + 40 + hashf(ki, 3) * 50, hgt = 100 + hashf(ki, 4) * 70, base = 330;
       for (int y = (int)(base - hgt - 60); y < (int)base; y++) for (int xx = (int)cx - 64; xx <= (int)cx + 64; xx++) {
         if ((unsigned)y >= FB_H) continue;
@@ -630,7 +645,7 @@ static void hd_render_bg(void) {
     // a row of bushes along the bottom
     for (int x = 0; x < BGW; x++) {
       float fx = x + 0.5f;
-      float bb = 330 - 14 * fabsf(sinf(fx * 6.28318f * 16 / BGW)) - 6 * fabsf(sinf(fx * 6.28318f * 7 / BGW + 1));
+      float bb = (bg_lake ? 350 : 330) - 14 * fabsf(sinf(fx * 6.28318f * 16 / BGW)) - 6 * fabsf(sinf(fx * 6.28318f * 7 / BGW + 1));
       for (int y = (int)bb - 1; y < FB_H; y++) {
         float fy = y + 0.5f;
         if (fy > bb - 0.5f) over(&BG_NEAR.px[y * BGW + x], sn ? mixc(0xFFFFFFFF, 0xFFBFD4EA, (fy - bb) / 30) : mixc(tl, td, clampf((fy - bb) / 34, 0, 1)), cov(bb - fy + 0.5f));

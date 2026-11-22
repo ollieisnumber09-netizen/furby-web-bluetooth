@@ -162,7 +162,7 @@ static void dino_tick(void) {
       tsq = 1 + 0.025f * sinf(frame * 0.06f);   // breathing
       if (state == ST_CLEAR) { DA.mood = 4; tmouth = 1; tbob = 3.5f * fabsf(sinf(state_t * 0.16f)); }
     }
-    if (inv_t > 70) DA.mood = 2;
+    if (ouch_t > 0) DA.mood = 2;
     if (on_ground && !DA.wasg) DA.sqv -= 0.05f + clampf(DA.vy0, 0, 6) * 0.022f;   // squash on landing
     if (!on_ground && DA.wasg && pvy < 0) DA.sqv += 0.07f;                       // stretch on take-off
   }

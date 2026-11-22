@@ -13,7 +13,7 @@ static int bsolid(float x, float y, float w, float h) {
   for (int ty = y0; ty <= y1; ty++) for (int tx = x0; tx <= x1; tx++) if (solid_r(tile(tx, ty))) return 1;
   return 0;
 }
-static int is_water(int tx, int ty) { char c = tile(tx, ty); return L->theme == 9 ? !solid_r(c) && ty >= 0 && ty < LH && c != '^' : c == 'w' || (c == 'K' && tile(tx, ty - 1) == 'w') || (c == 'o' && tile(tx, ty - 1) == 'w'); }
+static int is_water(int tx, int ty) { char c = tile(tx, ty); return stage_water(tx) ? !solid_r(c) && ty >= 0 && ty < LH && c != '^' : c == 'w' || (c == 'K' && tile(tx, ty - 1) == 'w') || (c == 'o' && tile(tx, ty - 1) == 'w'); }
 static void push(int x, int y) { if (x < 0 || x >= LW || y < 0 || y >= LH || seen[y][x]) return; seen[y][x] = 1; qx[qn] = x; qy[qn] = y; qn++; }
 static void wpush(int x, int y) { if (x < 0 || x >= LW || y < 0 || y >= LH || wseen[y][x] || !is_water(x, y)) return; wseen[y][x] = 1; wqx[wqn] = x; wqy[wqn] = y; wqn++; }
 // one jump (or walk off a ledge): where does Dino come to rest?
@@ -59,7 +59,7 @@ static void sim(float x, float y, float vx, float vy, int d, int hold, int steer
     }
     if (y > LH * T + 24) return;
     int cx = (int)floorf((x + PW / 2) / T), cy = (int)floorf((y + PH / 2) / T);
-    if (vy > 0 && is_water(cx, cy) && L->theme != 9) { wpush(cx, cy); return; }
+    if (vy > 0 && is_water(cx, cy) && !stage_water(cx)) { wpush(cx, cy); return; }
     if (ground && t > 0) { push((int)floorf((x + PW / 2) / T), (int)floorf((y + PH - 1) / T)); return; }
   }
 }
@@ -88,23 +88,32 @@ static int analyse(int door_open, int* keys_out) {
   }
   qn = 0; wqn = 0;
   int sx = (int)(start_x / T), sy = (int)((start_y + PH - 1) / T);
-  if (L->theme == 9) wpush(sx, sy); else push(sx, sy);
+  if (stage_water(sx)) wpush(sx, sy); else push(sx, sy);
   int qi = 0, wi = 0;
-  while (qi < qn || wi < wqn) {
+  while (1) {
+    if (!(qi < qn || wi < wqn)) {   // cannons: reaching one takes Dino to where it lands him
+      for (int i = 0; i < ncan; i++) {
+        const Cannon* c = &CAN[i]; int hit = 0;
+        if (!c->dx) continue;
+        for (int yy = c->ty - 2; yy <= c->ty; yy++) for (int xx = c->tx - 1; xx <= c->tx + 2; xx++) if (yy >= 0 && got[yy][xx]) hit = 1;
+        if (hit) { if (stage_water(c->dx)) wpush(c->dx, 6); else push(c->dx, c->dy); }
+      }
+      if (!(qi < qn || wi < wqn)) break;
+    }
     while (qi < qn) { int x = qx[qi], y = qy[qi]; qi++; got[y][x] = 1; from_cell(x, y); }
     while (wi < wqn) {
       int x = wqx[wi], y = wqy[wi]; wi++; got[y][x] = 1;
       wpush(x + 1, y); wpush(x - 1, y); wpush(x, y + 1); wpush(x, y - 1);
-      if (L->theme != 9 && !is_water(x, y - 1) && !solid_r(tile(x, y - 1)))   // at the top of a pool: leap out
+      if (!stage_water(x) && !is_water(x, y - 1) && !solid_r(tile(x, y - 1)))   // at the top of a pool: leap out
         for (int d = -1; d <= 1; d++) { float px0 = x * T + 3, py0 = y * T + 1; if (!bsolid(px0, py0, PW, PH)) { int keep = wqn; sim(px0, py0, d * 1.5f, -5.2f, d, 0, 0, 0); (void)keep; } }
       // standing on the bottom of a pool next to a ledge: walk out
-      if (L->theme != 9) { for (int d = -1; d <= 1; d += 2) if (!solid_r(tile(x + d, y)) && !is_water(x + d, y)) push(x + d, y); }
+      if (!stage_water(x)) { for (int d = -1; d <= 1; d += 2) if (!solid_r(tile(x + d, y)) && !is_water(x + d, y)) push(x + d, y); }
     }
   }
   int keys = 0, goal = 0, arena = 0;
   for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) {
     if (saved[y][x] == 'K' && got[y][x]) keys++;
-    if (got[y][x] && x >= goal_x - 1) goal = 1;
+    if (got[y][x] && x >= goal_x - 1 && x <= goal_x + 6) goal = 1;
     if (got[y][x] && boss_i >= 0 && x * T > arena_x0 + 32) arena = 1;
   }
   memcpy(G, saved, sizeof G);
@@ -114,7 +123,7 @@ static int analyse(int door_open, int* keys_out) {
 int main(int argc, char** argv) {
   game_init();
   if (getenv("SPRINT")) VMAX = RUN_V;
-  int tot1 = 0;
+  int tot1 = 0, nback = 0, nshore = 0;
   int bad = 0, from = argc > 1 ? atoi(argv[1]) - 1 : 0, to = argc > 2 ? atoi(argv[2]) : NLEVELS;
   for (int n = from; n < to; n++) {
     start_level(n);
@@ -131,9 +140,14 @@ int main(int argc, char** argv) {
     int far = 0; for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (got[y][x] && x > far) far = x;
     int n1 = 0, g1 = 0; for (int y = 0; y < LH; y++) for (int x = 0; x < LW; x++) if (G[y][x] == '1') { n1++; g1 += got[y][x]; }
     if (g1 < n1) { bad++; note = " (1-UP OUT OF REACH)"; }
+    for (int i = 0; i < ncan; i++) {   // every cannon can be reached
+      int hit = 0; for (int yy = CAN[i].ty - 2; yy <= CAN[i].ty; yy++) for (int xx = CAN[i].tx - 1; xx <= CAN[i].tx + 2; xx++) hit |= got[yy][xx];
+      if (!hit) { bad++; note = " (CANNON OUT OF REACH)"; }
+    }
+    if (ncan) nback += nstg > 1 && STG[1].back, nshore += STG[0].lake;
     tot1 += n1;
     printf("%-26s keys %d/%d  1-ups %d  %s%s  (got to column %d of %d)\n", L->name, keys, nk, n1, fine ? "OK" : "STUCK", note, far, LW);
   }
-  printf("%d 1-ups in all\n", tot1);
+  printf("%d 1-ups in all, %d levels with a back stage, %d with a shore\n", tot1, nback, nshore);
   printf("%d levels with problems\n", bad);
 }

@@ -439,6 +439,53 @@ static void item3d(Bmp* b, int kind, float spin) {
   rt_end(b);
 }
 
+// a box from quads: centre c, half sizes h
+static void cube3(const M3* W, float cx, float cy, float cz, float hx, float hy, float hz, uint32_t col, int mat) {
+  float A[3] = { cx - hx, cy - hy, cz + hz }, B[3] = { cx + hx, cy - hy, cz + hz }, C[3] = { cx + hx, cy + hy, cz + hz }, D[3] = { cx - hx, cy + hy, cz + hz };
+  float E[3] = { cx - hx, cy - hy, cz - hz }, F[3] = { cx + hx, cy - hy, cz - hz }, G2[3] = { cx + hx, cy + hy, cz - hz }, H[3] = { cx - hx, cy + hy, cz - hz };
+  float nz[3] = { 0, 0, 1 }, mz[3] = { 0, 0, -1 }, ny[3] = { 0, 1, 0 }, my[3] = { 0, -1, 0 }, nx[3] = { 1, 0, 0 }, mx[3] = { -1, 0, 0 };
+  quad(W, A, B, C, D, nz, col, mat); quad(W, F, E, H, G2, mz, col, mat);
+  quad(W, D, C, G2, H, ny, mixc(col, 0xFFFFFFFF, 0.12f), mat); quad(W, E, F, B, A, my, col, mat);
+  quad(W, B, F, G2, C, nx, col, mat); quad(W, E, A, D, H, mx, col, mat);
+}
+// the cannon that shoots Dino off to the back of a level: an iron barrel pointing up and away,
+// on a wooden carriage with two wheels. 80x80 picture, its foot at (40, 74). kick: 0..1, the recoil
+static void cannon3d(Bmp* b, float kick) {
+  rt_begin(80, 80, 40, 74, 1);
+  VIEW = m3_rotx(0.42f);
+  M3 Wm = m3_roty(-0.55f);
+  // the carriage: a chunky wooden block with darker planks along it
+  cube3(&Wm, 0, 9 - kick * 2, 0, 17, 8, 12, 0xFFA8693A, MAT_PLAIN);
+  cube3(&Wm, 0, 17.5f - kick * 2, 0, 15, 1.5f, 10.5f, 0xFF7A4724, MAT_PLAIN);
+  cube3(&Wm, 0, 9 - kick * 2, 12.3f, 14, 1.4f, 0.4f, 0xFF7A4724, MAT_PLAIN);
+  // the wheels, eight-sided, with gold hubs
+  static const float WHEEL[8] = { 0, -1, 1, -1, 1, 1, 0, 1 };
+  for (int i = 0; i < 2; i++) {
+    float sx = i ? 1 : -1;
+    M3 wl = m3_mul(m3_trans(sx * 19, 10, 2), m3_mul(m3_rotz(1.5708f), m3_scale(10, 3, 10)));
+    lathe(&Wm, &wl, WHEEL, 4, 8, 1, 0xFF5E3A1E, MAT_PLAIN);
+    M3 rim = m3_mul(m3_trans(sx * 19.6f, 10, 2), m3_mul(m3_rotz(1.5708f), m3_scale(10.6f, 2.2f, 10.6f)));
+    lathe(&Wm, &rim, WHEEL, 4, 8, 1, 0xFF3A3A44, MAT_SHINY);
+    cube3(&Wm, sx * 22.5f, 10, 2, 1.4f, 3, 3, 0xFFF2B02E, MAT_SHINY);
+  }
+  // the barrel: tilted back (away from you, towards the back of the level) and a little to the right
+  M3 Bm = m3_mul(m3_trans(0, 18 - kick * 3, -2), m3_mul(m3_rotx(-0.5f), m3_rotz(-0.32f)));
+  M3 Wb = m3_mul(Wm, Bm);
+  float len = 26 * (1 - kick * 0.15f);
+  static const float BARREL[14] = { 0, -0.55f, 0.95f, -0.55f, 1.0f, -0.25f, 0.82f, 0.5f, 0.82f, 0.86f, 1.12f, 0.88f, 1.12f, 1.0f };
+  M3 br = m3_scale(10, len, 10);
+  lathe(&Wb, &br, BARREL, 7, 8, 1, 0xFF3E4452, MAT_SHINY);
+  static const float HOLE[6] = { 0.78f, 1.0f, 0.74f, 0.55f, 0, 0.55f };
+  lathe(&Wb, &br, HOLE, 3, 8, 1, 0xFF0C0C12, MAT_PLAIN);
+  static const float TOP[4] = { 1.12f, 1.0f, 0.74f, 1.0f };
+  lathe(&Wb, &br, TOP, 2, 8, 1, 0xFF5A6274, MAT_SHINY);
+  static const float BAND[4] = { 1, -1, 1, 1 };
+  for (int k = 0; k < 2; k++) { M3 bd = m3_mul(m3_trans(0, len * (k ? 0.25f : -0.2f), 0), m3_scale(10.4f - k * 1.6f, 1.8f, 10.4f - k * 1.6f)); lathe(&Wb, &bd, BAND, 2, 8, 1, 0xFFF2B02E, MAT_SHINY); }
+  // a fuse at the back with a gold cap
+  cube3(&Wb, 0, -len * 0.5f, -9, 2, 2, 2, 0xFFF2B02E, MAT_SHINY);
+  rt_end(b);
+}
+
 // beetle: 52x40 picture, feet at (26, 36)
 // a little gold crown for the bosses
 static void crown3d(const M3* Wm, float x, float y, float z, float r) {
