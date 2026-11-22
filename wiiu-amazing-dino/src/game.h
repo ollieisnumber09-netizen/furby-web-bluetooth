@@ -37,3 +37,17 @@ void plat_sfx(int id);
 extern int g_lowq;
 // The platform sets this to 1 when the GamePad shows game_draw_pad, so the TV leaves the slot off its HUD.
 extern int g_pad_screen;
+
+// The Wii U sets g_gpu to 1: then, in a level, the game leaves the background and the level picture
+// out of fb (fb is see-through there, in premultiplied colour) and the graphics chip draws them
+// underneath, from the pictures game_layers describes. pad: 1 for the GamePad's picture.
+extern int g_gpu;
+typedef struct {
+  int bg, level;                                   // which layers to draw under fb this frame
+  const uint32_t *far, *near, *sun; int bgw, bgh, bg_ver;   // background strips (bgw x bgh, repeat sideways)
+  int far_scroll, far_yoff, near_scroll, near_yoff;  // strip column at the screen's left edge; screen row of strip row 0
+  int sun_x, sun_y, sun_w, sun_h;                  // the sun or moon (sun is NULL when there is none)
+  const uint32_t* lvb; int lvb_w, lvb_h, lvb_ver;  // the whole level picture
+  int cx, cy;                                      // its pixel at the screen's top left
+} GameLayers;
+void game_layers(GameLayers* out, int pad);

@@ -33,10 +33,13 @@ static inline void over(uint32_t* d, uint32_t c, float a) {
 }
 static inline float cov(float d) { return clampf(0.5f - d, 0, 1); }   // distance to edge -> coverage
 
-static inline uint32_t lerpc(uint32_t a, uint32_t b, int t) {   // t 0..256, whole-number maths
+// t 0..256, whole-number maths. Alpha is mixed too: with opaque colours nothing changes, and on a
+// see-through screen (the Wii U draws the level on the graphics chip, then this on top) the
+// result is "premultiplied" colour, which the chip lays over the level correctly.
+static inline uint32_t lerpc(uint32_t a, uint32_t b, int t) {
   uint32_t rb = (((a & 0xFF00FF) * (256 - t) + (b & 0xFF00FF) * t) >> 8) & 0xFF00FF;
-  uint32_t g = (((a & 0x00FF00) * (256 - t) + (b & 0x00FF00) * t) >> 8) & 0x00FF00;
-  return 0xFF000000 | rb | g;
+  uint32_t ag = ((((a >> 8) & 0xFF00FF) * (256 - t) + ((b >> 8) & 0xFF00FF) * t)) & 0xFF00FF00;
+  return ag | rb;
 }
 // distances to shapes (negative inside)
 static inline float sd_circle(float x, float y, float cx, float cy, float r) { return sqrtf((x - cx) * (x - cx) + (y - cy) * (y - cy)) - r; }
@@ -86,11 +89,7 @@ static void hblit(const Bmp* b, int X, int Y, int flip) {
       uint32_t a = c >> 24;
       if (!a) continue;
       if (a == 255) dst[x] = c;
-      else {
-        uint32_t d = dst[x], ia = 255 - a;
-        dst[x] = 0xFF000000 | (((((c >> 16) & 255) * a + ((d >> 16) & 255) * ia) / 255) << 16)
-               | (((((c >> 8) & 255) * a + ((d >> 8) & 255) * ia) / 255) << 8) | (((c & 255) * a + (d & 255) * ia) / 255);
-      }
+      else dst[x] = lerpc(dst[x], c | 0xFF000000, a + (a >> 7));
     }
   }
 }
@@ -100,7 +99,7 @@ static void hblit(const Bmp* b, int X, int Y, int flip) {
 static inline void fb_over(int x, int y, uint32_t c, float a) {
   if (a <= 0 || (unsigned)x >= FB_W || (unsigned)y >= FB_H) return;
   uint32_t* d = &FB[y * FB_W + x];
-  *d = mixc(*d, c, a);
+  *d = lerpc(*d, c | 0xFF000000, (int)(clampf(a, 0, 1) * 256));
 }
 static void fb_dot(float cx, float cy, float r, uint32_t c, float alpha) {
   for (int y = (int)(cy - r - 1); y <= (int)(cy + r + 1); y++) for (int x = (int)(cx - r - 1); x <= (int)(cx + r + 1); x++)

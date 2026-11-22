@@ -160,10 +160,10 @@ static void darken(int x, int y, int w, int h, float t) {
   if (y0 < 0) y0 = 0;
   if (x1 > FB_W) x1 = FB_W;
   if (y1 > FB_H) y1 = FB_H;
-  int k = (int)((1 - t) * 256);
+  int k = (int)((t < 0 ? 0 : t > 1 ? 1 : t) * 256);   // towards black, alpha too (see lerpc)
   for (int j = y0; j < y1; j++) for (int i = x0; i < x1; i++) {
     uint32_t c = FB[j * FB_W + i];
-    FB[j * FB_W + i] = 0xFF000000 | ((((c >> 16) & 255) * k >> 8) << 16) | ((((c >> 8) & 255) * k >> 8) << 8) | ((c & 255) * k >> 8);
+    FB[j * FB_W + i] = ((((c & 0xFF00FF) * (256 - k)) >> 8) & 0xFF00FF) | ((((c >> 8) & 0xFF00FF) * (256 - k) + 0xFF0000 * k) & 0xFF00FF00);
   }
 }
 static void sprite(const char* const* s, int x, int y, int flip) {
@@ -1260,7 +1260,7 @@ static void load_level(int n) {
       for (int v = 0; v < c.h; v++) memcpy(c.px + v * c.w, LVB.px + (ay * HT + v) * LVB.w + ax * HT, (size_t)c.w * 4);
       ROOM[nrooms].cover = c;
       render_staged(ax, ay, bx + 1, by + 1);
-      nrooms++;
+      nrooms++; lvb_ver++;
     }
   }
   for (int d = 0; d < 2; d++) for (int i = 0; i < 20; i++) if (BOSS_C[d][i].px) { free(BOSS_C[d][i].px); BOSS_C[d][i].px = NULL; BOSS_C[d][i].w = 0; }
@@ -2068,7 +2068,29 @@ void game_update(const Input* in) {
 }
 
 // ============================================================ drawing
+int g_gpu;
+static int lay_bg, lay_level, lay_cx, lay_cy, pad_lay_bg;
+static void bg_layer(int pad) {   // the background: drawn here, or left to the graphics chip
+  if (g_gpu) { hd_render_bg(); memset(FB, 0, FB_W * FB_H * 4); if (pad) pad_lay_bg = 1; else lay_bg = 1; }
+  else hd_background();
+}
+void game_layers(GameLayers* o, int pad) {
+  memset(o, 0, sizeof *o);
+  o->bg = pad ? pad_lay_bg : lay_bg; o->level = pad ? 0 : lay_level;
+  if (!BG_FAR.px) o->bg = 0;
+  if (o->bg) {
+    float vy = LH * T > SCR_H ? camy / (float)(LH * T - SCR_H) : 1;
+    int th = L->theme;
+    o->far = BG_FAR.px; o->near = BG_NEAR.px; o->bgw = BGW; o->bgh = FB_H; o->bg_ver = bg_ver;
+    o->far_scroll = (((int)(camx * 0.5f) % BGW) + BGW) % BGW; o->far_yoff = (int)((1 - vy) * 40) - 44;
+    o->near_scroll = (((int)(camx * 1.0f) % BGW) + BGW) % BGW; o->near_yoff = (int)((1 - vy) * 70) - 50;
+    const Bmp* sun = (th == 0 || th == 3 || th == 4 || th == 5 || th == 8 || th == 10) ? &HD_SUN : (th == 1 || th == 7) ? &HD_MOON : NULL;
+    if (sun) { o->sun = sun->px; o->sun_w = sun->w; o->sun_h = sun->h; o->sun_x = sun == &HD_SUN ? 486 : 470; o->sun_y = sun == &HD_SUN ? 28 : 42; }
+  }
+  if (o->level) { o->lvb = LVB.px; o->lvb_w = LVB.w; o->lvb_h = LVB.h; o->lvb_ver = lvb_ver; o->cx = lay_cx; o->cy = lay_cy; }
+}
 static void blit_level(int CX, int CY) {
+  if (g_gpu) { lay_level = 1; lay_cx = CX; lay_cy = CY; return; }
   for (int y = 0; y < FB_H; y++) {
     int sy = y + CY;
     if (sy < 0 || sy >= LVB.h || !LV_ROW[sy]) continue;
@@ -2203,6 +2225,7 @@ static void make_extra_art(void) {
   Bmp* icon[5] = { 0, &HD_WINGI, &HD_SWORDI, &HD_HELMI, &HD_STARI };
   for (int k = 1; k <= 4; k++) { free(icon[k]->px); *icon[k] = bmp_new(32, 32); item3d(icon[k], k, k == 2 ? 0 : 0.35f); }
 }
+static const Bmp* dino_cached(const DinoPose* p0, float yaw);
 static void draw_world(void) {
   make_extra_art();
   int CX = (int)floorf(camx * 2), CY = (int)floorf(camy * 2);
@@ -2390,7 +2413,7 @@ static void draw_world(void) {
         hblit(&DSCR, (int)(rx * 2) - CX - (int)(36 * rs), (int)(ry * 2) - CY - (int)(64 * rs), 0);
       }
     }
-    if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
+    if (show) hblit(dino_cached(&p, DA.yaw), X - 36, Y - 64, 0);
     if (power == 4 && show && !dead_t && frame % 7 == 0) spawn_parts(px + PW / 2 - face * 5 + (frame % 5 - 2), py + 2, 1, 0xFFFFF2A0, 0.5f, 0.3f);   // sparkles off his golden spikes
     if (p.hot && show && frame % 38 == 0) spawn_parts(px + PW / 2 + (frame % 3 - 1) * 3, py - 2, 2, 0xFF9ADCF5, 0.8f, 0.6f);   // drops of sweat
     if (p.shake != 0 && show && frame % 70 == 0) spawn_parts(px + PW / 2 + face * 8, py + 6, 3, 0xFFF4FAFF, 0.4f, 0.1f);   // a puff of cold breath
@@ -2445,6 +2468,26 @@ static void draw_world(void) {
 }
 
 // a still Dino for the HUD, the title and the map
+// Dino is drawn in 3D from his pose every frame, which is the slowest part of a frame. Poses come round
+// again and again (a step, a breath), so each picture is kept: the pose is rounded a tiny bit so repeats match.
+#define DCACHE 128
+static int dc_miss;
+static struct { DinoPose p; float yaw; int ss, used; Bmp b; } DC[DCACHE];
+static const Bmp* dino_cached(const DinoPose* p0, float yaw) {
+  DinoPose p = *p0;
+  #define Q(v, st) v = roundf((v) / (st)) * (st)
+  Q(p.sq, 0.01f); Q(p.tilt, 0.02f); Q(p.bob, 0.25f); Q(p.lx[0], 0.25f); Q(p.lx[1], 0.25f); Q(p.ly[0], 0.25f); Q(p.ly[1], 0.25f);
+  Q(p.spk, 0.03f); Q(p.eye, 0.1f); Q(p.mouth, 0.1f); Q(p.wing, 0.05f); Q(p.sword, 0.05f); Q(p.shake, 0.25f); Q(yaw, 0.03f);
+  #undef Q
+  int ss = g_lowq ? 1 : 2, old = 0;
+  for (int i = 0; i < DCACHE; i++) {
+    if (DC[i].b.px && DC[i].ss == ss && DC[i].yaw == yaw && !memcmp(&DC[i].p, &p, sizeof p)) { DC[i].used = frame; return &DC[i].b; }
+    if (DC[i].used < DC[old].used) old = i;
+  }
+  RT_SS = ss; dino3d(&DC[old].b, &p, yaw, 1); RT_SS = 2; dc_miss++;
+  DC[old].p = p; DC[old].yaw = yaw; DC[old].ss = ss; DC[old].used = frame;
+  return &DC[old].b;
+}
 static void draw_dino_at(int X, int Y, float S, const DinoPose* p, float yaw) {
   static Bmp big;
   if (S > 1.5f) RT_SS = 1;   // when he is drawn big, skip the draw-double-and-shrink step: four times quicker
@@ -2961,7 +3004,7 @@ static void draw_travel(void) {
 }
 
 void game_draw(uint32_t* fb) {
-  FB = fb;
+  FB = fb; lay_bg = lay_level = 0;
   char buf[64];
   if (state == ST_TITLE) { draw_title(); return; }
   if (state == ST_MAP) { draw_map(); return; }
@@ -2971,7 +3014,7 @@ void game_draw(uint32_t* fb) {
     // the level intro: Dino on black with his coins and lives above him, then everything flies into place
     float k = clampf((intro_t - INTRO_HOLD) / (float)INTRO_FLY, 0, 1), e = k * k * (3 - 2 * k);
     if (k <= 0) memset(FB, 0, FB_W * FB_H * 4);
-    else { hd_background(); draw_world(); darken(0, 0, SCR_W, SCR_H, 1 - e); }
+    else { bg_layer(0); draw_world(); darken(0, 0, SCR_W, SCR_H, 1 - e); }
     if (k <= 0) { for (int i = 0; i < FB_W * FB_H; i++) FB[i] = 0xFF000000; text_c(L->name, 14, 3, 0xFFFFFFFF); dino_sx = 320; dino_sy = 250; }
     else if (k < 0.5f) text_c(L->name, 14 - (int)(e * 80), 3, 0xFFFFFFFF);
     hud_cx = (int)(100 * (1 - e)); hud_lx = (int)(-96 * (1 - e)); hud_cy = hud_ly = (int)(38 * (1 - e));
@@ -3014,7 +3057,7 @@ void game_draw(uint32_t* fb) {
     }
     return;
   }
-  hd_background();
+  bg_layer(0);
   draw_world();
   if (L->theme == 5 || L->theme == 7) {
     for (int i = 0; i < 90; i++) {   // soft snowflakes drifting down
@@ -3079,7 +3122,8 @@ void game_draw_pad(uint32_t* fb) {
   uint32_t* keep = FB; FB = fb;
   char buf[64];
   int in_level = L && (state == ST_PLAY || state == ST_PAUSE || state == ST_CLEAR || (state == ST_OVER && state_t < 40));
-  if (in_level) hd_background();
+  pad_lay_bg = 0;
+  if (in_level) bg_layer(1);
   else if (title_bg) memcpy(FB, title_bg, FB_W * FB_H * 4);
   else for (int i = 0; i < FB_W * FB_H; i++) FB[i] = 0xFF7EC8F0;
   make_extra_art();

@@ -3,6 +3,8 @@
 // and plays its sound.
 #include <SDL2/SDL.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 #include "game.h"
 
@@ -112,6 +114,103 @@ static void wiiu_read(Input* in) {
 }
 #endif
 
+// ---- drawing on the graphics chip: in a level the game leaves the background and the level picture
+// out of its own picture (see game_layers), and they are drawn here from textures instead. Only the
+// game's see-through picture on top (creatures, Dino, coins, the HUD) is sent across each frame.
+#define LV_CHUNK 1024
+typedef struct {
+  SDL_Renderer* r;
+  SDL_Texture *far, *near, *sun, *lv[48];
+  const uint32_t* sun_px;
+  int bg_ver, lvb_ver, nlv, lv_w[48], lv_h, premul;
+  SDL_BlendMode pm;
+} Layers;
+static void layers_init(Layers* L, SDL_Renderer* r, SDL_Texture* over) {
+  memset(L, 0, sizeof *L); L->r = r; L->bg_ver = L->lvb_ver = -1;
+  // the game's picture is premultiplied where it is see-through: lay it on with that blend if the chip can
+  L->pm = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+                                     SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+  L->premul = over && SDL_SetTextureBlendMode(over, L->pm) == 0;
+  if (over) SDL_SetTextureBlendMode(over, SDL_BLENDMODE_NONE);
+}
+static SDL_Texture* make_tex(SDL_Renderer* r, int w, int h, const uint32_t* px, int pitch, SDL_BlendMode b) {
+  SDL_Texture* t = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
+  if (!t) return NULL;
+  SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+  SDL_SetTextureBlendMode(t, b);
+  SDL_UpdateTexture(t, NULL, px, pitch * 4);
+  return t;
+}
+static void layers_sync(Layers* L, const GameLayers* g) {
+  if (g->bg && (g->bg_ver != L->bg_ver || !L->far)) {
+    if (L->far) SDL_DestroyTexture(L->far);
+    if (L->near) SDL_DestroyTexture(L->near);
+    L->far = make_tex(L->r, g->bgw, g->bgh, g->far, g->bgw, SDL_BLENDMODE_NONE);
+    L->near = make_tex(L->r, g->bgw, g->bgh, g->near, g->bgw, SDL_BLENDMODE_BLEND);
+    L->bg_ver = g->bg_ver;
+  }
+  if (g->bg && g->sun != L->sun_px) {
+    if (L->sun) SDL_DestroyTexture(L->sun);
+    L->sun = g->sun ? make_tex(L->r, g->sun_w, g->sun_h, g->sun, g->sun_w, SDL_BLENDMODE_BLEND) : NULL;
+    L->sun_px = g->sun;
+  }
+  if (g->level && g->lvb_ver != L->lvb_ver) {
+    for (int i = 0; i < L->nlv; i++) if (L->lv[i]) SDL_DestroyTexture(L->lv[i]);
+    L->nlv = 0;
+    for (int x = 0; x < g->lvb_w && L->nlv < 48; x += LV_CHUNK) {
+      int w = g->lvb_w - x < LV_CHUNK ? g->lvb_w - x : LV_CHUNK;
+      L->lv_w[L->nlv] = w;
+      L->lv[L->nlv++] = make_tex(L->r, w, g->lvb_h, g->lvb + x, g->lvb_w, SDL_BLENDMODE_BLEND);
+    }
+    L->lv_h = g->lvb_h; L->lvb_ver = g->lvb_ver;
+  }
+}
+// copy rows sy..sy+sh of a strip that repeats sideways, starting at column scroll, to screen rows dy..dy+dh
+static void strip(SDL_Renderer* r, SDL_Texture* t, int bgw, int scroll, int sy, int sh, int dy, int dh) {
+  if (!t || sh <= 0 || dh <= 0) return;
+  int n1 = bgw - scroll; if (n1 > FB_W) n1 = FB_W;
+  SDL_Rect s1 = { scroll, sy, n1, sh }, d1 = { 0, dy, n1, dh };
+  SDL_RenderCopy(r, t, &s1, &d1);
+  if (n1 < FB_W) { SDL_Rect s2 = { 0, sy, FB_W - n1, sh }, d2 = { n1, dy, FB_W - n1, dh }; SDL_RenderCopy(r, t, &s2, &d2); }
+}
+static void layers_draw(Layers* L, const GameLayers* g) {
+  if (g->bg) {
+    int y0 = g->far_yoff > 0 ? g->far_yoff : 0, y1 = g->far_yoff + g->bgh < FB_H ? g->far_yoff + g->bgh : FB_H;
+    if (g->far_yoff > 0) strip(L->r, L->far, g->bgw, g->far_scroll, 0, 1, 0, g->far_yoff);   // the top row, stretched up
+    strip(L->r, L->far, g->bgw, g->far_scroll, y0 - g->far_yoff, y1 - y0, y0, y1 - y0);
+    if (y1 < FB_H) strip(L->r, L->far, g->bgw, g->far_scroll, g->bgh - 1, 1, y1, FB_H - y1);   // the bottom row, stretched down
+    if (L->sun) { SDL_Rect d = { g->sun_x, g->sun_y, g->sun_w, g->sun_h }; SDL_RenderCopy(L->r, L->sun, NULL, &d); }
+    y0 = g->near_yoff > 0 ? g->near_yoff : 0; y1 = g->near_yoff + g->bgh < FB_H ? g->near_yoff + g->bgh : FB_H;
+    strip(L->r, L->near, g->bgw, g->near_scroll, y0 - g->near_yoff, y1 - y0, y0, y1 - y0);
+    if (y1 < FB_H) strip(L->r, L->near, g->bgw, g->near_scroll, g->bgh - 1, 1, y1, FB_H - y1);
+  }
+  if (g->level) for (int i = 0; i < L->nlv; i++) {
+    int x = i * LV_CHUNK - g->cx;
+    if (!L->lv[i] || x >= FB_W || x + L->lv_w[i] <= 0) continue;
+    SDL_Rect d = { x, -g->cy, L->lv_w[i], L->lv_h };
+    SDL_RenderCopy(L->r, L->lv[i], NULL, &d);
+  }
+}
+// send the game's picture and lay it on top. If the chip has no premultiplied blend, undo the premultiplying first.
+static void overlay(Layers* L, SDL_Texture* tex, uint32_t* fb, int layered) {
+  static uint32_t tmp[FB_W * FB_H];
+  static int inv[256];
+  const uint32_t* src = fb;
+  if (layered && !L->premul) {
+    if (!inv[1]) for (int a = 1; a < 256; a++) inv[a] = (255 << 16) / a;
+    for (int i = 0; i < FB_W * FB_H; i++) {
+      uint32_t c = fb[i], a = c >> 24;
+      if (a == 0 || a == 255) { tmp[i] = c; continue; }
+      uint32_t k = inv[a], rr = ((c >> 16) & 255) * k >> 16, gg = ((c >> 8) & 255) * k >> 16, bb = (c & 255) * k >> 16;
+      tmp[i] = (a << 24) | ((rr > 255 ? 255 : rr) << 16) | ((gg > 255 ? 255 : gg) << 8) | (bb > 255 ? 255 : bb);
+    }
+    src = tmp;
+  }
+  SDL_UpdateTexture(tex, NULL, src, FB_W * 4);
+  SDL_SetTextureBlendMode(tex, !layered ? SDL_BLENDMODE_NONE : L->premul ? L->pm : SDL_BLENDMODE_BLEND);
+  SDL_RenderCopy(L->r, tex, NULL, NULL);
+}
+
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
@@ -130,13 +229,21 @@ int main(int argc, char** argv) {
   SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_WIIU_TV_ONLY);
   SDL_Window* pwin = SDL_CreateWindow("Amazing Dino pad", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 854, 480, SDL_WINDOW_WIIU_GAMEPAD_ONLY);
 #else
+#ifdef DINO_SELFTEST
+  SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FB_W, FB_H, 0);
+#else
   SDL_Window* win = SDL_CreateWindow("Amazing Dino", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, 0);
+#endif
   SDL_Window* pwin = NULL;
 #endif
   SDL_Renderer* r = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  SDL_RenderSetLogicalSize(r, 1280, 720);
+  SDL_RenderSetLogicalSize(r, FB_W, FB_H);   // everything is placed in the game's 640x360 pixels and stretched
   SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
   SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);   // smooth when stretched to the TV, not blocky
+  // two of them, used in turn, so sending this frame never waits for the chip to finish with the last one
+  SDL_Texture* tex2 = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
+  if (tex2) SDL_SetTextureScaleMode(tex2, SDL_ScaleModeLinear); else tex2 = tex;
+  int flip = 0;
   SDL_Renderer* pr = pwin ? SDL_CreateRenderer(pwin, -1, SDL_RENDERER_ACCELERATED) : NULL;
   SDL_Texture* ptex = pr ? SDL_CreateTexture(pr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H) : NULL;
   if (ptex) SDL_SetTextureScaleMode(ptex, SDL_ScaleModeLinear);
@@ -145,7 +252,11 @@ int main(int argc, char** argv) {
   if (!ptex) {   // no second screen after all: show the game on both, as before
     if (pwin) SDL_DestroyWindow(pwin);
     pwin = NULL;
-  } else g_pad_screen = 1;
+  } else { g_pad_screen = 1; SDL_RenderSetLogicalSize(pr, FB_W, FB_H); }
+  static Layers TVL, PADL;
+  layers_init(&TVL, r, tex);
+  if (pr) layers_init(&PADL, pr, ptex);
+  g_gpu = getenv("DINO_CPU") ? 0 : 1;
 
   game_init();
 
@@ -200,8 +311,18 @@ int main(int argc, char** argv) {
       in.pop |= SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
     }
 #endif
+#ifdef DINO_SELFTEST   // a desktop check of the drawing: walk into level 1, save a picture, stop
+    static int st_f; st_f++;
+    memset(&in, 0, sizeof in);
+    in.jump = st_f == 40 || st_f == 80 || st_f == 170;
+    in.right = (st_f > 130 && st_f < 134) || (st_f > 340 && st_f < 420);
+    acc = tick;
+#endif
     Uint64 now = SDL_GetPerformanceCounter();
     acc += (double)(now - last) / freq; last = now;
+#ifdef DINO_SELFTEST
+    acc = tick;
+#endif
     if (acc > 0.1) acc = 0.1;
     int steps = 0;
     while (acc >= tick && steps < 4) {
@@ -220,16 +341,38 @@ int main(int argc, char** argv) {
     if (dt > 0.03) dt = 0.03;
     slow_avg = slow_avg * 0.97 + dt * 0.03;
     if (++slow_n > 180) { if (slow_avg > 0.014) g_lowq = 1; else if (slow_avg < 0.010) g_lowq = 0; }
-    SDL_UpdateTexture(tex, NULL, fb, FB_W * 4);
-    SDL_RenderClear(r);
-    SDL_RenderCopy(r, tex, NULL, NULL);
-    SDL_RenderPresent(r);
+    {
+      GameLayers g; game_layers(&g, 0);
+      layers_sync(&TVL, &g);
+      SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+      SDL_RenderClear(r);
+      layers_draw(&TVL, &g);
+      overlay(&TVL, (flip ^= 1) ? tex2 : tex, fb, g.bg || g.level);
+#ifdef DINO_SELFTEST
+      if (st_f == 470) {
+        static uint32_t shot[FB_W * FB_H];
+        SDL_Rect all = { 0, 0, FB_W, FB_H };
+        int ok = SDL_RenderReadPixels(r, NULL, SDL_PIXELFORMAT_ARGB8888, shot, FB_W * 4);
+        (void)all;
+        FILE* fp = fopen(getenv("DINO_SHOT") ? getenv("DINO_SHOT") : "shot.ppm", "wb");
+        fprintf(fp, "P6 %d %d 255\n", FB_W, FB_H);
+        for (int i = 0; i < FB_W * FB_H; i++) { unsigned char c[3] = { shot[i] >> 16, shot[i] >> 8, shot[i] }; fwrite(c, 1, 3, fp); }
+        fclose(fp);
+        printf("read %d, layers bg %d level %d, premultiplied blend %d\n", ok, g.bg, g.level, TVL.premul);
+        running = 0;
+      }
+#endif
+      SDL_RenderPresent(r);
+    }
     // the GamePad screen changes slowly, so it is only drawn every fourth frame, leaving the time for the TV
     if (ptex && ++pad_n % (g_lowq ? 8 : 4) == 0) {
       game_draw_pad(pfb);
-      SDL_UpdateTexture(ptex, NULL, pfb, FB_W * 4);
+      GameLayers g; game_layers(&g, 1);
+      layers_sync(&PADL, &g);
+      SDL_SetRenderDrawColor(pr, 0, 0, 0, 255);
       SDL_RenderClear(pr);
-      SDL_RenderCopy(pr, ptex, NULL, NULL);
+      layers_draw(&PADL, &g);
+      overlay(&PADL, ptex, pfb, g.bg);
       SDL_RenderPresent(pr);
     }
   }

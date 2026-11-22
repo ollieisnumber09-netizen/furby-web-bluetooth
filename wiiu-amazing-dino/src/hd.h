@@ -428,6 +428,7 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   }
   return 0;
 }
+static int bg_ver, lvb_ver;   // bumped whenever the background or level picture is drawn again
 static void hd_render_tiles(int ax, int ay, int bx, int by);
 static void render_staged(int ax, int ay, int bx, int by);
 static void hd_render_level(void) {
@@ -436,6 +437,7 @@ static void hd_render_level(void) {
   LVB = bmp_new(LW * HT, LH * HT);
   LV_ROW = (unsigned char*)calloc(LH * HT, 1);
   render_staged(0, 0, LW, LH);
+  lvb_ver++;
 }
 // paint tiles ax..bx-1, ay..by-1 of the level picture (clearing them first)
 static void hd_render_tiles(int ax, int ay, int bx, int by) {
@@ -544,7 +546,7 @@ static void hd_render_bg(void) {
   int th = L->theme;
   static uint32_t bg_cols[4]; static int bg_lk = -1;
   if (bg_theme == th && bg_lk == bg_lake && bg_cols[0] == L->sky0 && bg_cols[1] == L->sky1 && bg_cols[2] == L->far && bg_cols[3] == L->nearc) return;
-  bg_theme = th; bg_lk = bg_lake; bg_cols[0] = L->sky0; bg_cols[1] = L->sky1; bg_cols[2] = L->far; bg_cols[3] = L->nearc;
+  bg_theme = th; bg_lk = bg_lake; bg_ver++; bg_cols[0] = L->sky0; bg_cols[1] = L->sky1; bg_cols[2] = L->far; bg_cols[3] = L->nearc;
   if (!BG_FAR.px) {
     BG_FAR = bmp_new(BGW, FB_H); BG_NEAR = bmp_new(BGW, FB_H);
     HD_SUN = bmp_new(68, 68); HD_MOON = bmp_new(62, 62);
