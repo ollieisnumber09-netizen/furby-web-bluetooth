@@ -2846,7 +2846,22 @@ static void draw_title(void) {
     int w = text_w(ps, 2) + 16, x = (SCR_W - w) / 2, y = 152;
     if ((state_t / 30) % 2 == 0) { darken(x, y, w, 18, 0.45f); text(ps, x + 8, y + 3, 2, 0xFFFFFFFF); }
   }
-  text_c("MADE BY OLIVER", 172, 1, 0xFFFFF4C2);
+  {   // @furbopotato, with a round @ drawn by hand (the little letters are too small for one)
+    const char* nm = " FURBOPOTATO";
+    int tx = (SCR_W - text_w(nm, 1)) / 2;
+    text(nm, tx, 172, 1, 0xFFFFF4C2);
+    float cx = tx * 2 + 3, cy = 172 * 2 + 5;
+    for (int pass = 0; pass < 2; pass++) {
+      uint32_t c = pass ? 0xFFFFF4C2 : 0xFF1E1A22; float w = pass ? 0.8f : 1.9f;
+      for (int y = (int)cy - 8; y <= (int)cy + 8; y++) for (int x = (int)cx - 8; x <= (int)cx + 8; x++) {
+        float fx = x + 0.5f - cx, fy = y + 0.5f - cy, r = sqrtf(fx * fx + fy * fy);
+        float ring = fabsf(r - 4.6f) - w, inner = fabsf(r - 1.8f) - w, stem = (fx > 1 && fx < 4.6f && fy > -2.5f && fy < 1.5f) ? fabsf(fx - 2.4f) - w : 99;
+        if (fx > 1.5f && fy > 0.6f && fy < 3.2f && r < 5.8f) ring = 99;   // the gap where the tail curls in
+        float d = minf(ring, minf(inner, stem));
+        fb_over(x, y, c, cov(d));
+      }
+    }
+  }
 #ifndef __EMSCRIPTEN__
   if (!g_no_hud && state_t > 240 && (state_t / 240) % 2) {   // now and then, show the controls instead
     darken(0, 150, SCR_W, 30, 0.5f);
