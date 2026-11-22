@@ -2415,42 +2415,124 @@ dino:;
 }
 
 static uint32_t* title_bg;   // the title's sky, trees and hill never change, so they are painted once and kept
+
+// ============================================================ the title screen
+// The logo: chunky letters with a thick dark outline, a deep 3D side and a sunny gold-to-orange face.
+static Bmp LOGO;
+static void make_logo(void) {
+  int W = 600, H = 190;
+  uint32_t* keep = FB;
+  static uint32_t mask[600 * 190];
+  // draw the words in white into a scratch picture, to use as a stencil
+  uint32_t* tmp = (uint32_t*)calloc((size_t)FB_W * FB_H, 4);
+  FB = tmp;
+  text_raw("AMAZING", (SCR_W - text_w("AMAZING", 6)) / 2, 6, 6, 0xFFFFFFFF);
+  text_raw("DINO", (SCR_W - text_w("DINO", 10)) / 2, 40, 10, 0xFFFFFFFF);
+  FB = keep;
+  int ox = (FB_W - W) / 2;
+  for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) mask[y * W + x] = (tmp[y * FB_W + x + ox] >> 24) > 127;
+  free(tmp);
+  LOGO = bmp_new(W, H);
+  const int DEP = 9, OL = 5;
+  // outline and the 3D side: the stencil pushed down and right, step by step, with a dark rim round it all
+  for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+    int side = 0, out = 0;
+    for (int k = 0; k <= DEP && !side; k++) { int sx = x - k / 2, sy = y - k; if (sx >= 0 && sy >= 0 && mask[sy * W + sx]) side = k + 1; }
+    for (int dy = -OL; dy <= OL + DEP && !out; dy++) for (int dx = -OL; dx <= OL && !out; dx++) {
+      if (dx * dx + (dy > 0 ? 0 : dy * dy) > OL * OL + (dy > 0 ? 99 : 0)) continue;
+      int sx = x + dx - (dy > 0 ? dy / 2 : 0), sy = y + (dy > 0 ? -dy : dy);
+      if (sx >= 0 && sy >= 0 && sx < W && sy < H && mask[sy * W + sx]) out = 1;
+    }
+    if (side > 1) LOGO.px[y * W + x] = mixc(0xFFC8521E, 0xFF7A2A10, (side - 1) / (float)DEP);
+    else if (out) LOGO.px[y * W + x] = 0xFF2A1408;
+  }
+  // the face of the letters: gold at the top to orange at the bottom of each row of words, with a shine near the top
+  for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if (mask[y * W + x]) {
+    int top = y < 64 ? 12 : 80, bot = y < 64 ? 54 : 180;
+    float t = clampf((y - top) / (float)(bot - top), 0, 1);
+    uint32_t c = t < 0.5f ? mixc(0xFFFFF7A8, 0xFFFFD23A, t * 2) : mixc(0xFFFFD23A, 0xFFFF9A2A, t * 2 - 1);
+    if (t > 0.18f && t < 0.3f) c = mixc(c, 0xFFFFFFFF, 0.45f);
+    int edge = !mask[(y > 0 ? y - 1 : y) * W + x] || !mask[y * W + (x > 0 ? x - 1 : x)];
+    if (edge) c = mixc(c, 0xFFFFFFFF, 0.6f);
+    LOGO.px[y * W + x] = c;
+  }
+}
+// the gang lined up on the grass: Dino in the middle with creatures either side
+#define NGANG 6
+static Bmp GANG[NGANG];
+static void draw_title(void) {
+  if (!title_bg) {
+    title_bg = (uint32_t*)malloc(FB_W * FB_H * 4);
+    hd_background();
+    // a long grassy bank across the bottom, with a striped dirt edge
+    for (int y = 270; y < FB_H; y++) for (int x = 0; x < FB_W; x++) {
+      float top = 284 + sinf(x * 0.012f) * 6 + sinf(x * 0.037f + 1) * 3;
+      if (y < top - 1) continue;
+      float d = y - top;
+      uint32_t c = d < 14 ? mixc(0xFFB8EE6A, 0xFF5CC23E, d / 14) : d < 18 ? 0xFF3A8A2E : mixc(0xFFC98A4A, 0xFF8A5528, clampf((d - 18) / 50, 0, 1));
+      if (d >= 18 && ((x + (int)d * 2) / 22) % 2) c = mixc(c, 0xFF000000, 0.08f);
+      fb_over(x, y, c, clampf(d + 1, 0, 1));
+    }
+    // flowers along the bank
+    for (int i = 0; i < 22; i++) {
+      float fx = 14 + i * 29.5f + (hash2(i, 7) % 9), fy = 284 + sinf(fx * 0.012f) * 6 + sinf(fx * 0.037f + 1) * 3 - 2;
+      static const uint32_t PC[4] = { 0xFFFF7A9A, 0xFFFFE04A, 0xFFFFFFFF, 0xFF9AC8FF };
+      uint32_t pc = PC[hash2(i, 3) % 4];
+      fb_capsule(fx, fy, fx, fy - 9, 1.2f, 0xFF2E8A3A);
+      for (int k = 0; k < 5; k++) { float a = k * 1.2566f; fb_dot(fx + cosf(a) * 3.6f, fy - 11 + sinf(a) * 3.6f, 3.2f, OUTLINE, 1); }
+      for (int k = 0; k < 5; k++) { float a = k * 1.2566f; fb_dot(fx + cosf(a) * 3.6f, fy - 11 + sinf(a) * 3.6f, 2.4f, pc, 1); }
+      fb_dot(fx, fy - 11, 2.2f, 0xFFFFC23A, 1);
+    }
+    memcpy(title_bg, FB, FB_W * FB_H * 4);
+    make_logo();
+    static const int TY[NGANG] = { E_FROG, E_PENGUIN, E_BEETLE, E_CRAB, E_ROLL, E_SNOWMAN };
+    for (int i = 0; i < NGANG; i++) {
+      float yaw = i < NGANG / 2 ? 0.55f : -0.55f;
+      if (TY[i] == E_BEETLE) beetle3d(&GANG[i], 0.6f, 1, yaw, 0, 0, 0, 2.0f, 0);
+      else critter3d(&GANG[i], TY[i], 1, yaw, 0, 2.0f, 0);
+    }
+  } else memcpy(FB, title_bg, FB_W * FB_H * 4);
+  // the gang, each hopping a little in turn
+  static const int GX[NGANG] = { 62, 148, 232, 408, 492, 578 };
+  for (int i = 0; i < NGANG; i++) {
+    float hop = maxf(0, sinf(state_t * 0.08f - i * 0.9f)) * 8;
+    int gy = 284 + (int)(sinf(GX[i] * 0.012f) * 6 + sinf(GX[i] * 0.037f + 1) * 3);
+    fb_shadow(GX[i], gy + 2, 22 - hop, 4, 0.2f);
+    hblit(&GANG[i], GX[i] - (int)(26 * 2.0f), gy + 4 - (int)(38 * 2.0f) - (int)hop, 0);
+  }
+  {
+    DinoPose p; dino_idle_pose(&p, state_t);
+    float hop = fabsf(sinf(state_t * 0.05f));
+    p.bob = hop * 5; p.sq = 1 + 0.06f * sinf(state_t * 0.1f); p.spk = sinf(state_t * 0.1f + 1) * 0.15f; p.mouth = hop > 0.5f ? (hop - 0.5f) * 2 : 0; p.mood = 4;
+    fb_shadow(320, 292, 32 - hop * 5, 5, 0.22f);
+    draw_dino_at(320, 292, 1.9f, &p, sinf(state_t * 0.025f) * 0.5f);
+  }
+  // the logo, gently bobbing
+  hblit(&LOGO, (FB_W - LOGO.w) / 2, 2 + (int)(sinf(state_t * 0.04f) * 3), 0);
+  // press start, in a little banner
+  {
+    const char* ps =
+#ifdef __EMSCRIPTEN__
+      "PRESS JUMP TO START";
+#else
+      "PRESS A TO START";
+#endif
+    int w = text_w(ps, 2) + 16, x = (SCR_W - w) / 2, y = 152;
+    if ((state_t / 30) % 2 == 0) { darken(x, y, w, 18, 0.45f); text(ps, x + 8, y + 3, 2, 0xFFFFFFFF); }
+  }
+  text_c("MADE BY OLIVER", 172, 1, 0xFFFFF4C2);
+#ifndef __EMSCRIPTEN__
+  if (!g_no_hud && state_t > 240 && (state_t / 240) % 2) {   // now and then, show the controls instead
+    darken(0, 150, SCR_W, 30, 0.5f);
+    text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 154, 1, 0xFFFFF4C2);
+    text_c("SPRINT: HOLD ZL OR ZR   TWIRL: L OR R IN THE AIR   USE SLOT: -", 163, 1, 0xFFFFF4C2);
+  }
+#endif
+}
 void game_draw(uint32_t* fb) {
   FB = fb;
   char buf[64];
-  if (state == ST_TITLE) {
-    if (!title_bg) {
-      title_bg = (uint32_t*)malloc(FB_W * FB_H * 4);
-      hd_background();
-      // a round grassy hill for Dino to stand on
-      for (int y = 280; y < FB_H; y++) for (int x = 0; x < FB_W; x++) {
-        float dd = sd_ellipse(x + 0.5f, y + 0.5f, 320, 700, 620, 410);
-        if (dd > 1) continue;
-        uint32_t c = dd > -12 ? mixc(0xFFC8F27A, 0xFF6CC943, clampf(-dd / 12, 0, 1)) : mixc(0xFF6CC943, 0xFF3B9A36, clampf((-dd - 12) / 60, 0, 1));
-        fb_over(x, y, c, cov(dd));
-      }
-      memcpy(title_bg, FB, FB_W * FB_H * 4);
-    } else memcpy(FB, title_bg, FB_W * FB_H * 4);
-    {
-      DinoPose p; dino_idle_pose(&p, state_t);
-      float hop = fabsf(sinf(state_t * 0.05f));
-      p.bob = hop * 5; p.sq = 1 + 0.06f * sinf(state_t * 0.1f); p.spk = sinf(state_t * 0.1f + 1) * 0.15f; p.mouth = hop > 0.5f ? (hop - 0.5f) * 2 : 0;
-      fb_shadow(320, 293, 44 - hop * 6, 6, 0.2f);
-      draw_dino_at(320, 292, 3, &p, 0.35f + sinf(state_t * 0.025f) * 0.45f);
-    }
-    hblit(&HD_COIN[(frame / 2) % COIN_FRAMES], 80, 250 + (int)(sinf(frame * 0.08f) * 4), 0);
-    hblit(&HD_COIN[(frame / 2 + 8) % COIN_FRAMES], 528, 250 + (int)(sinf(frame * 0.08f + 2) * 4), 0);
-    text_c("AMAZING DINO", 24, 5, 0xFFF7D038);
-    text_c("A LITTLE JUNGLE ADVENTURE", 58, 1, 0xFF3B2414);
-#ifdef __EMSCRIPTEN__
-    if ((state_t / 30) % 2 == 0) text_c("PRESS JUMP TO START", 80, 2, 0xFFFFFFFF);
-#else
-    if ((state_t / 30) % 2 == 0) text_c("PRESS A TO START", 80, 2, 0xFFFFFFFF);
-    if (!g_no_hud) text_c("MOVE: STICK   JUMP: A OR B   HEADBUTT: X OR Y   PAUSE: +", 161, 1, 0xFFFFF4C2);
-    if (!g_no_hud) text_c("SPRINT: HOLD ZL OR ZR   TWIRL: L OR R IN THE AIR   USE SLOT: -", 171, 1, 0xFFFFF4C2);
-#endif
-    return;
-  }
+  if (state == ST_TITLE) { draw_title(); return; }
   if (state == ST_MAP) { draw_map(); return; }
   if (state == ST_PLAY && intro_t) {
     // the level intro: Dino on black with his coins and lives above him, then everything flies into place

@@ -25,7 +25,7 @@ class Midi:
         d += b'\x00\xff\x2f\x00'
         open(fn, 'wb').write(b'MThd' + struct.pack('>IHHH', 6, 0, 1, PPQ) + b'MTrk' + struct.pack('>I', len(d)) + d)
 
-BASS, KEYS, LEAD, LEAD2, HARM, PIZZ, ARP, PIANO, LOW, DR, PAD = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+BASS, KEYS, LEAD, LEAD2, HARM, PIZZ, ARP, PIANO, LOW, DR, PAD, BRASS, GLOCK, COUNTER, STRINGS = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 HATS = {'x': 42, 's': 83, 't': 81, 'w': 76}
 PERC = {'h': 60, 'l': 61, 's': 70, 'c': 56, 'w': 76, 'q': 63, 'd': 64, 't': 81}   # bongos, maracas, cowbell, woodblock, congas, triangle
 
@@ -36,10 +36,19 @@ def loop_steps(sg):
 def arrange(sg, fn, loops=3, seed=1):
     R = random.Random(seed)
     m = Midi(sg['bpm']); spb = sg.get('spb', 8); sw = sg['swing']; mel = sg['mel']; ch = sg['chords']; base = sg['base']
-    nsteps = len(mel); secs = sg['sections']; I = sg['ins']; ls = loop_steps(sg)
+    nsteps = len(mel); I = sg['ins']
+    # more instruments: every song gets one more section where the whole band joins in
+    # (strings, brass hits, a glockenspiel on the tune, a low counter-melody and a tambourine)
+    secs = list(sg['sections'])
+    if sg.get('rich', 1):
+        full = dict(secs[-1]); full.update(strings=1, brass=1, glock=1, counter=1, tamb=1); secs.append(full)
+        for i in range(1, len(secs) - 1): secs[i] = dict(secs[i], strings=1, counter=1)
+    sg = dict(sg, sections=secs); ls = loop_steps(sg)
     V = dict(bass=112, keys=76, lead=118, lead2=86, harm=80, pizz=92, arp=72, piano=72, low=70, pad=62, drums=100); V.update(sg.get('vol', {}))
     m.ctl(BASS, V['bass'], 64, 20); m.ctl(KEYS, V['keys'], 44, 40); m.ctl(LEAD, V['lead'], 70, 45); m.ctl(LEAD2, V['lead2'], 56, 45); m.ctl(HARM, V['harm'], 84, 40)
     m.ctl(PIZZ, V['pizz'], 96, 45); m.ctl(ARP, V['arp'], 30, 45); m.ctl(PIANO, V['piano'], 80, 40); m.ctl(LOW, V['low'], 40, 45); m.ctl(PAD, V['pad'], 64, 60); m.ctl(DR, V['drums'], 64, 30)
+    m.ctl(BRASS, 74, 76, 40); m.ctl(GLOCK, 58, 52, 50); m.ctl(COUNTER, 70, 40, 45); m.ctl(STRINGS, 58, 64, 70)
+    m.prog(0, BRASS, I.get('brass', 61)); m.prog(0, GLOCK, I.get('glock', 9)); m.prog(0, COUNTER, I.get('counter', 42)); m.prog(0, STRINGS, I.get('strings', 49))
     m.prog(0, BASS, I.get('bass', 32)); m.prog(0, KEYS, I.get('keys', 24)); m.prog(0, ARP, I.get('arp', 12)); m.prog(0, PIZZ, 45); m.prog(0, PIANO, 0)
     def T(step):   # tick of a step, with swing
         bar, st = divmod(step, spb); return bar * spb * 240 + (st // 2) * 480 + (int(480 * sw) if st % 2 else 0)
@@ -64,6 +73,7 @@ def arrange(sg, fn, loops=3, seed=1):
             dur = T(step + k) - T(step) - 30
             if k == 1 and not sg.get('legato'): dur = min(dur, 200)
             m.note(LEAD, t, n, dur, hum(104 if st % 2 == 0 else 92))
+            if sec.get('glock'): m.note(GLOCK, t, n + 12 if n < 84 else n, min(dur, 300), hum(70))
             if sec.get('lead2') is not None: m.note(LEAD2, t, n + (12 if n < 76 else 0), dur, hum(84))
             if sec.get('harm') is not None:
                 h = n - 3
@@ -75,9 +85,17 @@ def arrange(sg, fn, loops=3, seed=1):
             m.note(BASS, t, root + off, steplen * 2 - 60 if pat('bass', step + 1) == '.' else steplen - 30, hum(108 if st == 0 else 96))
         if pat('stab', step) == 'x':
             for q in tri[:3]: m.note(KEYS, t + R.randint(0, 8), q, 150, hum(78))
+            if sec.get('brass'):
+                for q in tri[:3]: m.note(BRASS, t + R.randint(0, 6), q + 12, 120, hum(80))
             if sec.get('piano'):
                 for q in tri[1:4]: m.note(PIANO, t + R.randint(0, 8), q + 12, 130, hum(70))
         if sec.get('pizz'): m.note(PIZZ, t, tri[[0, 2, 1, 2, 3, 2, 1, 2][st % 8]] + 12, 160, hum(80 if st % 2 == 0 else 66))
+        if st == 0 and sec.get('strings'):   # long string chords under everything
+            for q in tri[:3]: m.note(STRINGS, t, q + 12, spb * 240 - 30, hum(60))
+        if sec.get('counter') and st % (spb // 2) == 0:   # a slow low tune of its own, walking through the chord
+            q = [tri[0], tri[1], tri[2], tri[1]][(st // (spb // 2) + bar) % 4] - 12
+            m.note(COUNTER, t, q, spb * 120 - 40, hum(70))
+        if sec.get('tamb') and st % 2 == 1: m.note(DR, t, 54, 60, hum(58))
         if st == 0:
             if sec.get('low') is not None: m.note(LOW, t, tri[1] - 12, spb * 240 - 40, hum(72))
             if sec.get('pad') is not None:
@@ -117,13 +135,13 @@ def render(name):
 
 S = lambda **k: k
 SONGS = {
- 'title': dict(base=62, bpm=168, swing=0.60, fill=1,   # Hello Dino: a little parade
-    mel="7.77C.G." "E.C.9.7-" "9.99C.9." "7--.4.2." "4.57C.G." "H.G.E.C-" "E.EGE.B." "C--....."
-        "H.HGH.L." "J.G.E.G-" "H.HGH.L." "N--.L.J." "O.L.J.G." "H.E.C.9." "B.EGJ.N." "O--.....",
-    chords="0M5M5M7M0M9m7M0M5M0M5M7M0M9m7M0M",
-    bass="0.0.7.7.", stab="..x...x.", kick="x...x...", snare="..x...xx", hat="x.x.x.x.",
-    ins=dict(bass=58, keys=0), vol=dict(bass=120),
-    sections=[S(lead=56, lead2=9, harm=60), S(lead=71, lead2=73, harm=60, pizz=1)]),
+ 'title': dict(base=60, bpm=140, swing=0.56, fill=1,   # Here Comes Dino: a bright march for the title
+    mel="C.C.G.E." "H.G.E.C-" "9.9.C.H." "G---...." "C.C.G.E." "H.J.L.J-" "H.G.E.9." "C---...."
+        "E.E.G.H." "J.H.G.E-" "C.C.E.G." "H---...." "L.J.H.G." "E.G.J.L." "O.L.J.H." "J---G...",
+    chords="0M5M5M0M0M5M7M0M0M7M0M5M9m0M5M7M",
+    bass="0.7.0.7.", stab="..x...x.", kick="x...x...", snare="..x...xx", hat="x.x.x.x.", perc="....s..s",
+    ins=dict(bass=33, keys=0), vol=dict(bass=116),
+    sections=[S(lead=56, lead2=73, harm=60, pizz=1), S(lead=61, lead2=9, harm=48, piano=1, low=57)]),
  'map': dict(base=67, bpm=112, swing=0.66, legato=1, clap=37, crash=0,   # Which Way?: a lazy stroll
     mel="4--57--4" "0--24---" "5--79--7" "7--54-2-" "4--57--C" "E--C9---" "5-7-9-B-" "C-----..",
     chords="0M9m5M7M0M9m5M0M",
