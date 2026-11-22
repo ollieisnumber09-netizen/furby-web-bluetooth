@@ -383,7 +383,7 @@ static const Level LEVELS[] = {
 #define NLEVELS (int)(sizeof LEVELS / sizeof LEVELS[0])
 
 // ============================================================ state
-enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP };
+enum { ST_TITLE, ST_PLAY, ST_PAUSE, ST_CLEAR, ST_OVER, ST_WIN, ST_MAP, ST_WORLDS, ST_TRAVEL };
 enum { E_BEETLE, E_BEE, E_POW, E_ICE, E_BOSS, E_PLAT, E_SHOT, E_FROG, E_SPINY, E_PLANT, E_BAT,
        E_CRAB, E_FISH, E_JELLY, E_ROLL, E_PENGUIN, E_MOLE, E_BIRD, E_SNOWMAN };
 #define NCRIT (E_SNOWMAN - E_FROG + 1)
@@ -513,6 +513,14 @@ static void load_progress(void) {
   if (fscanf(f, "%d", &total_bananas) != 1) total_bananas = 0;
   fclose(f);
 }
+static int travel_from, travel_to, travel_node, wsel; static float wsel_f;   // the trip between worlds, and the world select
+static int world_open(int w) {
+  if (w <= 0) return 1;
+  const World* pw = &WORLDS[w - 1];
+  for (int k = 0; k < pw->n; k++) if (pw->kind[k] >= 0 && !cleared[pw->kind[k] + 1]) return 0;
+  return 1;
+}
+static void go_travel(int to, int node) { travel_from = world; travel_to = to; travel_node = node; state = ST_TRAVEL; state_t = 0; }
 static int node_open(int n) {
   const World* w = &WORLDS[world];
   for (int k = 0; k < n; k++) if (w->kind[k] >= 0 && !cleared[w->kind[k] + 1]) return 0;   // every level before it is cleared
@@ -1967,7 +1975,22 @@ void game_update(const Input* in) {
   int jp = in->jump && !prev_jump, sp = in->start && !prev_start;
   switch (state) {
     case ST_TITLE:
-      if ((jp || sp) && state_t > 20) { lives = 3; bananas = 0; state = ST_MAP; state_t = 0; map_from = map_node; map_t = 99; plat_sfx(SFX_SELECT); }
+      if ((jp || sp) && state_t > 20) { lives = 3; bananas = 0; state = ST_WORLDS; state_t = 0; wsel = world; wsel_f = world; plat_sfx(SFX_SELECT); }
+      break;
+    case ST_WORLDS: {   // pick a world: an island each, side by side
+      int l = in->left && !prev_left, r = in->right && !prev_right;
+      if (l && wsel > 0) { wsel--; plat_sfx(SFX_WALL); }
+      if (r && wsel < NWORLDS - 1) { wsel++; plat_sfx(SFX_WALL); }
+      wsel_f += (wsel - wsel_f) * 0.18f;
+      if ((jp || sp) && state_t > 10) {
+        if (!world_open(wsel)) plat_sfx(SFX_HURT);
+        else if (wsel == world) { state = ST_MAP; state_t = 0; map_t = 99; plat_sfx(SFX_SELECT); }
+        else { go_travel(wsel, 0); plat_sfx(SFX_CHECK); }
+      }
+      break;
+    }
+    case ST_TRAVEL:   // the trip by balloon from one island to the next
+      if (state_t > 210 || ((jp || sp) && state_t > 20)) { world = travel_to; map_node = map_from = travel_node; map_t = 99; state = ST_MAP; state_t = 0; plat_sfx(SFX_SELECT); }
       break;
     case ST_PLAY:
       if (intro_t) {   // nothing moves until the intro is over
@@ -2034,8 +2057,9 @@ void game_update(const Input* in) {
         if (fwd && map_node < WORLDS[world].n - 1 && node_open(map_node + 1)) { map_from = map_node; map_node++; map_t = 0; plat_sfx(SFX_WALL); }
         else if (back && map_node > 0) { map_from = map_node; map_node--; map_t = 0; plat_sfx(SFX_WALL); }
         else if (jp && kind >= 0) { start_level(kind); update_camera(1); plat_sfx(SFX_SELECT); }
-        else if (jp && kind == -3 && world < NWORLDS - 1) { world++; map_node = map_from = 0; map_t = 99; state_t = 0; plat_sfx(SFX_CHECK); }
-        else if (jp && kind == -2 && world > 0) { world--; map_node = map_from = WORLDS[world].n - 1; map_t = 99; state_t = 0; plat_sfx(SFX_CHECK); }
+        else if (jp && kind == -3 && world < NWORLDS - 1) { go_travel(world + 1, 0); plat_sfx(SFX_CHECK); }
+        else if (jp && kind == -2 && world > 0) { go_travel(world - 1, WORLDS[world - 1].n - 1); plat_sfx(SFX_CHECK); }
+        else if (sp) { state = ST_WORLDS; state_t = 0; wsel = world; wsel_f = world; plat_sfx(SFX_SELECT); }
       }
       break;
   }
@@ -2657,7 +2681,7 @@ dino:;
   // labels
   fill(0, 0, SCR_W, 16, 0xFF1B1020);
   int kind = w->kind[map_node];
-  if (kind == -1) text_c("DINO'S HOUSE", 3, 2, 0xFFFFFFFF);
+  if (kind == -1) { text("DINO'S HOUSE", 4, 3, 2, 0xFFFFFFFF); text("START: WORLDS", SCR_W - text_w("START: WORLDS", 1) - 4, 6, 1, 0xFF58D6E8); }
   else if (kind == -3 || kind == -2) {
     snprintf(buf, sizeof buf, "TO %s", WORLDS[world + (kind == -3 ? 1 : -1)].name);
     text(buf, 4, 3, 2, 0xFFFFFFFF);
@@ -2788,11 +2812,161 @@ static void draw_title(void) {
   }
 #endif
 }
+// ---- the world select and the balloon trip between worlds
+static void fb_ell(float cx, float cy, float rx, float ry, uint32_t c, float alpha) {
+  for (int y = (int)(cy - ry - 2); y <= (int)(cy + ry + 2); y++) for (int x = (int)(cx - rx - 2); x <= (int)(cx + rx + 2); x++) {
+    if ((unsigned)x >= FB_W || (unsigned)y >= FB_H) continue;
+    float a = cov(sd_ellipse(x + 0.5f, y + 0.5f, cx, cy, rx, ry)) * alpha;
+    if (a > 0) fb_over(x, y, c, a);
+  }
+}
+static void fb_tri(float ax, float ay, float bx, float by, float cx, float cy, uint32_t c) {
+  for (int y = (int)minf(ay, minf(by, cy)) - 1; y <= (int)maxf(ay, maxf(by, cy)) + 1; y++) for (int x = (int)minf(ax, minf(bx, cx)) - 1; x <= (int)maxf(ax, maxf(bx, cx)) + 1; x++) {
+    if ((unsigned)x >= FB_W || (unsigned)y >= FB_H) continue;
+    float a = cov(sd_tri(x + 0.5f, y + 0.5f, ax, ay, bx, by, cx, cy));
+    if (a > 0) fb_over(x, y, c, a);
+  }
+}
+static void island_pic(float cx, float cy, float S, int w, float dim) {
+  static const uint32_t LAND[7] = { 0xFF5CB84A, 0xFF7ACC6A, 0xFFF2F8FF, 0xFFE8C888, 0xFF3F9A48, 0xFFE8F0FA, 0xFFFFFFFF };
+  #define DIM(c) mixc((c), 0xFF4A5A70, dim)
+  if (w == 6) {   // Cloud Castle sits on a cloud
+    fb_ell(cx, cy + 10 * S, 74 * S, 16 * S, DIM(0xFFBFD8F0), 1);
+    for (int k = 0; k < 5; k++) fb_dot(cx + (k - 2) * 26 * S, cy - 2 * S - (k % 2) * 8 * S, (20 + (k % 2) * 6) * S, DIM(0xFFFFFFFF), 1);
+  } else {
+    fb_ell(cx, cy + 8 * S, 78 * S, 24 * S, DIM(0xFFE6F6FF), 0.85f);   // surf
+    fb_ell(cx, cy + 5 * S, 70 * S, 20 * S, DIM(w == 2 || w == 5 ? 0xFFDCE8F4 : 0xFFF2DCA0), 1);   // beach
+    fb_ell(cx, cy, 58 * S, 15 * S, DIM(LAND[w]), 1);
+    fb_ell(cx - 14 * S, cy - 4 * S, 26 * S, 6 * S, DIM(mixc(LAND[w], 0xFFFFFFFF, 0.25f)), 1);
+  }
+  float b = cy - 4 * S;   // where things stand
+  switch (w) {
+    case 0: case 4:   // round jungle trees
+      for (int k = 0; k < (w == 4 ? 3 : 2); k++) {
+        float x = cx + (k - (w == 4 ? 1 : 0.5f)) * 30 * S, h = (34 + k * 6) * S;
+        fb_capsule(x, b, x, b - h, 4 * S, DIM(0xFF7A4A24));
+        uint32_t g = DIM(w == 4 ? 0xFF2F8A3A : 0xFF4FB043);
+        fb_dot(x - 9 * S, b - h + 2 * S, 12 * S, g, 1); fb_dot(x + 9 * S, b - h + 2 * S, 12 * S, g, 1); fb_dot(x, b - h - 7 * S, 14 * S, DIM(mixc(g, 0xFFFFFFFF, 0.2f)), 1);
+      }
+      break;
+    case 1:   // a palm tree and pink coral
+      for (int k = 0; k < 6; k++) { float t0 = k / 6.0f, t1 = (k + 1) / 6.0f; fb_capsule(cx + 20 * S * t0 * t0, b - 50 * S * t0, cx + 20 * S * t1 * t1, b - 50 * S * t1, 4 * S, DIM(0xFFC8945A)); }
+      for (int k = 0; k < 6; k++) { float a = k * 1.047f + 0.3f; fb_capsule(cx + 20 * S, b - 50 * S, cx + 20 * S + cosf(a) * 26 * S, b - 50 * S + sinf(a) * 9 * S + 6 * S, 4 * S, DIM(0xFF3A9A4A)); }
+      fb_dot(cx - 30 * S, b + 2 * S, 7 * S, DIM(0xFFFF7A9A), 1); fb_dot(cx - 22 * S, b, 5 * S, DIM(0xFFFF9AB0), 1);
+      break;
+    case 2: case 5:   // pine trees (and snowy peaks behind)
+      if (w == 5) {
+        fb_tri(cx - 50 * S, b + 2 * S, cx - 10 * S, b - 62 * S, cx + 30 * S, b + 2 * S, DIM(0xFF8A9AC0));
+        fb_tri(cx - 22 * S, b - 36 * S, cx - 10 * S, b - 62 * S, cx + 3 * S, b - 36 * S, DIM(0xFFFFFFFF));
+      }
+      for (int k = 0; k < 3; k++) {
+        float x = cx + (k - 1) * 26 * S + (w == 5 ? 14 * S : 0), h = (30 + (k == 1) * 10) * S;
+        fb_tri(x - 13 * S, b, x, b - h, x + 13 * S, b, DIM(0xFF2F7A6A));
+        fb_tri(x - 6 * S, b - h * 0.55f, x, b - h, x + 6 * S, b - h * 0.55f, DIM(0xFFFFFFFF));
+      }
+      break;
+    case 3:   // a pyramid and a cactus
+      fb_tri(cx - 40 * S, b + 2 * S, cx - 4 * S, b - 44 * S, cx + 32 * S, b + 2 * S, DIM(0xFFE2B66A));
+      fb_tri(cx - 4 * S, b - 44 * S, cx + 32 * S, b + 2 * S, cx + 6 * S, b + 2 * S, DIM(0xFFB88A44));
+      fb_capsule(cx + 42 * S, b, cx + 42 * S, b - 24 * S, 4 * S, DIM(0xFF4FA048)); fb_capsule(cx + 42 * S, b - 12 * S, cx + 50 * S, b - 16 * S, 3 * S, DIM(0xFF4FA048));
+      break;
+    case 6:   // a castle with red roofs
+      for (int k = 0; k < 3; k++) {
+        float x = cx + (k - 1) * 24 * S, h = (k == 1 ? 46 : 32) * S, hw = (k == 1 ? 11 : 8) * S;
+        for (int y = (int)(b - h); y < (int)b; y++) for (int xx = (int)(x - hw); xx < (int)(x + hw); xx++) if ((unsigned)xx < FB_W && (unsigned)y < FB_H) FB[y * FB_W + xx] = DIM(mixc(0xFFE8ECF4, 0xFFB8C0D0, (xx - x + hw) / (2 * hw)));
+        fb_tri(x - hw - 3 * S, b - h, x, b - h - 18 * S, x + hw + 3 * S, b - h, DIM(0xFFE8483C));
+      }
+      break;
+  }
+  #undef DIM
+}
+static void sea_back(uint32_t top, uint32_t bot) {
+  for (int y = 0; y < FB_H; y++) { uint32_t c = mixc(top, bot, y / (float)FB_H); for (int x = 0; x < FB_W; x++) FB[y * FB_W + x] = c; }
+  for (int i = 0; i < 70; i++) {
+    uint32_t h = hash2(i, 9);
+    float x = fmodf(h % FB_W + frame * 0.6f, FB_W), y = (h >> 10) % FB_H;
+    if ((frame / 20 + i) % 4) fb_capsule(x, y, x + 10, y, 1.2f, 0x80FFFFFF | 0xFF000000);
+  }
+}
+static void draw_worlds(void) {
+  sea_back(0xFF5BB3E6, 0xFF1F6FB0);
+  text_c("CHOOSE A WORLD", 6, 2, 0xFFFFFFFF);
+  int order[NWORLDS], n = 0;
+  for (int i = 0; i < NWORLDS; i++) order[n++] = i;
+  for (int a = 0; a < n; a++) for (int b2 = a + 1; b2 < n; b2++) if (fabsf(order[b2] - wsel_f) > fabsf(order[a] - wsel_f)) { int t = order[a]; order[a] = order[b2]; order[b2] = t; }
+  for (int k = 0; k < n; k++) {
+    int i = order[k]; float off = i - wsel_f, ao = fabsf(off);
+    if (ao > 2.6f) continue;
+    float S = 1.15f - 0.32f * minf(ao, 1.6f), x = 320 + off * 210, y = 200 - (1 - minf(ao, 1)) * 10;
+    island_pic(x, y, S, i, world_open(i) ? (ao > 0.5f ? 0.15f : 0) : 0.7f);
+    if (!world_open(i)) {   // a padlock
+      fb_capsule(x - 9, y - 40, x - 9, y - 50, 3.5f, 0xFF3A3A44); fb_capsule(x + 9, y - 40, x + 9, y - 50, 3.5f, 0xFF3A3A44); fb_capsule(x - 9, y - 54, x + 9, y - 54, 3.5f, 0xFF3A3A44);
+      for (int yy = (int)y - 42; yy < (int)y - 20; yy++) for (int xx = (int)x - 15; xx < (int)x + 15; xx++) if ((unsigned)xx < FB_W && (unsigned)yy < FB_H) FB[yy * FB_W + xx] = 0xFFF2B02E;
+      fb_dot(x, y - 33, 4, 0xFF3A3A44, 1);
+    }
+  }
+  // Dino stands on the island that is picked
+  if (world_open(wsel)) { DinoPose p; dino_idle_pose(&p, frame); p.mood = 4; p.bob = 4 * fabsf(sinf(frame * 0.1f)); draw_dino_at(320 - (int)((wsel_f - wsel) * 210) + 34, 196, 0.9f, &p, 0.4f); }
+  char buf[48];
+  const World* w = &WORLDS[wsel];
+  text_c(w->name, 132, 2, 0xFFFFFFFF);
+  int nl = 0, nc = 0; for (int k = 0; k < w->n; k++) if (w->kind[k] >= 0) { nl++; nc += cleared[w->kind[k] + 1]; }
+  if (world_open(wsel)) snprintf(buf, sizeof buf, "WORLD %d   CLEARED %d/%d", wsel + 1, nc, nl);
+  else snprintf(buf, sizeof buf, "WORLD %d   CLEAR WORLD %d TO OPEN IT", wsel + 1, wsel);
+  text_c(buf, 150, 1, 0xFFFFF4C2);
+  text_c("LEFT / RIGHT: CHOOSE    A: GO", 166, 1, 0xFFE0F0FF);
+}
+static void draw_travel(void) {
+  float t = clampf(state_t / 200.0f, 0, 1), e = t * t * (3 - 2 * t);
+  int dir = travel_to > travel_from ? 1 : -1;
+  // sky and sea
+  for (int y = 0; y < 250; y++) { uint32_t c = mixc(0xFF7EC8F0, 0xFFD4F1F9, y / 250.0f); for (int x = 0; x < FB_W; x++) FB[y * FB_W + x] = c; }
+  for (int y = 250; y < FB_H; y++) { uint32_t c = mixc(0xFF5BB3E6, 0xFF1F6FB0, (y - 250) / 110.0f); for (int x = 0; x < FB_W; x++) FB[y * FB_W + x] = c; }
+  fb_dot(540, 60, 26, 0xFFFFF7D0, 1);
+  for (int k = 0; k < 6; k++) {   // clouds drifting past
+    float x = fmodf(k * 140 - state_t * (1.2f + (k % 3) * 0.5f) * dir + 4000, FB_W + 200) - 100, y = 40 + (k * 37) % 120;
+    fb_dot(x - 20, y + 4, 14, 0xFFFFFFFF, 0.9f); fb_dot(x, y - 4, 20, 0xFFFFFFFF, 0.9f); fb_dot(x + 22, y + 2, 15, 0xFFFFFFFF, 0.9f); fb_ell(x, y + 10, 40, 8, 0xFFFFFFFF, 0.9f);
+  }
+  for (int i = 0; i < 60; i++) {   // waves
+    uint32_t h = hash2(i, 13);
+    float x = fmodf(h % FB_W - state_t * 2.5f * dir + 4000, FB_W), y = 254 + (h >> 10) % 104;
+    fb_capsule(x, y, x + 12, y, 1.3f, 0xFFE0F4FF);
+  }
+  // the island he leaves, the island he goes to
+  island_pic(320 - dir * (150 + e * 520), 290, 1.1f, travel_from, 0);
+  island_pic(320 + dir * (150 + (1 - e) * 520), 290, 1.1f, travel_to, 0);
+  // Dino in a hot-air balloon
+  float bx = 320 + dir * (e - 0.5f) * 300, by = 110 + sinf(state_t * 0.06f) * 8 - sinf(t * 3.14159f) * 20;
+  for (int y = (int)(by - 52); y < (int)(by + 52); y++) for (int x = (int)(bx - 50); x < (int)(bx + 50); x++) {
+    if ((unsigned)x >= FB_W || (unsigned)y >= FB_H) continue;
+    float fx = x + 0.5f - bx, fy = y + 0.5f - by;
+    float d = minf(sd_circle(fx, fy, 0, -6, 44), sd_tri(fx, fy, -36, 18, 36, 18, 0, 46) - 3);
+    if (d > 1) continue;
+    float u = asinf(clampf(fx / 46, -1, 1));
+    int band = (int)floorf((u + 1.6f) / 0.4f);
+    uint32_t c = band & 1 ? 0xFFF7D038 : 0xFFE8483C;
+    c = mixc(mixc(c, 0xFFFFFFFF, 0.25f), mixc(c, 0xFF000000, 0.3f), clampf(fx / 90 + fy / 120 + 0.5f, 0, 1));
+    if (d > -1.6f) c = OUTLINE;
+    fb_over(x, y, c, cov(d));
+  }
+  fb_capsule(bx - 12, by + 44, bx - 16, by + 82, 1.4f, 0xFF5A3A20); fb_capsule(bx + 12, by + 44, bx + 16, by + 82, 1.4f, 0xFF5A3A20);
+  DinoPose p; dino_idle_pose(&p, state_t); p.mood = 4; p.mouth = 1;
+  draw_dino_at((int)bx, (int)by + 92, 1.1f, &p, 0.5f * dir);
+  for (int y = (int)by + 80; y < (int)by + 100; y++) for (int x = (int)bx - 18; x < (int)bx + 18; x++)
+    if ((unsigned)x < FB_W && (unsigned)y < FB_H) FB[y * FB_W + x] = ((x + y) / 4 + (y / 5)) % 2 ? 0xFFB8803A : 0xFF8A5A28;
+  fb_capsule(bx - 19, by + 80, bx + 19, by + 80, 2.4f, 0xFF6A4220);
+  char buf[64];
+  snprintf(buf, sizeof buf, "OFF TO %s!", WORLDS[travel_to].name);
+  text_c(buf, 8, 2, 0xFFFFFFFF);
+}
+
 void game_draw(uint32_t* fb) {
   FB = fb;
   char buf[64];
   if (state == ST_TITLE) { draw_title(); return; }
   if (state == ST_MAP) { draw_map(); return; }
+  if (state == ST_WORLDS) { draw_worlds(); return; }
+  if (state == ST_TRAVEL) { draw_travel(); return; }
   if (state == ST_PLAY && intro_t) {
     // the level intro: Dino on black with his coins and lives above him, then everything flies into place
     float k = clampf((intro_t - INTRO_HOLD) / (float)INTRO_FLY, 0, 1), e = k * k * (3 - 2 * k);
@@ -3068,7 +3242,7 @@ static void m_play(int ins, float hz) {
 }
 static int pick_song(void) {
   if (state == ST_TITLE) return SONG_TITLE;
-  if (state == ST_MAP) return SONG_MAP;
+  if (state == ST_MAP || state == ST_WORLDS || state == ST_TRAVEL) return SONG_MAP;
   if (state == ST_PLAY || state == ST_PAUSE) {
     if (g_boss_music) return SONG_BOSS;
     if (L->theme == 9) return SONG_WATER;
