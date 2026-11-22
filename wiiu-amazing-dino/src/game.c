@@ -672,7 +672,7 @@ static void key_piece(int piece) {
 
 // ---- the set pieces of a land level
 enum { P_RUN, P_GAP, P_STEP, P_BRIDGE, P_SPIKES, P_BOXES, P_STONE, P_HIGH, P_ICE, P_ZIGZAG, P_MOVE, P_LIFT, P_FALL, P_PILLARS,
-       P_CHIMNEY, P_TUNNEL, P_POOL, P_SECRET, P_HELMET, P_WAVE, P_BIRDS, P_PYRAMID, P_ICICLES, P_CHAIN, P_STAR, NPIECE };
+       P_CHIMNEY, P_TUNNEL, P_POOL, P_SECRET, P_HELMET, P_WAVE, P_BIRDS, P_PYRAMID, P_ICICLES, P_CHAIN, P_STAR, P_TOWER, P_CLIFF, NPIECE };
 static int piece_weight(int k) {
   int th = L->theme, sky = th == 3, cave = cave_theme(), sn = snow_theme(), sand = th == 8 || th == 10, wet = th == 0 || th == 4 || th == 10 || g_world == 1 || g_world == 4;
   switch (k) {
@@ -701,6 +701,8 @@ static int piece_weight(int k) {
     case P_ICICLES: return sn ? 3 : 0;
     case P_CHAIN: return g_n >= 8 ? (sky ? 3 : 1) : 0;
     case P_STAR: return g_n >= 16 ? 1 : 0;
+    case P_TOWER: return sky ? 2 : 6;
+    case P_CLIFF: return g_n >= 1 ? 3 : 0;
   }
   return 0;
 }
@@ -898,6 +900,31 @@ static void land_piece(int k) {
       foe_g(x + 8); foe_g(x + 11); foe_g(x + 14);
       break;
     }
+    case P_TOWER: {   // planks zigzag up a tall cliff to a high plateau
+      if (GY - 9 < g_top) { ground_step(4); flat(6); break; }
+      flat(3); x = GX;
+      for (int i = 0; i < 12; i++) colm(x + i, GY);
+      for (int j = 0; j < 3; j++) {
+        int px0 = x + 1 + (j % 2) * 5, yy = GY - 3 * (j + 1);
+        for (int i = 0; i < 4; i++) SET(px0 + i, yy, '=');
+        coin(px0 + 1, yy - 1); coin(px0 + 2, yy - 1);
+      }
+      if (grnd(2)) foe_g(x + 4);
+      GX = x + 12; GY -= 9; x = GX;
+      flat(9); coin_arc(x + 2, GY - 3, 5);
+      foe_g(x + 6);
+      if (grnd(3) == 0) box(x + 4, GY - 4, power_kind());
+      break;
+    }
+    case P_CLIFF: {   // a big drop down, with coins all the way down
+      if (GY + 6 > g_bot) { flat(5); break; }
+      x = GX; flat(5);
+      int d = 5 + grnd(2); if (GY + d > g_bot) d = g_bot - GY;
+      for (int j = 1; j < d; j++) coin(GX, GY + j - 1);
+      GY += d; x = GX; flat(8);
+      coin_row(x + 2, GY - 2, 4); foe_g(x + 6);
+      break;
+    }
   }
 }
 
@@ -989,22 +1016,57 @@ static void boss_arena(int bk) {
   GX += 38;
 }
 
+// more creatures: on long empty stretches of flat ground, and now and then one in the air
+static int foe_near(int x, int r) {
+  for (int i = 0; i < nents; i++) if (IS_FOE(ents[i].type) || ents[i].type == E_PLAT || ents[i].type == E_ICE) { int ex = (int)(ents[i].x / T); if (ex > x - r && ex < x + r) return 1; }
+  return 0;
+}
+static int surface(int x) {   // the row a creature would stand on at column x, or -1
+  for (int y = 1; y < LH - 1; y++) {
+    char c = G[y][x];
+    if (c == '#' || c == 'X' || c == 'I') return G[y - 1][x] == ' ' && (y < 2 || G[y - 2][x] == ' ') && !FAKE[y - 1][x] ? y : -1;
+    if (c != ' ') return -1;
+  }
+  return -1;
+}
+static void more_foes(int x0, int x1, int water) {
+  int last = x0, lasta = x0;
+  for (int x = x0; x < x1; x++) {
+    int y = surface(x), run = 0;
+    if (y < 0) continue;
+    while (run < 9 && x + run < x1 && surface(x + run) == y) run++;
+    if (run < 9 || x - last < (water ? 26 : 16) || foe_near(x + 4, 7)) continue;
+    for (int c = x; c < x + 9; c++) if (G[y - 1][c] == 'c' || G[y - 1][c] == 's' || G[y - 1][c] == '^') { run = 0; break; }
+    if (!run) continue;
+    int t = water ? (grnd(2) ? E_CRAB : E_FISH) : POOL_G[g_world][grnd(6)];
+    if (!water && g_n < 2 && t != E_BEETLE) t = grnd(3) ? E_BEETLE : E_FROG;
+    add_ent(t, x + 4, t == E_FISH ? y - 4 : y - 1);
+    last = x;
+    if (!water && x - lasta > 45 && !cave_theme() && grnd(2)) {
+      int ta = POOL_A[g_world][grnd(3)]; if (g_n < 2) ta = E_BEE;
+      add_ent(ta, x + 6, ta == E_BIRD || ta == E_BAT ? y - 7 : y - 4);
+      lasta = x;
+    }
+    x += 8;
+  }
+}
+
 static void build_level(int n) {
   boss_i = -1; boss_awake = boss_dead = 0; g_boss_music = 0;
   int water = L->theme == 9, bk = boss_kind(n);
   g_world = n / 8; g_n = n; g_diff = n / 55.0f;
-  LH = water ? 20 : 20;
-  g_top = water ? 9 : 7; g_bot = water ? 17 : 16;
+  LH = water ? 20 : 24;
+  g_top = water ? 9 : 7; g_bot = water ? 17 : 20;
   GC = cave_theme() ? 'X' : '#';
   gen_seed = 2654435761u ^ (uint32_t)(n * 7919 + 17);
-  GX = 0; GY = water ? 16 : 14;
+  GX = 0; GY = water ? 16 : 18;
   // the start, with any signs
   int start_w = 10 + (L->signs[0] ? 6 : 0) + (L->signs[1] ? 5 : 0) + (L->signs[2] ? 5 : 0);
   flat(start_w);
   start_x = 3 * T + 3; start_y = (GY - 1) * T + T - PH;
   for (int i = 0; i < 3 && L->signs[i]; i++) { sign_x[i] = 7 + i * 5; sign_y[i] = GY - 1; nsigns = i + 1; }
   int len = bk >= 0 ? 300 : water ? 380 + (int)(g_diff * 50) : 470 + (int)(g_diff * 70);
-  level_keys = bk < 0;
+  level_keys = bk < 0 && (n == 0 || ((uint32_t)(n * 2654435761u) >> 13) % 2 == 0);   // only some levels have a locked door
   int last_cp = GX, keys_done = 0, last = -1, last2 = -1;
   while (GX < len) {
     if (GX - last_cp > 80) {   // a checkpoint every so often
@@ -1022,11 +1084,11 @@ static void build_level(int n) {
     land_piece(k);
   }
   // the end: bring the ground back to a comfortable height
-  while (GY < (water ? 15 : 13)) { flat(3); ground_step(1); }
-  while (GY > (water ? 17 : 15)) { flat(3); ground_step(-1); }
+  while (GY < (water ? 15 : 16)) { flat(3); ground_step(1); }
+  while (GY > (water ? 17 : 19)) { flat(3); ground_step(-1); }
   flat(4);
   if (bk >= 0) boss_arena(bk);
-  else {   // the locked door in a wall that goes all the way up
+  else if (level_keys) {   // the locked door in a wall that goes all the way up
     int x = GX;
     for (int y = 0; y < GY - 3; y++) SET(x, y, 'X');
     for (int y = GY - 3; y < GY; y++) SET(x, y, 'D');
@@ -1035,6 +1097,7 @@ static void build_level(int n) {
   int x = GX; flat(12);
   goal_x = x + 6; goal_y = GY - 1;
   LW = GX;
+  more_foes(start_w + 6, goal_x - 14, water);
   // every level that has no hidden room still gets a 1-up: high on a plank, or out in open water
   int n1 = 0; for (int y = 0; y < LH; y++) for (int x2 = 0; x2 < LW; x2++) n1 += G[y][x2] == '1';
   if (!n1 && bk < 0) {

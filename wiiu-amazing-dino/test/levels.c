@@ -6,8 +6,8 @@ static uint32_t fb[FB_W * FB_H];
 static void shot(const char* nm) { game_draw(fb); FILE* fp = fopen(nm, "wb"); fprintf(fp, "P6 %d %d 255\n", FB_W, FB_H); for (int i = 0; i < FB_W * FB_H; i++) { unsigned char c[3] = { fb[i] >> 16, fb[i] >> 8, fb[i] }; fwrite(c, 1, 3, fp); } fclose(fp); }
 int main(int argc, char** argv) {
   game_init();
-  int W = MAXW * 2, H = NLEVELS * 42;
-  static unsigned char img[MAXW * 2 * 56 * 42 * 3];
+  int W = MAXW * 2, H = NLEVELS * 52;
+  static unsigned char img[MAXW * 2 * 56 * 52 * 3];
   memset(img, 40, sizeof img);
   for (int n = 0; n < NLEVELS; n++) {
     start_level(n);
@@ -22,9 +22,9 @@ int main(int argc, char** argv) {
       else if (c == 'K') { r = 255; g = 0; b = 255; } else if (c == 'D') { r = 255; g = 0; b = 0; } else if (c == 'w') { r = 60; g = 140; b = 230; }
       else if (c == 'I') { r = 200; g = 240; b = 255; } else if (c == 'k') { r = 90; g = 60; b = 40; } else if (c == 's') { r = 255; g = 60; b = 60; } else if (c == 'c') { r = 0; g = 255; b = 0; }
       if (FAKE[y][x]) { r = 255; g = 120; b = 200; }
-      for (int k = 0; k < 4; k++) { int X = x * 2 + (k & 1), Y = n * 42 + y * 2 + (k >> 1); unsigned char* p = &img[(Y * W + X) * 3]; p[0] = r; p[1] = g; p[2] = b; }
+      for (int k = 0; k < 4; k++) { int X = x * 2 + (k & 1), Y = n * 52 + y * 2 + (k >> 1); unsigned char* p = &img[(Y * W + X) * 3]; p[0] = r; p[1] = g; p[2] = b; }
     }
-    for (int i = 0; i < nents; i++) { int X = (int)(ents[i].x / T) * 2, Y = n * 42 + (int)(ents[i].y / T) * 2; if (X >= 0 && X < W - 1 && Y >= 0 && Y < H) { unsigned char* p = &img[(Y * W + X) * 3]; p[0] = 255; p[1] = 0; p[2] = 0; p[3] = 255; } }
+    for (int i = 0; i < nents; i++) { int X = (int)(ents[i].x / T) * 2, Y = n * 52 + (int)(ents[i].y / T) * 2; if (X >= 0 && X < W - 1 && Y >= 0 && Y < H) { unsigned char* p = &img[(Y * W + X) * 3]; p[0] = 255; p[1] = 0; p[2] = 0; p[3] = 255; } }
     printf("%-26s theme %2d  w %3d  keys %d door %d cps %d  foes:", L->name, L->theme, LW, keys, doors, cps);
     for (int t = 0; t < 32; t++) if (cnt[t] && t != E_PLAT && t != E_ICE) printf(" %d:%d", t, cnt[t]);
     printf("  plats %d  boss %d\n", cnt[E_PLAT], boss_i >= 0);
