@@ -44,7 +44,9 @@ static void rt_begin(int w, int h, float ox, float oy, float sc) {   // w, h: fi
   memset(RT.c, 0, (size_t)n * 4);
 }
 static int RT_EDGE = 1, RT_TMP;
+static int M3_LOW;   // 1: build the model low-poly and flat-shaded (the blocky look the creatures use); reset by rt_end
 static void rt_end(Bmp* b) {
+  M3_LOW = 0;
   bmp_fit(b, RT.w / RT.ss, RT.h / RT.ss);
   if (RT.ss == 1) memcpy(b->px, RT.c, (size_t)RT.w * RT.h * 4);
   else for (int y = 0; y < b->h; y++) for (int x = 0; x < b->w; x++) {
@@ -171,6 +173,9 @@ static void rt_tri(const V3* a, const V3* b, const V3* c, uint32_t col, int mat)
   if (x1 > RT.w - 1) x1 = RT.w - 1;
   if (y1 > RT.h - 1) y1 = RT.h - 1;
   float inv = 1.0f / area;
+  float fn[3] = { a->n[0] + b->n[0] + c->n[0], a->n[1] + b->n[1] + c->n[1], a->n[2] + b->n[2] + c->n[2] };   // one normal for the whole face (low-poly)
+  { float l = sqrtf(fn[0] * fn[0] + fn[1] * fn[1] + fn[2] * fn[2]); if (l > 0) { fn[0] /= l; fn[1] /= l; fn[2] /= l; } }
+  int low = M3_LOW;
   // the three weights change by a fixed step from one pixel to the next, so they are stepped, not recalculated
   float sx0 = x0 + 0.5f, sy0 = y0 + 0.5f;
   float r0 = ((b->p[0] - sx0) * (c->p[1] - sy0) - (b->p[1] - sy0) * (c->p[0] - sx0)) * inv, r1 = ((c->p[0] - sx0) * (a->p[1] - sy0) - (c->p[1] - sy0) * (a->p[0] - sx0)) * inv;
@@ -185,7 +190,7 @@ static void rt_tri(const V3* a, const V3* b, const V3* c, uint32_t col, int mat)
     int i = y * RT.w + x;
     if (z <= RT.z[i]) continue;
     float n[3], o[3];
-    for (int k = 0; k < 3; k++) { n[k] = w0 * a->n[k] + w1 * b->n[k] + w2 * c->n[k]; o[k] = w0 * a->o[k] + w1 * b->o[k] + w2 * c->o[k]; }
+    for (int k = 0; k < 3; k++) { n[k] = low ? fn[k] : w0 * a->n[k] + w1 * b->n[k] + w2 * c->n[k]; o[k] = w0 * a->o[k] + w1 * b->o[k] + w2 * c->o[k]; }
     float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
     if (l > 0) { n[0] /= l; n[1] /= l; n[2] /= l; }
     if (n[2] < 0) { n[0] = -n[0]; n[1] = -n[1]; n[2] = -n[2]; }
@@ -226,19 +231,31 @@ static void v3_make(V3* v, const float* lp, const float* ln) {
 }
 // spin a profile (pairs of radius, height) round the y axis. W places the whole model, P places this part in it.
 #define LATHE_MAX 20
+static float PROF_BALL[13 * 2], PROF_EGG[15 * 2], PROF_SPIKE[10 * 2], PROF_COIN[6 * 2] = { 0, -1, 0.84f, -1, 1, -0.55f, 1, 0.55f, 0.84f, 1, 0, 1 };
 static int LATHE_COARSE;   // 1: use every other profile point (half the triangles), for small models
 static void lathe(const M3* W, const M3* P, const float* prof0, int np0, int nseg, int flat, uint32_t col, int mat) {
   static float thin[LATHE_MAX * 2];
-  const float* prof = prof0; int np = np0;
-  if (LATHE_COARSE && !flat && np0 >= 9) {
+  const float* prof = prof0; int np = np0, cube45 = 0;
+  if (M3_LOW) {   // low-poly: at most five rings and six sides, with sharp edges
+    if (np0 > 5) {
+      np = 5;
+      for (int i = 0; i < 5; i++) { int k = (int)lroundf(i * (np0 - 1) / 4.0f); thin[i * 2] = prof0[k * 2]; thin[i * 2 + 1] = prof0[k * 2 + 1]; }
+      prof = thin;
+    }
+    float sz = fabsf(P->m[0]) + fabsf(P->m[4]) + fabsf(P->m[8]);
+    if (prof0 == PROF_SPIKE) { static const float PYR[4] = { 1, 0, 0, 1 }; prof = PYR; np = 2; nseg = 4; }   // spikes: four-sided points
+    else if (prof0 == PROF_BALL && sz < 10) { static const float CUBE[8] = { 0, -0.85f, 1.2f, -0.85f, 1.2f, 0.85f, 0, 0.85f }; prof = CUBE; np = 4; nseg = 4; cube45 = 1; }   // small round bits (eyes, knobs): little cubes
+    else nseg = nseg >= 12 ? 6 : nseg >= 7 ? 5 : 4;
+    flat = 1;
+  } else if (LATHE_COARSE && !flat && np0 >= 9) {
     np = 0;
     for (int i = 0; i < np0; i += 2) { thin[np * 2] = prof0[i * 2]; thin[np * 2 + 1] = prof0[i * 2 + 1]; np++; }
     if ((np0 - 1) % 2) { thin[np * 2] = prof0[(np0 - 1) * 2]; thin[np * 2 + 1] = prof0[(np0 - 1) * 2 + 1]; np++; }
     prof = thin;
   }
   static V3 ring[2][LATHE_MAX * 2][33];
-  static float CS[33], SN[33]; static int cs_n;
-  if (cs_n != nseg) { cs_n = nseg; for (int j = 0; j <= nseg; j++) { CS[j] = cosf(j * 6.28318f / nseg); SN[j] = sinf(j * 6.28318f / nseg); } }
+  static float CS[33], SN[33]; static int cs_n, cs_off;
+  if (cs_n != nseg || cs_off != cube45) { cs_n = nseg; cs_off = cube45; for (int j = 0; j <= nseg; j++) { float a = j * 6.28318f / nseg + (cube45 ? 0.7854f : 0); CS[j] = cosf(a); SN[j] = sinf(a); } }
   set_mats(W, P);
   int rows = 0;
   // each profile point gives one row of vertices (or two, with different normals, when "flat" keeps edges sharp)
@@ -264,8 +281,7 @@ static void lathe(const M3* W, const M3* P, const float* prof0, int np0, int nse
     rt_tri(a, b, c, col, mat); rt_tri(b, d, c, col, mat);
   }
 }
-static float PROF_BALL[13 * 2], PROF_EGG[15 * 2], PROF_SPIKE[10 * 2], PROF_COIN[6 * 2] = { 0, -1, 0.84f, -1, 1, -0.55f, 1, 0.55f, 0.84f, 1, 0, 1 };
-static void m3d_init(void) {
+ static void m3d_init(void) {
   for (int i = 0; i < 13; i++) { float a = -1.5708f + i * 3.14159f / 12; PROF_BALL[i * 2] = cosf(a); PROF_BALL[i * 2 + 1] = sinf(a); }
   for (int i = 0; i < 15; i++) {   // Dino's body: an egg with flatter sides, a little wider at the bottom
     float a = -1.5708f + i * 3.14159f / 14, c = maxf(0, cosf(a)), s = sinf(a);
@@ -318,7 +334,7 @@ static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
   FACE.eye = p->eye; FACE.mouth = p->mouth; FACE.mood = p->mood;
   float sy = p->sq, sx = 1.0f / sqrtf(p->sq);
   M3 turn = m3_roty(yaw);
-  M3 body = m3_mul(m3_trans(0, 8, 0), m3_mul(m3_rotx(p->tilt), m3_mul(m3_trans(0, p->bob, 0), m3_mul(m3_scale(sx, sy, sx), m3_trans(0, 13.5f, 0)))));
+  M3 body = m3_mul(m3_trans(p->shake, 8, 0), m3_mul(m3_rotx(p->tilt), m3_mul(m3_trans(0, p->bob, 0), m3_mul(m3_scale(sx, sy, sx), m3_trans(0, 13.5f, 0)))));
   M3 Wb = m3_mul(turn, body);
   // legs first (they join the body at the hips; on the ground the feet stay planted)
   for (int i = 0; i < 2; i++) {
@@ -333,16 +349,93 @@ static void dino3d(Bmp* b, const DinoPose* p, float yaw, float S) {
   // two smooth spikes on his back
   M3 s1 = m3_mul(m3_trans(0, 7.5f, -5.5f), m3_mul(m3_rotx(-(0.80f - p->spk)), m3_scale(7.2f, 18, 5.4f)));
   M3 s2 = m3_mul(m3_trans(0, -1.5f, -7.5f), m3_mul(m3_rotx(-(1.25f - p->spk * 1.35f)), m3_scale(6.0f, 14, 4.6f)));
-  lathe(&Wb, &s1, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, 0xFF5FD04A, MAT_SHINY);
-  lathe(&Wb, &s2, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, 0xFF5FD04A, MAT_SHINY);
+  uint32_t spc = p->gear == 4 ? 0xFFFFC72A : 0xFF5FD04A;   // the star power turns his spikes to shiny gold
+  int spm = p->gear == 4 ? MAT_COIN : MAT_SHINY;
+  lathe(&Wb, &s1, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, spc, spm);
+  lathe(&Wb, &s2, PROF_SPIKE, 10, S > 1.5f ? 14 : 9, 0, spc, spm);
+  if (p->gear == 3) {   // the helmet: a round metal cap with a rim and a stripe over the top
+    M3 dome = m3_mul(m3_trans(0, 7.6f, 0.4f), m3_scale(12.2f, 10.5f, 11.4f));
+    lathe(&Wb, &dome, PROF_BALL + 12, 7, 20, 0, 0xFFF0A23A, MAT_SHINY);
+    static const float RIM[8] = { 1, -0.5f, 1.06f, 0, 1.06f, 0.5f, 1, 0.5f };
+    M3 rim = m3_mul(m3_trans(0, 7.6f, 0.4f), m3_scale(12.4f, 2.2f, 11.6f));
+    lathe(&Wb, &rim, RIM, 4, 20, 1, 0xFFC4761E, MAT_SHINY);
+    M3 crest = m3_mul(m3_trans(0, 17.6f, 0.2f), m3_scale(2.0f, 1.4f, 10.0f));
+    lathe(&Wb, &crest, PROF_BALL, 13, 8, 0, 0xFFFFE08A, MAT_SHINY);
+  }
+  if (p->gear == 2) {   // the sword, held out in front of him and swung over
+    M3 sw = m3_mul(m3_trans(5, -3, 11), m3_rotx(p->sword));
+    static const float BLADE[8] = { 0, 0, 1, 0, 1, 0.82f, 0, 1 };
+    M3 bl = m3_mul(sw, m3_mul(m3_trans(0, 7, 0), m3_scale(2.6f, 24, 0.9f)));
+    lathe(&turn, &bl, BLADE, 4, 4, 1, 0xFFE8EEF8, MAT_SHINY);
+    M3 gd = m3_mul(sw, m3_mul(m3_trans(0, 6, 0), m3_scale(7, 1.4f, 2.2f)));
+    lathe(&turn, &gd, PROF_BALL, 13, 8, 0, 0xFFF2B02E, MAT_SHINY);
+    M3 gr = m3_mul(sw, m3_mul(m3_trans(0, 2, 0), m3_scale(1.6f, 4, 1.6f)));
+    lathe(&turn, &gr, PROF_BALL, 13, 8, 0, 0xFF8B5A2B, MAT_PLAIN);
+    M3 pm = m3_mul(sw, m3_mul(m3_trans(0, -2.2f, 0), m3_scale(2.2f, 2.2f, 2.2f)));
+    lathe(&turn, &pm, PROF_BALL, 13, 8, 0, 0xFFF2B02E, MAT_SHINY);
+  }
   if (p->wing > -5) for (int i = 0; i < 2; i++) {
     float sgn = i ? 1 : -1;
     M3 wg = m3_mul(m3_trans(sgn * 7, 2, -5), m3_mul(m3_rotz(sgn * (0.5f + p->wing)), m3_mul(m3_trans(sgn * 8, 0, 0), m3_scale(9, 4.2f, 2))));
     lathe(&Wb, &wg, PROF_BALL, 13, 12, 0, 0xFFEAF4FF, MAT_PLAIN);
   }
   M3 bd = m3_scale(11.5f, 14.5f, 10.6f);
-  lathe(&Wb, &bd, PROF_EGG, 15, S > 1.5f ? 28 : 16, 0, 0xFFF8FAFF, MAT_DINO);
+  lathe(&Wb, &bd, PROF_EGG, 15, S > 1.5f ? 28 : 16, 0, p->hot ? 0xFFFFF0EC : 0xFFF8FAFF, MAT_DINO);
   LATHE_COARSE = 0;
+  rt_end(b);
+}
+
+// the power-ups as 3D things: 1 wings, 2 sword, 3 helmet, 4 star. A 32x32 picture, turned by "spin".
+static void item3d(Bmp* b, int kind, float spin) {
+  rt_begin(32, 32, 16, 17, 1);
+  VIEW = m3_rotx(0.25f);
+  M3 Wm = m3_mul(m3_roty(spin), m3_scale(kind == 1 ? 1.3f : 1.1f, kind == 1 ? 1.3f : 1.1f, kind == 1 ? 1.3f : 1.1f));
+  if (kind == 1) {
+    for (int i = 0; i < 2; i++) {
+      float sgn = i ? 1 : -1;
+      M3 wg = m3_mul(m3_trans(sgn * 6, 1, 0), m3_mul(m3_rotz(sgn * 0.45f), m3_scale(7.5f, 4.4f, 1.8f)));
+      lathe(&Wm, &wg, PROF_BALL, 13, 12, 0, 0xFFF4FAFF, MAT_SHINY);
+      M3 f2 = m3_mul(m3_trans(sgn * 7, -3.5f, 0.5f), m3_mul(m3_rotz(sgn * 0.15f), m3_scale(5.5f, 3, 1.6f)));
+      lathe(&Wm, &f2, PROF_BALL, 13, 10, 0, 0xFFD8ECFF, MAT_SHINY);
+    }
+    ball(&Wm, 0, 0, 0, 2.4f, 2.4f, 2.4f, 0xFFFFD84A, MAT_SHINY, 10);
+  } else if (kind == 2) {
+    M3 sw = m3_rotz(0.785f);
+    static const float BLADE[8] = { 0, 0, 1, 0, 1, 0.82f, 0, 1 };
+    M3 bl = m3_mul(sw, m3_mul(m3_trans(0, -4, 0), m3_scale(2.4f, 17, 0.9f)));
+    lathe(&Wm, &bl, BLADE, 4, 4, 1, 0xFFE8EEF8, MAT_SHINY);
+    M3 gd = m3_mul(sw, m3_mul(m3_trans(0, -5, 0), m3_scale(6, 1.3f, 2)));
+    lathe(&Wm, &gd, PROF_BALL, 13, 8, 0, 0xFFF2B02E, MAT_SHINY);
+    M3 gr = m3_mul(sw, m3_mul(m3_trans(0, -8.5f, 0), m3_scale(1.5f, 3.4f, 1.5f)));
+    lathe(&Wm, &gr, PROF_BALL, 13, 8, 0, 0xFF8B5A2B, MAT_PLAIN);
+    M3 pm = m3_mul(sw, m3_mul(m3_trans(0, -12, 0), m3_scale(2, 2, 2)));
+    lathe(&Wm, &pm, PROF_BALL, 13, 8, 0, 0xFFF2B02E, MAT_SHINY);
+  } else if (kind == 3) {
+    M3 dome = m3_mul(m3_trans(0, -5, 0), m3_scale(11, 11, 10));
+    lathe(&Wm, &dome, PROF_BALL + 12, 7, 20, 0, 0xFFF0A23A, MAT_SHINY);
+    static const float RIM[8] = { 1, -0.5f, 1.06f, 0, 1.06f, 0.5f, 1, 0.5f };
+    M3 rim = m3_mul(m3_trans(0, -5, 0), m3_scale(11.2f, 2.2f, 10.2f));
+    lathe(&Wm, &rim, RIM, 4, 20, 1, 0xFFC4761E, MAT_SHINY);
+    M3 crest = m3_mul(m3_trans(0, 5.6f, 0), m3_scale(1.8f, 1.4f, 9));
+    lathe(&Wm, &crest, PROF_BALL, 13, 8, 0, 0xFFFFE08A, MAT_SHINY);
+  } else {   // a chunky five-pointed star, the colour of gold
+    M3 I = m3_id(); set_mats(&Wm, &I);
+    float ctr[3] = { 0, 0, 3.2f }, bk[3] = { 0, 0, -3.2f };
+    for (int k = 0; k < 10; k++) {
+      float a0 = k * 0.62832f - 1.5708f, a1 = (k + 1) * 0.62832f - 1.5708f;
+      float r0 = k % 2 ? 5.2f : 12.5f, r1 = k % 2 ? 12.5f : 5.2f;
+      float p0[3] = { cosf(a0) * r0, -sinf(a0) * r0, 0 }, p1[3] = { cosf(a1) * r1, -sinf(a1) * r1, 0 };
+      for (int side = 0; side < 2; side++) {
+        const float* c = side ? bk : ctr;
+        float e1[3] = { p0[0] - c[0], p0[1] - c[1], p0[2] - c[2] }, e2[3] = { p1[0] - c[0], p1[1] - c[1], p1[2] - c[2] };
+        float n[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+        float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]); if (l > 0) { n[0] /= l; n[1] /= l; n[2] /= l; }
+        if (side) { n[0] = -n[0]; n[1] = -n[1]; n[2] = -n[2]; }
+        V3 va, vb, vc; v3_make(&va, c, n); v3_make(&vb, p0, n); v3_make(&vc, p1, n);
+        int low = M3_LOW; M3_LOW = 1; rt_tri(&va, &vb, &vc, 0xFFFFC72A, MAT_SHINY); M3_LOW = low;
+      }
+    }
+  }
   rt_end(b);
 }
 
@@ -360,7 +453,7 @@ static void crown3d(const M3* Wm, float x, float y, float z, float r) {
 }
 // kind: 0 green, 1 icy blue, 2 royal red
 static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, int t, float S, int crown) {
-  rt_begin((int)(52 * S), (int)(40 * S) + (crown ? (int)(10 * S) : 0), 26 * S, 36 * S + (crown ? (int)(10 * S) : 0), S);
+  M3_LOW = 1; rt_begin((int)(52 * S), (int)(40 * S) + (crown ? (int)(10 * S) : 0), 26 * S, 36 * S + (crown ? (int)(10 * S) : 0), S);
   VIEW = m3_rotx(CAM_TILT);
   uint32_t shell = snow == 2 ? 0xFFE8503C : snow ? 0xFF9FD4F2 : 0xFF58C85A;
   float bobb = sinf(ph * 2) * 0.6f, ant = sinf(ph) * 1.5f;
@@ -394,7 +487,7 @@ static void beetle3d(Bmp* b, float ph, float sq, float yaw, int snow, int dead, 
 
 // bee: 56x52 picture, middle at (28, 28)
 static void bee3d(Bmp* b, float fph, float pitch, float yaw, int dead, float S, int crown) {
-  rt_begin((int)(56 * S), (int)(52 * S), 28 * S, 28 * S, S);
+  M3_LOW = 1; rt_begin((int)(56 * S), (int)(52 * S), 28 * S, 28 * S, S);
   VIEW = m3_rotx(CAM_TILT * 0.5f);
   M3 Wm = m3_mul(m3_roty(yaw), m3_rotx(pitch));
   float flap = sinf(fph), sway = sinf(fph) * 0.7f;
@@ -451,7 +544,7 @@ static void box3d(Bmp* b, int used) {
   rt_end(b);
 }
 // ---- more creatures. Each is a 52x44 picture with its ground point at (26, 38).
-static void crit_begin(float S, int crown) { rt_begin((int)(52 * S), (int)(44 * S) + (crown ? (int)(8 * S) : 0), 26 * S, 38 * S + (crown ? (int)(8 * S) : 0), S); VIEW = m3_rotx(CAM_TILT); }
+static void crit_begin(float S, int crown) { M3_LOW = 1; rt_begin((int)(52 * S), (int)(44 * S) + (crown ? (int)(8 * S) : 0), 26 * S, 38 * S + (crown ? (int)(8 * S) : 0), S); VIEW = m3_rotx(CAM_TILT); }
 static void crit_eyes(const M3* W, float x, float y, float z, float r, int dead, uint32_t white) {
   for (int i = 0; i < 2; i++) {
     float sgn = i ? 1 : -1;

@@ -4,7 +4,7 @@
 
 // ------------------------------------------------------------ Dino
 // mood: 0 normal, 2 hurt, 3 angry (headbutt), 4 happy, 5 sad
-typedef struct { float sq, tilt, bob, lx[2], ly[2], spk, eye, mouth, wing; int mood, air; } DinoPose;
+typedef struct { float sq, tilt, bob, lx[2], ly[2], spk, eye, mouth, wing, sword, shake; int mood, air, gear, hot; } DinoPose;   // gear: 2 sword, 3 helmet, 4 golden spikes
 #define DN 72          // drawing area at scale 1; his feet stand at (36, 64)
 static Bmp DSCR, ESCR;
 
@@ -196,6 +196,16 @@ static void dino_pose(DinoPose* p) {
   p->sq = DA.sq; p->tilt = DA.tilt; p->bob = DA.bob; p->spk = DA.spk; p->mouth = DA.mouth; p->wing = power == 1 ? DA.wing : -9; p->mood = DA.mood; p->air = DA.air;
   for (int i = 0; i < 2; i++) { p->lx[i] = DA.lx[i]; p->ly[i] = DA.ly[i]; }
   p->eye = k < 10 ? fabsf(k - 5) / 5.0f : (k >= 24 && k < 32 ? fabsf(k - 28) / 4.0f : 1);
+  p->gear = dead_t ? 0 : power >= 2 ? power : 0;
+  // the sword: held up and a little back, or swung over in an arc
+  if (atk_t > 0 && power == 2) { float t = (16 - atk_t) / 16.0f; p->sword = -0.3f + t * t * (3 - 2 * t) * 2.6f; }
+  else p->sword = 0.3f + sinf(frame * 0.07f) * 0.05f;
+  // cold places: he shivers when standing about; hot places: he pants
+  int th = L ? L->theme : 0, still = on_ground && fabsf(pvx) < 0.3f && !dead_t && atk_t == 0;
+  p->shake = (th == 5 || th == 6 || th == 7) && still && state == ST_PLAY ? sinf(frame * 2.1f) * 0.55f : 0;
+  p->hot = (th == 8 || th == 10) && state == ST_PLAY && !dead_t;
+  if (p->hot && still) { p->mouth = maxf(p->mouth, 0.45f + 0.25f * sinf(frame * 0.35f)); p->sq *= 0.985f; }
+  if (p->shake != 0 && p->mood == 0) p->eye = minf(p->eye, 0.55f);
 }
 // a calm standing pose for the title, the map and the HUD
 static void dino_idle_pose(DinoPose* p, int t) {

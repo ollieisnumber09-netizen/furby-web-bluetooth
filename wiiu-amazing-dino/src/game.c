@@ -402,6 +402,7 @@ static unsigned char FAKE[MAXH][MAXW];   // a pretend wall or hidden room: drawn
 static struct { int x0, y0, x1, y1; float show; Bmp cover; } ROOM[MAXROOM];   // hidden rooms: the ground picture that covers each one
 static int nrooms;
 static int tile_raw, ride_i = -1;        // tile_raw: show pretend walls as ground (for painting). ride_i: the platform Dino stands on
+static Bmp ITEM_C[5][16];   // the power-ups, turning
 static Bmp CRIT_C[NCRIT][2][8], HD_FPLAT, HD_DOOR, HD_KEYP, HD_PLAT, HD_CRACK, HD_HELMI, HD_STARI, HD_HELM;
 static char BOXK[MAXH][MAXW];   // what each ? box holds: 0 bananas, 1 double jump, 2 sword
 static int LW, LH, lvl;
@@ -1883,7 +1884,7 @@ static void key_part(float x, float y, int part, uint32_t col, float sc) {   // 
   else { fb_capsule(x - 5 * sc, y, x + 4 * sc, y, 3.4f * sc, OUTLINE); fb_capsule(x + 1 * sc, y, x + 1 * sc, y + 7 * sc, 3 * sc, OUTLINE); fb_capsule(x - 4 * sc, y, x - 4 * sc, y + 5 * sc, 3 * sc, OUTLINE);
          fb_capsule(x - 5 * sc, y, x + 4 * sc, y, 2 * sc, col); fb_capsule(x + 1 * sc, y, x + 1 * sc, y + 7 * sc, 1.6f * sc, col); fb_capsule(x - 4 * sc, y, x - 4 * sc, y + 5 * sc, 1.6f * sc, col); }
 }
-static void make_extra_art(void) {
+static void make_extra_art0(void) {
   if (HD_FPLAT.px) return;
   HD_FPLAT = bmp_new(96, 22); HD_DOOR = bmp_new(40, 98);
   for (int y = 0; y < 22; y++) for (int x = 0; x < 96; x++) {   // a crumbly stone platform
@@ -1946,6 +1947,14 @@ static void make_extra_art(void) {
     uint32_t* d = &HD_HELM.px[y * 36 + x];
     if (dall < 3) { over(d, OUTLINE, cov(dall - 1.4f)); over(d, mixc(0xFFFFD27A, 0xFFE0862C, clampf((fy - 4) / 14, 0, 1)), cov(dome)); over(d, 0xFFB8641E, cov(brim)); over(d, 0xFFFFFFFF, cov(sd_circle(fx, fy, 13, 9, 2.4f)) * 0.8f); }
   }
+}
+// the extra art, then the power-ups as turning 3D models (the HUD and the GamePad use the first turn)
+static void make_extra_art(void) {
+  if (ITEM_C[1][0].px) return;
+  make_extra_art0();
+  for (int k = 1; k <= 4; k++) for (int f = 0; f < 16; f++) item3d(&ITEM_C[k][f], k, f * 0.3927f + (k == 2 ? 0 : 0.35f));
+  Bmp* icon[5] = { 0, &HD_WINGI, &HD_SWORDI, &HD_HELMI, &HD_STARI };
+  for (int k = 1; k <= 4; k++) { free(icon[k]->px); *icon[k] = bmp_new(32, 32); item3d(icon[k], k, k == 2 ? 0 : 0.35f); }
 }
 static void draw_world(void) {
   make_extra_art();
@@ -2025,7 +2034,7 @@ static void draw_world(void) {
     if (e->type == E_POW) {
       float bob = sinf(e->t * 0.1f) * 3;
       fb_dot(ex + 12, ey + 12 + bob, 17 + sinf(e->t * 0.15f) * 2, 0xFFFFFFFF, 0.28f);
-      hblit(e->k == 2 ? &HD_SWORDI : e->k == 3 ? &HD_HELMI : e->k == 4 ? &HD_STARI : &HD_WINGI, (int)ex - 4, (int)(ey - 4 + bob), 0);
+      hblit(&ITEM_C[e->k & 3 ? e->k : 1][(frame / 4 + i) % 16], (int)ex - 4, (int)(ey - 4 + bob), 0);   // the power-up, spinning slowly
       continue;
     }
     if (e->type == E_PLAT) {
@@ -2107,14 +2116,10 @@ static void draw_world(void) {
     dino_sx = X; dino_sy = Y;
     if (intro_t) show = 0;
     if (show) { if (g_lowq) RT_SS = 1; dino3d(&DSCR, &p, DA.yaw, 1); RT_SS = 2; hblit(&DSCR, X - 36, Y - 64, 0); }
-    if (power == 3 && show) hblit(&HD_HELM, X - 18 + (flip ? -2 : 2), Y - 62, 0);
-    if (power == 4 && show && !dead_t) {   // the star power: a little star that floats over his head
-      float sx = X - 16 + (flip ? -4 : 4), sy = Y - 82 + sinf(frame * 0.12f) * 3;
-      fb_dot(sx + 16, sy + 16, 15, 0xFFFFF2A0, 0.25f + 0.1f * sinf(frame * 0.2f));
-      hblit(&HD_STARI, (int)sx, (int)sy, 0);
-      if (frame % 9 == 0) spawn_parts(px + PW / 2 + (frame % 5 - 2) * 2, py - 12, 1, 0xFFFFF2A0, 0.4f, 0.2f);
-    }
-    if (power == 2 && show && !dead_t) {
+    if (power == 4 && show && !dead_t && frame % 7 == 0) spawn_parts(px + PW / 2 - face * 5 + (frame % 5 - 2), py + 2, 1, 0xFFFFF2A0, 0.5f, 0.3f);   // sparkles off his golden spikes
+    if (p.hot && show && frame % 38 == 0) spawn_parts(px + PW / 2 + (frame % 3 - 1) * 3, py - 2, 2, 0xFF9ADCF5, 0.8f, 0.6f);   // drops of sweat
+    if (p.shake != 0 && show && frame % 70 == 0) spawn_parts(px + PW / 2 + face * 8, py + 6, 3, 0xFFF4FAFF, 0.4f, 0.1f);   // a puff of cold breath
+    if (0 && power == 2 && show && !dead_t) {
       // the sword: held up behind him, or swung in an arc
       float hx = X + (flip ? -7 : 7), hy = Y - 22, ang;
       if (atk_t > 0) { float k = (16 - atk_t) / 16.0f; ang = -2.2f + k * k * (3 - 2 * k) * 3.0f; }
