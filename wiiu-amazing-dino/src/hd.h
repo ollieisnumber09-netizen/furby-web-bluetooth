@@ -193,6 +193,26 @@ static uint32_t* stone_tex(int pal) {
                                       { 0xFF8A7AB0, 0xFF443A6A, 0xFFB8A8DA } };
   uint32_t* t = STEX[pal] = (uint32_t*)malloc(TXW * TXH * 4);
   uint32_t base = COL[pal][0], dark = COL[pal][1], lite = COL[pal][2];
+  if (pal == 6) {   // under the sea: lumpy rock, not bricks, with pink coral and barnacles growing on it
+    const int CS = 16, NX = TXW / CS, NY = TXH / CS;
+    for (int Y = 0; Y < TXH; Y++) for (int X = 0; X < TXW; X++) {
+      int cx = X / CS, cy = Y / CS; float d1 = 1e9f, d2 = 1e9f; uint32_t hb = 0;
+      for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        int gx = cx + i, gy = cy + j; uint32_t h = hash2((gx + NX) % NX, (gy + NY) % NY + 77);
+        float fx = gx * CS + (h % 100) / 100.0f * CS, fy = gy * CS + ((h >> 8) % 100) / 100.0f * CS;
+        float d = (X + 0.5f - fx) * (X + 0.5f - fx) + (Y + 0.5f - fy) * (Y + 0.5f - fy);
+        if (d < d1) { d2 = d1; d1 = d; hb = h; } else if (d < d2) d2 = d;
+      }
+      float e = sqrtf(d2) - sqrtf(d1);
+      uint32_t c = mixc(0xFF7E9AA8, 0xFF4E6A7C, (hb % 7) / 9.0f + (pnoise(X * 32.0f / TXW, Y * 16.0f / TXH, 32, 16) - 0.5f) * 0.4f);
+      c = mixc(c, 0xFFB8D0D8, clampf(1 - sqrtf(d1) / 9, 0, 1) * 0.35f);   // each lump catches the light in its middle
+      if (e < 2.2f) c = mixc(0xFF2A3E50, c, e / 2.2f);
+      uint32_t hs = hash2(X / 3, Y / 3 + 5);
+      if (hs % 61 == 0) c = 0xFFF08AA8; else if (hs % 97 == 0) c = 0xFFFFE0A8; else if (hs % 53 == 0) c = mixc(c, 0xFFFFFFFF, 0.5f);
+      t[Y * TXW + X] = c;
+    }
+    return t;
+  }
   for (int Y = 0; Y < TXH; Y++) for (int X = 0; X < TXW; X++) {
     // two bricks per tile, staggered every other row
     int u = X & 31, v = Y & 31, row = v / 16, bu = (u + (row ? 16 : 0)) & 31, bv = v & 15;
@@ -246,10 +266,46 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
   char below = tile(tx, ty + 1);
   if (!(below == '#' || (below == 'X' && L->theme != 1 && L->theme != 2 && L->theme != 6))) return 0;
   if (tile(tx, ty) != ' ') return 0;
-  if (L->theme == 9) {   // swaying weed on the sea floor
+  if (L->theme == 9) {   // swaying weed on the sea floor, starfish, shells, coral and rocks
     uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
-    if (h % 9 > 3) return 0;
     float fx = (X & 31) + 0.5f, fy = (Y & 31) + 0.5f, dd = 99;
+    int kind = h % 11;
+    if (kind == 4 || kind == 5) {   // a starfish
+      float cx = 10 + (h >> 8) % 12, cy = 27, r = sqrtf((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy) * 1.8f), a = atan2f(fy - cy, fx - cx) + (h % 5) * 0.3f;
+      float rr = 3 + 4.5f * powf(fabsf(cosf(a * 2.5f)), 3);
+      dd = r - rr;
+      if (dd > 1.2f) return 0;
+      uint32_t sc = (h >> 4) & 1 ? 0xFFF08A3A : 0xFFE85A7A;
+      *out = dd > 0 ? mixc(sc, 0xFF000000, 0.45f) : mixc(mixc(sc, 0xFFFFFFFF, 0.35f), sc, clampf(r / 6, 0, 1));
+      if (hash2(X, Y) % 7 == 0 && dd < -1) *out = mixc(*out, 0xFFFFFFFF, 0.5f);
+      return cov(dd);
+    }
+    if (kind == 6) {   // a scallop shell
+      float cx = 16, cy = 31, r = sqrtf((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy)), a = atan2f(fy - cy, fx - cx);
+      if (fy > 31.5f || a > -0.35f || a < -2.8f) return 0;
+      dd = r - 7.5f;
+      if (dd > 1) return 0;
+      *out = mixc(0xFFFFF0E0, 0xFFF0B0A0, fabsf(sinf(a * 7)) * 0.7f);
+      if (dd > -0.6f) *out = 0xFFB07060;
+      return cov(dd);
+    }
+    if (kind == 7) {   // a branching coral
+      float cx = 16;
+      dd = minf(minf(sd_seg(fx, fy, cx, 32, cx, 14) - 2.2f, sd_seg(fx, fy, cx, 24, cx - 7, 13) - 1.8f), minf(sd_seg(fx, fy, cx, 21, cx + 7, 11) - 1.8f, sd_seg(fx, fy, cx - 4, 18, cx - 10, 17) - 1.4f));
+      dd = minf(dd, sd_seg(fx, fy, cx + 4, 16, cx + 10, 18) - 1.4f);
+      if (dd > 1.2f) return 0;
+      uint32_t cc = (h >> 5) % 3 == 0 ? 0xFFFF7A9A : (h >> 5) % 3 == 1 ? 0xFFFFA84A : 0xFFB87AE8;
+      *out = dd > 0 ? mixc(cc, 0xFF000000, 0.45f) : mixc(mixc(cc, 0xFFFFFFFF, 0.3f), cc, (fy - 10) / 22);
+      return cov(dd);
+    }
+    if (kind == 8) {   // a mossy rock
+      dd = minf(sd_ellipse(fx, fy, 12, 29, 9, 6), sd_ellipse(fx, fy, 21, 30, 6, 4.5f));
+      if (dd > 1) return 0;
+      *out = mixc(0xFF8AA0AA, 0xFF4A5E6A, clampf((fy - 23) / 9 + (fx - 12) / 30, 0, 1));
+      if (fy < 26 && dd < -1) *out = mixc(*out, L->nearc, 0.6f);
+      return cov(dd);
+    }
+    if (kind > 3) return 0;
     for (int k = 0; k < 3; k++) {
       float bx = 7 + k * 8 + (hash2(h, k) % 5), hh = 14 + hash2(k, h) % 16, bend = (fy - 32) / hh;
       float cx = bx + sinf(bend * 3 + k) * 3 * -bend;
@@ -259,8 +315,36 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
     *out = dd > 0.1f ? mixc(L->nearc, 0xFF000000, 0.4f) : mixc(mixc(L->nearc, 0xFFFFFFFF, 0.25f), L->nearc, (fy - 10) / 22);
     return cov(dd - 0.9f);
   }
-  if (desert()) return 0;
   for (int i = 0; i < nsigns; i++) if (sign_x[i] == tx && sign_y[i] == ty) return 0;
+  if (desert()) {   // sand: little cacti, bleached stones and dry grass
+    uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
+    float fx = (X & 31) + 0.5f, fy = (Y & 31) + 0.5f, dd;
+    int kind = h % 10;
+    if (goal_x == tx && goal_y == ty) return 0;
+    if (kind == 0) {
+      float cx = 12 + (h >> 8) % 8;
+      dd = minf(sd_seg(fx, fy, cx, 33, cx, 14) - 3.2f, minf(sd_seg(fx, fy, cx - 6, 24, cx - 6, 18) - 2, sd_seg(fx, fy, cx - 6, 24, cx, 24) - 2));
+      dd = minf(dd, minf(sd_seg(fx, fy, cx + 6, 22, cx + 6, 15) - 2, sd_seg(fx, fy, cx + 6, 22, cx, 22) - 2));
+      if (dd > 1.4f) return 0;
+      *out = dd > 0 ? 0xFF2A6A30 : mixc(0xFF8AD06A, 0xFF3F9A48, clampf((fx - cx + 6) / 14, 0, 1));
+      if (dd < 0 && hash2(X, Y) % 11 == 0) *out = 0xFFFFF8D0;
+      return cov(dd - 0.8f);
+    }
+    if (kind == 1 || kind == 2) {
+      dd = minf(sd_ellipse(fx, fy, 11, 30, 6, 3.5f), sd_ellipse(fx, fy, 20, 31, 4, 2.5f));
+      if (dd > 1) return 0;
+      *out = mixc(0xFFF0E2C4, 0xFFB09A78, clampf((fy - 27) / 5, 0, 1));
+      return cov(dd);
+    }
+    if (kind == 3) {
+      dd = 99;
+      for (int k = 0; k < 4; k++) { float bx = 9 + k * 4.5f, tip = bx + (k - 1.5f) * 3; dd = minf(dd, sd_tri(fx, fy, bx - 1.5f, 33, tip, 22 + (k & 1) * 3, bx + 1.5f, 33)); }
+      if (dd > 1) return 0;
+      *out = dd > 0.2f ? 0xFF9A7A3A : 0xFFD8B860;
+      return cov(dd - 0.6f);
+    }
+    return 0;
+  }
   if (goal_x == tx && goal_y == ty) return 0;
   uint32_t h = hash2(tx * 3 + 1, ty * 5 + lvl);
   int kind = h % 9;
@@ -324,6 +408,23 @@ static float decor_px(int X, int Y, int tx, int ty, uint32_t* out) {
     *out = sn ? mixc(0xFFFFFFFF, 0xFF9FBAD8, s) : mixc(0xFF9BE860, 0xFF2F8E3A, s);
     if (dd > 0) *out = sn ? 0xFF6F8FB4 : 0xFF1F5E2A;
     return cov(dd - 1.4f);
+  }
+  if (kind == 6 && !sn) {   // a spotty mushroom (glowing blue in caves)
+    float cx = 12 + (h >> 8) % 9;
+    float dstem = sd_rrect(fx, fy, cx, 28.5f, 2.6f, 4, 1.5f), dcap = maxf(sd_ellipse(fx, fy, cx, 24, 7.5f, 6), fy - 24.5f);
+    float dd = minf(dstem, dcap);
+    if (dd > 1.4f) return 0;
+    uint32_t capc = cave ? 0xFF6ADCF0 : ((h >> 3) & 1 ? 0xFFE8483C : 0xFFF0A030);
+    *out = dd > 0 ? OUTLINE : dcap < dstem ? mixc(mixc(capc, 0xFFFFFFFF, 0.25f), mixc(capc, 0xFF000000, 0.2f), clampf((fx - cx + 6) / 14, 0, 1)) : 0xFFF8EEDC;
+    if (dcap < -0.5f && dcap <= dstem && (sd_circle(fx, fy, cx - 3, 21, 1.6f) < 0 || sd_circle(fx, fy, cx + 3, 20.5f, 1.3f) < 0 || sd_circle(fx, fy, cx + 0.5f, 23, 1.1f) < 0)) *out = 0xFFFFFFFF;
+    return cov(dd - 1.1f);
+  }
+  if (kind == 7) {   // a stone with a crack, or a lump of ice
+    float dd = minf(sd_ellipse(fx, fy, 14, 29, 8, 5), sd_ellipse(fx, fy, 21, 30.5f, 5, 3.5f));
+    if (dd > 1.5f) return 0;
+    *out = dd > 0 ? (sn ? 0xFF5A7A9A : 0xFF3A3A44) : sn ? mixc(0xFFE8F6FF, 0xFF9AC8E8, clampf((fy - 24) / 8, 0, 1)) : mixc(0xFFC0C4CC, 0xFF7A7E8A, clampf((fy - 24) / 8 + (fx - 10) / 30, 0, 1));
+    if (!sn && dd < 0 && fabsf(fx - 15 - (fy - 26) * 0.6f) < 0.6f && fy > 25 && fy < 30) *out = 0xFF4A4E58;
+    return cov(dd - 1.1f);
   }
   return 0;
 }
