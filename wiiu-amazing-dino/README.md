@@ -20,6 +20,12 @@ The circle in the top corner is Dino's health: a hit knocks off his power-up if 
 it takes one of the three slots, and losing the last one costs a life. Grabbing the power-up he already
 has gives one slot back. Leaving a level any way but the flag leaves behind the coins, lives and
 power-ups found in it. Green bubbles with a little Dino inside are 1-ups. Dino is safe for a moment after respawning and after grabbing a power-up. Each kind of area has its own song (14 in all).
+Some land levels have a cannon: stand by it and press down (or jump in from above) and it shoots Dino
+off to a hazy back stage behind the level, full of coins, with another cannon to bring him back further on.
+Water levels start on a grassy shore by a big lake; the cannon at the end of the shore shoots Dino into the water.
+On the world map, water levels sit in a puddle. Only some levels have the three key pieces and a locked door.
+Levels are taller now, with plank towers to climb and cliffs to drop down. After the title, or with + on
+the map, a world select shows every island; picking another world plays a balloon trip there.
 Progress saves to `SD card/wiiu/apps/AmazingDino/save.txt` (an old Canopy Dino save is picked up the first time).
 
 ## Put it on the Wii U (Aroma)
@@ -34,6 +40,8 @@ In Cemu: File > Load and pick `AmazingDino.wuhb`.
 | Headbutt dash (or sword swing) | X or Y | 1 |
 | Wall-jump | Jump into a wall, then jump again | same |
 | Map: walk / enter level | Stick or D-pad / A | D-pad / 2 |
+| World select (on the map) | + | + |
+| Into a cannon | Down next to it | same |
 | Pause | + | + |
 | Back to the map | Pause, then Down | same |
 
